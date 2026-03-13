@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import TeamLogo from "../components/TeamLogo";
 
 type Team = {
   id: string;
@@ -242,23 +243,32 @@ function TeamLine({
   const winnerClasses = isWinner
     ? "border-green-300 bg-green-50 text-green-800"
     : "";
+
   const loserClasses = isLoser
     ? "border-red-300 bg-red-50 text-red-700 line-through"
     : "";
+
   const baseClasses =
-    !isWinner && !isLoser ? "border-slate-200 bg-white text-slate-800" : "";
+    !isWinner && !isLoser
+      ? "border-slate-200 bg-white text-slate-800"
+      : "";
 
   return (
     <div
       className={`rounded-lg border px-3 py-2 transition ${winnerClasses} ${loserClasses} ${baseClasses}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <span className="truncate text-sm font-medium">
-          {team.seed ? `${team.seed}. ` : ""}
-          {team.name}
-        </span>
+      <div className="flex items-center gap-3">
+        <TeamLogo teamName={team.name} size={24} />
+
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium">
+            {team.seed ? `${team.seed}. ` : ""}
+            {team.name}
+          </div>
+
+          <ManagerTag manager={team.manager} />
+        </div>
       </div>
-      <ManagerTag manager={team.manager} />
     </div>
   );
 }
@@ -288,7 +298,7 @@ function ConnectorColumn({
   matchups: Matchup[];
 }) {
   return (
-    <div className="min-w-[240px]">
+    <div className="min-w-[250px]">
       <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
         {title}
       </h4>
