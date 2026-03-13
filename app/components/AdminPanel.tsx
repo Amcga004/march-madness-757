@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import TeamLogo from "./TeamLogo";
 
 type Game = {
   id: string;
@@ -57,9 +58,7 @@ export default function AdminPanel() {
           .from("games")
           .select("id,round_name,winning_team_id,losing_team_id,created_at")
           .order("created_at", { ascending: false }),
-
         supabase.from("teams").select("id,school_name"),
-
         supabase
           .from("leagues")
           .select("id")
@@ -115,10 +114,8 @@ export default function AdminPanel() {
 
     setStatus("success");
     setMessage("Game result recorded.");
-
     setWinnerTeamId("");
     setLoserTeamId("");
-
     await refreshResults();
   }
 
@@ -151,11 +148,11 @@ export default function AdminPanel() {
 
     setStatus("success");
     setMessage("Game result removed.");
-
     await refreshResults();
   }
 
   const teamMap = new Map(teams.map((t) => [t.id, t.school_name]));
+  const latestUpdated = games[0]?.created_at ?? null;
 
   function statusBanner() {
     if (status === "idle") return null;
@@ -180,12 +177,17 @@ export default function AdminPanel() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl p-6 space-y-8">
-      <section className="flex items-center justify-between">
+    <div className="mx-auto max-w-7xl space-y-8 p-4 sm:p-6">
+      <section className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-3xl font-bold">Commissioner Admin Panel</h2>
           <p className="text-sm text-gray-600">
             Record results, manage draft picks, and control the tournament.
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            {latestUpdated
+              ? `Last result update: ${new Date(latestUpdated).toLocaleString()}`
+              : "No results entered yet"}
           </p>
         </div>
 
@@ -200,7 +202,7 @@ export default function AdminPanel() {
       {statusBanner()}
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
           <h3 className="text-xl font-semibold">Record Game Result</h3>
 
           <form onSubmit={submitResult} className="mt-4 space-y-4">
@@ -220,7 +222,6 @@ export default function AdminPanel() {
               onChange={(e) => setWinnerTeamId(e.target.value)}
             >
               <option value="">Winning Team</option>
-
               {teams.map((team) => (
                 <option key={team.id} value={team.id}>
                   {team.school_name}
@@ -234,7 +235,6 @@ export default function AdminPanel() {
               onChange={(e) => setLoserTeamId(e.target.value)}
             >
               <option value="">Losing Team</option>
-
               {teams.map((team) => (
                 <option key={team.id} value={team.id}>
                   {team.school_name}
@@ -251,67 +251,63 @@ export default function AdminPanel() {
           </form>
         </div>
 
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
           <h3 className="text-xl font-semibold">Quick Navigation</h3>
 
           <div className="mt-4 grid gap-3">
-            <Link
-              href="/draft"
-              className="rounded-xl border px-4 py-3 hover:bg-slate-50"
-            >
+            <Link href="/draft" className="rounded-xl border px-4 py-3 hover:bg-slate-50">
               Draft Room
             </Link>
-
-            <Link
-              href="/rosters"
-              className="rounded-xl border px-4 py-3 hover:bg-slate-50"
-            >
+            <Link href="/rosters" className="rounded-xl border px-4 py-3 hover:bg-slate-50">
               Team Rosters
             </Link>
-
-            <Link
-              href="/history"
-              className="rounded-xl border px-4 py-3 hover:bg-slate-50"
-            >
+            <Link href="/history" className="rounded-xl border px-4 py-3 hover:bg-slate-50">
               Results History
             </Link>
-
-            <Link
-              href="/standings"
-              className="rounded-xl border px-4 py-3 hover:bg-slate-50"
-            >
+            <Link href="/standings" className="rounded-xl border px-4 py-3 hover:bg-slate-50">
               Standings
             </Link>
           </div>
         </div>
       </section>
 
-      <section className="rounded-2xl border bg-white p-6 shadow-sm">
+      <section className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
         <h3 className="text-xl font-semibold">Recent Results</h3>
 
         <div className="mt-4 space-y-3">
-          {games.slice(0, 10).map((game) => (
-            <div
-              key={game.id}
-              className="flex items-center justify-between rounded-xl border px-4 py-3"
-            >
-              <div>
-                <div className="text-sm text-gray-500">{game.round_name}</div>
+          {games.slice(0, 10).map((game) => {
+            const winner = teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner";
+            const loser = teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser";
 
-                <div className="font-semibold">
-                  {teamMap.get(game.winning_team_id ?? "")} defeated{" "}
-                  {teamMap.get(game.losing_team_id ?? "")}
-                </div>
-              </div>
-
-              <button
-                onClick={() => deleteResult(game.id)}
-                className="rounded-lg border border-red-300 px-3 py-1 text-red-600 hover:bg-red-50"
+            return (
+              <div
+                key={game.id}
+                className="flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
-                Delete
-              </button>
-            </div>
-          ))}
+                <div>
+                  <div className="text-sm text-gray-500">{game.round_name}</div>
+                  <div className="mt-2 flex flex-col gap-2 font-semibold sm:flex-row sm:flex-wrap sm:items-center">
+                    <div className="flex items-center gap-2">
+                      <TeamLogo teamName={winner} size={24} />
+                      <span>{winner}</span>
+                    </div>
+                    <span className="text-slate-400">defeated</span>
+                    <div className="flex items-center gap-2">
+                      <TeamLogo teamName={loser} size={24} />
+                      <span>{loser}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => deleteResult(game.id)}
+                  className="rounded-lg border border-red-300 px-3 py-1 text-red-600 hover:bg-red-50"
+                >
+                  Delete
+                </button>
+              </div>
+            );
+          })}
         </div>
       </section>
     </div>

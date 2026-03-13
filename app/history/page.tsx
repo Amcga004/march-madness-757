@@ -39,9 +39,10 @@ export default async function HistoryPage() {
   }
 
   const teamMap = new Map((teams as Team[]).map((team) => [team.id, team.school_name]));
+  const typedGames = (games ?? []) as Game[];
 
   return (
-    <main className="mx-auto max-w-6xl p-6">
+    <main className="mx-auto max-w-6xl p-4 sm:p-6">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Results History</h1>
         <p className="mt-2 text-slate-600">
@@ -50,20 +51,25 @@ export default async function HistoryPage() {
       </div>
 
       <div className="space-y-4">
-        {(games as Game[]).length === 0 ? (
+        {typedGames.length === 0 ? (
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             No game results recorded yet.
           </div>
         ) : (
-          (games as Game[]).map((game) => {
+          typedGames.map((game) => {
             const winnerName = teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner";
             const loserName = teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser";
 
             return (
               <div key={game.id} className="rounded-2xl border bg-white p-5 shadow-sm">
-                <div className="text-sm text-slate-500">{game.round_name}</div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm text-slate-500">{game.round_name}</div>
+                  <div className="text-sm text-slate-500">
+                    {new Date(game.created_at).toLocaleString()}
+                  </div>
+                </div>
 
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-base font-semibold">
+                <div className="mt-3 flex flex-col gap-3 text-base font-semibold sm:flex-row sm:flex-wrap sm:items-center">
                   <div className="flex items-center gap-2">
                     <TeamLogo teamName={winnerName} size={26} />
                     <span>{winnerName}</span>
@@ -77,12 +83,8 @@ export default async function HistoryPage() {
                   </div>
                 </div>
 
-                <div className="mt-2 text-sm text-slate-600">
+                <div className="mt-3 text-sm text-slate-600">
                   Status: {game.status ?? "unknown"}
-                </div>
-
-                <div className="mt-1 text-sm text-slate-500">
-                  {new Date(game.created_at).toLocaleString()}
                 </div>
               </div>
             );

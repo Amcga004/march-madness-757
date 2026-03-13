@@ -43,9 +43,9 @@ function StatCard({
   value: number;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="text-sm font-medium text-slate-500">{title}</div>
-      <div className="mt-2 text-3xl font-extrabold tracking-tight">{value}</div>
+      <div className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">{value}</div>
     </div>
   );
 }
@@ -69,6 +69,7 @@ export default async function DashboardPage() {
   const typedTeams = (teams ?? []) as Team[];
 
   const teamMap = new Map(typedTeams.map((team) => [team.id, team.school_name]));
+  const latestUpdated = typedGames[0]?.created_at ?? null;
 
   const standings = typedMembers
     .map((member) => {
@@ -114,17 +115,17 @@ export default async function DashboardPage() {
     });
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
-      <section className="mb-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+    <div className="mx-auto max-w-7xl p-4 sm:p-6">
+      <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:mb-8 sm:p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 sm:text-sm">
               Live Competition Hub
             </div>
-            <h2 className="mt-2 text-4xl font-extrabold tracking-tight text-slate-950">
+            <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
               757 March Madness Snake Draft
             </h2>
-            <p className="mt-3 max-w-2xl text-slate-600">
+            <p className="mt-3 max-w-2xl text-sm text-slate-600 sm:text-base">
               Follow live standings, track roster performance, monitor the bracket,
               and see every result as the tournament unfolds.
             </p>
@@ -139,7 +140,7 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-6 grid gap-4 sm:mb-8 md:grid-cols-2 xl:grid-cols-4">
         <StatCard title="Total Picks Made" value={typedPicks.length} />
         <StatCard title="Results Recorded" value={typedGames.length} />
         <StatCard
@@ -152,8 +153,15 @@ export default async function DashboardPage() {
         />
       </section>
 
-      <section className="mb-8">
-        <h3 className="mb-4 text-2xl font-bold">Current Standings</h3>
+      <section className="mb-6 sm:mb-8">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-2xl font-bold">Current Standings</h3>
+          <div className="text-sm text-slate-500">
+            {latestUpdated
+              ? `Last result entered: ${new Date(latestUpdated).toLocaleString()}`
+              : "No results entered yet"}
+          </div>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {standings.map((entry, index) => (
@@ -161,7 +169,7 @@ export default async function DashboardPage() {
               key={entry.name}
               className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-medium text-slate-500">Rank #{index + 1}</div>
                 <ManagerBadge name={entry.name} />
               </div>
@@ -188,7 +196,7 @@ export default async function DashboardPage() {
 
       <section className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">
         <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <h3 className="text-xl font-bold">Recent Results</h3>
 
             <div className="mt-4 space-y-3">
@@ -200,14 +208,18 @@ export default async function DashboardPage() {
                 typedGames.map((game) => (
                   <div key={game.id} className="rounded-xl border border-slate-200 p-4">
                     <div className="text-sm font-medium text-slate-500">{game.round_name}</div>
-                    <div className="mt-1 flex items-center gap-2 text-base font-semibold text-slate-900">
-                      <TeamLogo teamName={teamMap.get(game.winning_team_id ?? "") ?? "TBD"} size={24} />
-                      <span>{teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner"}</span>
+                    <div className="mt-2 flex flex-col gap-2 text-base font-semibold text-slate-900 sm:flex-row sm:flex-wrap sm:items-center">
+                      <div className="flex items-center gap-2">
+                        <TeamLogo teamName={teamMap.get(game.winning_team_id ?? "") ?? "TBD"} size={24} />
+                        <span>{teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner"}</span>
+                      </div>
                       <span className="text-slate-400">defeated</span>
-                      <TeamLogo teamName={teamMap.get(game.losing_team_id ?? "") ?? "TBD"} size={24} />
-                      <span>{teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser"}</span>
+                      <div className="flex items-center gap-2">
+                        <TeamLogo teamName={teamMap.get(game.losing_team_id ?? "") ?? "TBD"} size={24} />
+                        <span>{teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser"}</span>
+                      </div>
                     </div>
-                    <div className="mt-1 text-sm text-slate-500">
+                    <div className="mt-2 text-sm text-slate-500">
                       {new Date(game.created_at).toLocaleString()}
                     </div>
                   </div>
@@ -216,7 +228,7 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <h3 className="text-xl font-bold">Recent Picks</h3>
 
             <div className="mt-4 space-y-3">
@@ -227,7 +239,7 @@ export default async function DashboardPage() {
               ) : (
                 recentPicks.map((pick) => (
                   <div key={pick.overallPick} className="rounded-xl border border-slate-200 p-4">
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex items-start gap-3">
                         <TeamLogo teamName={pick.teamName} size={28} />
                         <div>
@@ -246,14 +258,14 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <h3 className="text-xl font-bold">League Snapshot</h3>
 
           <div className="mt-5 space-y-4">
             {standings.map((entry) => (
               <div
                 key={entry.name}
-                className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3"
+                className="flex flex-col gap-3 rounded-xl border border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex items-center gap-3">
                   <ManagerBadge name={entry.name} />
