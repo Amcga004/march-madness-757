@@ -14,16 +14,29 @@ type Game = {
   losing_team_id: string | null;
 };
 
+type Pick = {
+  id: string;
+  member_id: string;
+  team_id: string;
+};
+
+type Member = {
+  id: string;
+  display_name: string;
+};
+
 type MatchupTeam = {
   id: string | null;
   name: string;
   seed: number | null;
+  manager: string | null;
 };
 
 type Matchup = {
   top: MatchupTeam;
   bottom: MatchupTeam;
   winnerId: string | null;
+  loserId: string | null;
 };
 
 const REGIONS = ["East", "West", "South", "Midwest"] as const;
@@ -39,21 +52,30 @@ const ROUND_OF_64_PAIRS = [
   [2, 15],
 ];
 
+const MANAGER_STYLES: Record<string, string> = {
+  Andrew: "bg-blue-100 text-blue-700 border-blue-200",
+  Wesley: "bg-green-100 text-green-700 border-green-200",
+  Eric: "bg-purple-100 text-purple-700 border-purple-200",
+  Greg: "bg-orange-100 text-orange-700 border-orange-200",
+};
+
 function emptyTeam(): MatchupTeam {
   return {
     id: null,
     name: "TBD",
     seed: null,
+    manager: null,
   };
 }
 
-function buildTeam(team?: Team): MatchupTeam {
+function buildTeam(team?: Team, manager?: string | null): MatchupTeam {
   if (!team) return emptyTeam();
 
   return {
     id: team.id,
     name: team.school_name,
     seed: team.seed,
+    manager: manager ?? null,
   };
 }
 
@@ -75,10 +97,25 @@ function findGameForTeams(
   );
 }
 
-function winnerFromGame(game: Game | null, teamAId: string | null, teamBId: string | null) {
+function winnerFromGame(
+  game: Game | null,
+  teamAId: string | null,
+  teamBId: string | null
+) {
   if (!game) return null;
   if (game.winning_team_id === teamAId) return teamAId;
   if (game.winning_team_id === teamBId) return teamBId;
+  return null;
+}
+
+function loserFromGame(
+  game: Game | null,
+  teamAId: string | null,
+  teamBId: string | null
+) {
+  if (!game) return null;
+  if (game.losing_team_id === teamAId) return teamAId;
+  if (game.losing_team_id === teamBId) return teamBId;
   return null;
 }
 
@@ -88,18 +125,25 @@ function winnerTeamFromMatchup(matchup: Matchup): MatchupTeam {
   return emptyTeam();
 }
 
-function buildRegionBracket(regionTeams: Team[], games: Game[]) {
+function buildRegionBracket(
+  regionTeams: Team[],
+  games: Game[],
+  managerByTeamId: Map<string, string>
+) {
   const seedMap = new Map(regionTeams.map((team) => [team.seed, team]));
 
   const round64: Matchup[] = ROUND_OF_64_PAIRS.map(([seedA, seedB]) => {
-    const top = buildTeam(seedMap.get(seedA));
-    const bottom = buildTeam(seedMap.get(seedB));
+    const teamA = seedMap.get(seedA);
+    const teamB = seedMap.get(seedB);
+    const top = buildTeam(teamA, teamA ? managerByTeamId.get(teamA.id) ?? null : null);
+    const bottom = buildTeam(teamB, teamB ? managerByTeamId.get(teamB.id) ?? null : null);
     const game = findGameForTeams(games, "Round of 64", top.id, bottom.id);
 
     return {
       top,
       bottom,
       winnerId: winnerFromGame(game, top.id, bottom.id),
+      loserId: loserFromGame(game, top.id, bottom.id),
     };
   });
 
@@ -113,6 +157,7 @@ function buildRegionBracket(regionTeams: Team[], games: Game[]) {
       top: leftWinner,
       bottom: rightWinner,
       winnerId: winnerFromGame(game, leftWinner.id, rightWinner.id),
+      loserId: loserFromGame(game, leftWinner.id, rightWinner.id),
     });
   }
 
@@ -126,6 +171,7 @@ function buildRegionBracket(regionTeams: Team[], games: Game[]) {
       top: leftWinner,
       bottom: rightWinner,
       winnerId: winnerFromGame(game, leftWinner.id, rightWinner.id),
+      loserId: loserFromGame(game, leftWinner.id, rightWinner.id),
     });
   }
 
@@ -139,6 +185,7 @@ function buildRegionBracket(regionTeams: Team[], games: Game[]) {
       top: leftWinner,
       bottom: rightWinner,
       winnerId: winnerFromGame(game, leftWinner.id, rightWinner.id),
+      loserId: loserFromGame(game, leftWinner.id, rightWinner.id),
     });
   }
 
@@ -165,46 +212,75 @@ function buildFinalRoundMatchup(
     top,
     bottom,
     winnerId: winnerFromGame(game, top.id, bottom.id),
+    loserId: loserFromGame(game, top.id, bottom.id),
   };
+}
+
+function ManagerTag({ manager }: { manager: string | null }) {
+  if (!manager) return null;
+
+  return (
+    <span
+      className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+        MANAGER_STYLES[manager] ?? "bg-slate-100 text-slate-700 border-slate-200"
+      }`}
+    >
+      {manager}
+    </span>
+  );
 }
 
 function TeamLine({
   team,
   isWinner,
+  isLoser,
 }: {
   team: MatchupTeam;
   isWinner: boolean;
+  isLoser: boolean;
 }) {
+  const winnerClasses = isWinner
+    ? "border-green-300 bg-green-50 text-green-800"
+    : "";
+  const loserClasses = isLoser
+    ? "border-red-300 bg-red-50 text-red-700 line-through"
+    : "";
+  const baseClasses =
+    !isWinner && !isLoser ? "border-slate-200 bg-white text-slate-800" : "";
+
   return (
     <div
-      className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
-        isWinner ? "bg-green-50 font-semibold" : "bg-white"
-      }`}
+      className={`rounded-lg border px-3 py-2 transition ${winnerClasses} ${loserClasses} ${baseClasses}`}
     >
-      <span className="truncate">
-        {team.seed ? `${team.seed}. ` : ""}
-        {team.name}
-      </span>
+      <div className="flex items-start justify-between gap-3">
+        <span className="truncate text-sm font-medium">
+          {team.seed ? `${team.seed}. ` : ""}
+          {team.name}
+        </span>
+      </div>
+      <ManagerTag manager={team.manager} />
     </div>
   );
 }
 
 function MatchupCard({ matchup }: { matchup: Matchup }) {
   return (
-    <div className="space-y-2 rounded-xl border bg-slate-50 p-3">
+    <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
       <TeamLine
         team={matchup.top}
         isWinner={matchup.winnerId !== null && matchup.winnerId === matchup.top.id}
+        isLoser={matchup.loserId !== null && matchup.loserId === matchup.top.id}
       />
       <TeamLine
         team={matchup.bottom}
         isWinner={matchup.winnerId !== null && matchup.winnerId === matchup.bottom.id}
+        isLoser={matchup.loserId !== null && matchup.loserId === matchup.bottom.id}
       />
     </div>
   );
 }
 
-function RoundColumn({
+function ConnectorColumn({
   title,
   matchups,
 }: {
@@ -212,13 +288,16 @@ function RoundColumn({
   matchups: Matchup[];
 }) {
   return (
-    <div className="min-w-[220px]">
-      <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+    <div className="min-w-[240px]">
+      <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
         {title}
       </h4>
-      <div className="space-y-4">
+      <div className="space-y-6">
         {matchups.map((matchup, index) => (
-          <MatchupCard key={`${title}-${index}`} matchup={matchup} />
+          <div key={`${title}-${index}`} className="relative">
+            <MatchupCard matchup={matchup} />
+            <div className="pointer-events-none absolute -right-3 top-1/2 hidden h-px w-6 -translate-y-1/2 bg-slate-300 xl:block" />
+          </div>
         ))}
       </div>
     </div>
@@ -228,25 +307,35 @@ function RoundColumn({
 export default async function BracketPage() {
   const supabase = await createClient();
 
-  const [{ data: teams }, { data: games }] = await Promise.all([
-    supabase
-      .from("teams")
-      .select("id, school_name, seed, region")
-      .order("region", { ascending: true })
-      .order("seed", { ascending: true }),
-    supabase
-      .from("games")
-      .select("id, round_name, winning_team_id, losing_team_id"),
-  ]);
+  const [{ data: teams }, { data: games }, { data: picks }, { data: members }] =
+    await Promise.all([
+      supabase
+        .from("teams")
+        .select("id, school_name, seed, region")
+        .order("region", { ascending: true })
+        .order("seed", { ascending: true }),
+      supabase
+        .from("games")
+        .select("id, round_name, winning_team_id, losing_team_id"),
+      supabase.from("picks").select("id, member_id, team_id"),
+      supabase.from("league_members").select("id, display_name"),
+    ]);
 
   const typedTeams = (teams ?? []) as Team[];
   const typedGames = (games ?? []) as Game[];
+  const typedPicks = (picks ?? []) as Pick[];
+  const typedMembers = (members ?? []) as Member[];
+
+  const memberNameById = new Map(typedMembers.map((m) => [m.id, m.display_name]));
+  const managerByTeamId = new Map(
+    typedPicks.map((pick) => [pick.team_id, memberNameById.get(pick.member_id) ?? "Unknown"])
+  );
 
   const regionBrackets = REGIONS.map((region) => {
     const teamsForRegion = typedTeams.filter((team) => team.region === region);
     return {
       region,
-      ...buildRegionBracket(teamsForRegion, typedGames),
+      ...buildRegionBracket(teamsForRegion, typedGames, managerByTeamId),
     };
   });
 
@@ -280,7 +369,7 @@ export default async function BracketPage() {
   );
 
   return (
-    <div className="mx-auto max-w-[1600px] p-6">
+    <div className="mx-auto max-w-[1700px] p-6">
       <section className="mb-8">
         <h2 className="text-3xl font-bold">Tournament Bracket</h2>
         <p className="mt-2 text-gray-600">
@@ -294,11 +383,20 @@ export default async function BracketPage() {
             <h3 className="mb-6 text-2xl font-bold">{region.region} Region</h3>
 
             <div className="overflow-x-auto">
-              <div className="flex gap-6 pb-2">
-                <RoundColumn title="Round of 64" matchups={region.round64} />
-                <RoundColumn title="Round of 32" matchups={region.round32} />
-                <RoundColumn title="Sweet 16" matchups={region.sweet16} />
-                <RoundColumn title="Elite Eight" matchups={region.elite8} />
+              <div className="flex min-w-max gap-10 pb-4">
+                <ConnectorColumn title="Round of 64" matchups={region.round64} />
+                <ConnectorColumn title="Round of 32" matchups={region.round32} />
+                <ConnectorColumn title="Sweet 16" matchups={region.sweet16} />
+                <div className="min-w-[240px]">
+                  <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                    Elite Eight
+                  </h4>
+                  <div className="space-y-6">
+                    {region.elite8.map((matchup, index) => (
+                      <MatchupCard key={`elite-${region.region}-${index}`} matchup={matchup} />
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </section>
@@ -307,26 +405,28 @@ export default async function BracketPage() {
         <section className="rounded-2xl border bg-white p-6 shadow-sm">
           <h3 className="mb-6 text-2xl font-bold">Final Four & Championship</h3>
 
-          <div className="grid gap-6 xl:grid-cols-3">
-            <div>
-              <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
-                Final Four 1
-              </h4>
-              <MatchupCard matchup={semifinal1} />
-            </div>
+          <div className="overflow-x-auto">
+            <div className="flex min-w-max gap-10 pb-4">
+              <div className="min-w-[260px]">
+                <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                  Final Four 1
+                </h4>
+                <MatchupCard matchup={semifinal1} />
+              </div>
 
-            <div>
-              <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
-                Final Four 2
-              </h4>
-              <MatchupCard matchup={semifinal2} />
-            </div>
+              <div className="min-w-[260px]">
+                <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                  Final Four 2
+                </h4>
+                <MatchupCard matchup={semifinal2} />
+              </div>
 
-            <div>
-              <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
-                Championship
-              </h4>
-              <MatchupCard matchup={championship} />
+              <div className="min-w-[260px]">
+                <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                  Championship
+                </h4>
+                <MatchupCard matchup={championship} />
+              </div>
             </div>
           </div>
         </section>
