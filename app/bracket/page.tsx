@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import TeamLogo from "../components/TeamLogo";
 
 type Team = {
   id: string;
@@ -253,16 +252,13 @@ function TeamLine({
     <div
       className={`rounded-lg border px-3 py-2 transition ${winnerClasses} ${loserClasses} ${baseClasses}`}
     >
-      <div className="flex items-start gap-3">
-        <TeamLogo teamName={team.name} size={24} />
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium">
-            {team.seed ? `${team.seed}. ` : ""}
-            {team.name}
-          </div>
-          <ManagerTag manager={team.manager} />
-        </div>
+      <div className="flex items-start justify-between gap-3">
+        <span className="truncate text-sm font-medium">
+          {team.seed ? `${team.seed}. ` : ""}
+          {team.name}
+        </span>
       </div>
+      <ManagerTag manager={team.manager} />
     </div>
   );
 }
@@ -292,7 +288,7 @@ function ConnectorColumn({
   matchups: Matchup[];
 }) {
   return (
-    <div className="min-w-[250px]">
+    <div className="min-w-[240px]">
       <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
         {title}
       </h4>
@@ -391,7 +387,7 @@ export default async function BracketPage() {
                 <ConnectorColumn title="Round of 64" matchups={region.round64} />
                 <ConnectorColumn title="Round of 32" matchups={region.round32} />
                 <ConnectorColumn title="Sweet 16" matchups={region.sweet16} />
-                <div className="min-w-[250px]">
+                <div className="min-w-[240px]">
                   <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
                     Elite Eight
                   </h4>
