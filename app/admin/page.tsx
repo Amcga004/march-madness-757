@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AdminPanel from "@/app/components/AdminPanel";
 
-const ADMIN_EMAIL = "AmacBFS@gmail.com";
+const ADMIN_EMAIL = "amacBFS@gmail.com";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -15,7 +15,7 @@ export default async function AdminPage() {
     redirect("/admin/login");
   }
 
-  if (user.email !== ADMIN_EMAIL) {
+  if ((user.email ?? "").toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
     return (
       <div className="mx-auto max-w-3xl p-6">
         <div className="rounded-2xl border bg-white p-8 shadow-sm">
