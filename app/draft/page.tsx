@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getSnakeDraftOrder } from "@/lib/draft";
+import ManagerBadge from "../components/ManagerBadge";
+import TeamLogo from "../components/TeamLogo";
 
 type Member = {
   id: string;
@@ -29,25 +31,6 @@ type League = {
   id: string;
   name: string;
 };
-
-const MANAGER_STYLES: Record<string, string> = {
-  Andrew: "bg-blue-100 text-blue-700 border-blue-200",
-  Wesley: "bg-green-100 text-green-700 border-green-200",
-  Eric: "bg-purple-100 text-purple-700 border-purple-200",
-  Greg: "bg-orange-100 text-orange-700 border-orange-200",
-};
-
-function ManagerTag({ name }: { name: string }) {
-  return (
-    <span
-      className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${
-        MANAGER_STYLES[name] ?? "bg-slate-100 text-slate-700 border-slate-200"
-      }`}
-    >
-      {name}
-    </span>
-  );
-}
 
 export default function DraftPage() {
   const supabase = createClient();
@@ -194,7 +177,7 @@ export default function DraftPage() {
                 On the Clock
               </div>
               <div className="mt-2 flex items-center gap-3">
-                <ManagerTag name={currentMember.display_name} />
+                <ManagerBadge name={currentMember.display_name} />
                 <span className="text-2xl font-bold">{currentMember.display_name}</span>
               </div>
               <div className="mt-2 text-sm text-gray-600">
@@ -240,7 +223,7 @@ export default function DraftPage() {
                     Pick #{currentPick.overallPick}
                   </div>
                   <div className="mt-2 flex items-center gap-2">
-                    <ManagerTag name={currentMember.display_name} />
+                    <ManagerBadge name={currentMember.display_name} />
                     <span className="text-sm text-gray-600">
                       {currentMember.display_name} is selecting now
                     </span>
@@ -305,7 +288,7 @@ export default function DraftPage() {
                           Round {pick.round}
                         </div>
                       </div>
-                      <ManagerTag name={pick.player} />
+                      <ManagerBadge name={pick.player} />
                     </div>
                   </div>
                 ))
@@ -326,16 +309,19 @@ export default function DraftPage() {
               recentlyCompleted.map((pick) => (
                 <div key={pick.id} className="rounded-xl border p-4">
                   <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="font-semibold">
-                        Pick #{pick.overall_pick} • {pick.teamName}
-                      </div>
-                      <div className="mt-1 text-sm text-gray-600">
-                        {pick.seed ? `${pick.seed} Seed • ` : ""}
-                        {pick.region}
+                    <div className="flex items-start gap-3">
+                      <TeamLogo teamName={pick.teamName} size={30} />
+                      <div>
+                        <div className="font-semibold">
+                          Pick #{pick.overall_pick} • {pick.teamName}
+                        </div>
+                        <div className="mt-1 text-sm text-gray-600">
+                          {pick.seed ? `${pick.seed} Seed • ` : ""}
+                          {pick.region}
+                        </div>
                       </div>
                     </div>
-                    <ManagerTag name={pick.owner} />
+                    <ManagerBadge name={pick.owner} />
                   </div>
                 </div>
               ))
