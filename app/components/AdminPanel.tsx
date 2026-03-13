@@ -118,7 +118,6 @@ export default function AdminPanel() {
 
   async function deleteResult(gameId: string) {
     if (!league) return;
-
     if (!window.confirm("Delete this game result?")) return;
 
     setStatus("loading");
@@ -145,6 +144,32 @@ export default function AdminPanel() {
 
     setStatus("success");
     setMessage("Game result removed.");
+    await refreshResults();
+  }
+
+  async function resetLeague() {
+    const confirmed = window.confirm(
+      "Reset the league? This will delete all picks, recorded game results, and team results, but keep league members and teams."
+    );
+    if (!confirmed) return;
+
+    setStatus("loading");
+    setMessage("Resetting league data...");
+
+    const res = await fetch("/api/reset-league", {
+      method: "POST",
+    });
+
+    const result = await res.json();
+
+    if (!result.ok) {
+      setStatus("error");
+      setMessage(result.error || "Reset failed.");
+      return;
+    }
+
+    setStatus("success");
+    setMessage("League reset complete.");
     await refreshResults();
   }
 
@@ -249,9 +274,16 @@ export default function AdminPanel() {
         </div>
 
         <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-          <h3 className="text-xl font-semibold">Quick Navigation</h3>
+          <h3 className="text-xl font-semibold">Commissioner Tools</h3>
 
           <div className="mt-4 grid gap-3">
+            <button
+              onClick={resetLeague}
+              className="w-full rounded-xl border border-red-300 px-4 py-3 text-left text-red-600 hover:bg-red-50"
+            >
+              Reset Draft + Results
+            </button>
+
             <Link
               href="/draft"
               className="rounded-xl border px-4 py-3 hover:bg-slate-50"
