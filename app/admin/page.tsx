@@ -118,12 +118,13 @@ export default function AdminPage() {
 
   async function handleSubmitResult(e: React.FormEvent) {
     e.preventDefault();
-    setMessage("Saving result...");
 
     if (!league) {
       setMessage("League not found.");
       return;
     }
+
+    setMessage("Saving result...");
 
     const response = await fetch("/api/record-result", {
       method: "POST",
@@ -151,13 +152,10 @@ export default function AdminPage() {
   }
 
   async function handleDeleteResult(gameId: string) {
-    if (!league) {
-      setMessage("League not found.");
-      return;
-    }
+    if (!league) return;
 
     const confirmed = window.confirm(
-      "Are you sure you want to delete this result and recalculate scoring?"
+      "Are you sure you want to delete this result?"
     );
 
     if (!confirmed) return;
@@ -178,7 +176,7 @@ export default function AdminPage() {
     const result = await response.json();
 
     if (result.ok) {
-      setMessage("Result deleted and standings recalculated.");
+      setMessage("Result deleted.");
       await refreshLeagueData();
     } else {
       setMessage(result.error || "Failed to delete result.");
@@ -187,209 +185,128 @@ export default function AdminPage() {
 
   const totalPicks = picks.length;
   const totalResults = games.length;
-  const teamsAlive = teamResults.filter((team) => team.eliminated === false).length;
-  const teamsWithPoints = teamResults.filter((team) => team.total_points > 0).length;
+  const teamsAlive = teamResults.filter((t) => !t.eliminated).length;
+  const teamsWithPoints = teamResults.filter((t) => t.total_points > 0).length;
 
-  const teamMap = new Map(teams.map((team) => [team.id, team.school_name]));
+  const teamMap = new Map(teams.map((t) => [t.id, t.school_name]));
   const recentResults = games.slice(0, 6);
 
   return (
     <div className="mx-auto max-w-7xl p-6">
-      <section className="mb-8">
-        <h2 className="text-3xl font-bold">Commissioner Admin Panel</h2>
-        <p className="mt-2 text-gray-600">
-          Manage draft picks, submit results, and monitor league status.
-        </p>
-      </section>
+      <h2 className="mb-6 text-3xl font-bold">Commissioner Admin Panel</h2>
 
-      <section className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border bg-white p-5 shadow-sm">
-          <div className="text-sm text-gray-500">Total Picks Made</div>
-          <div className="mt-1 text-3xl font-bold">{totalPicks}</div>
-        </div>
+      <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Stat title="Total Picks Made" value={totalPicks} />
+        <Stat title="Results Recorded" value={totalResults} />
+        <Stat title="Teams Alive" value={teamsAlive} />
+        <Stat title="Teams With Points" value={teamsWithPoints} />
+      </div>
 
-        <div className="rounded-2xl border bg-white p-5 shadow-sm">
-          <div className="text-sm text-gray-500">Results Recorded</div>
-          <div className="mt-1 text-3xl font-bold">{totalResults}</div>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-5 shadow-sm">
-          <div className="text-sm text-gray-500">Teams Alive</div>
-          <div className="mt-1 text-3xl font-bold">{teamsAlive}</div>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-5 shadow-sm">
-          <div className="text-sm text-gray-500">Teams With Points</div>
-          <div className="mt-1 text-3xl font-bold">{teamsWithPoints}</div>
-        </div>
-      </section>
-
-      <section className="mb-8 grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+      <div className="mb-8 grid gap-6 xl:grid-cols-2">
+        <div className="rounded-2xl border p-6">
           <h3 className="text-xl font-semibold">Record Game Result</h3>
-          <p className="mt-2 text-sm text-gray-600">
-            Submit winners and losers here to update scoring and standings.
-          </p>
 
-          <form onSubmit={handleSubmitResult} className="mt-6 space-y-4">
-            <div>
-              <label className="mb-2 block text-sm font-medium">Round</label>
-              <select
-                className="w-full rounded-xl border px-3 py-2"
-                value={roundName}
-                onChange={(e) => setRoundName(e.target.value)}
-              >
-                {ROUNDS.map((round) => (
-                  <option key={round} value={round}>
-                    {round}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium">Winning Team</label>
-              <select
-                className="w-full rounded-xl border px-3 py-2"
-                value={winnerTeamId}
-                onChange={(e) => setWinnerTeamId(e.target.value)}
-                required
-              >
-                <option value="">Select winner</option>
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.school_name} • {team.seed} Seed • {team.region}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium">Losing Team</label>
-              <select
-                className="w-full rounded-xl border px-3 py-2"
-                value={loserTeamId}
-                onChange={(e) => setLoserTeamId(e.target.value)}
-                required
-              >
-                <option value="">Select loser</option>
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.school_name} • {team.seed} Seed • {team.region}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              type="submit"
-              className="rounded-xl bg-black px-4 py-2 text-white"
+          <form onSubmit={handleSubmitResult} className="mt-4 space-y-4">
+            <select
+              className="w-full rounded border p-2"
+              value={roundName}
+              onChange={(e) => setRoundName(e.target.value)}
             >
+              {ROUNDS.map((round) => (
+                <option key={round}>{round}</option>
+              ))}
+            </select>
+
+            <select
+              className="w-full rounded border p-2"
+              value={winnerTeamId}
+              onChange={(e) => setWinnerTeamId(e.target.value)}
+            >
+              <option value="">Winning Team</option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.school_name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="w-full rounded border p-2"
+              value={loserTeamId}
+              onChange={(e) => setLoserTeamId(e.target.value)}
+            >
+              <option value="">Losing Team</option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.school_name}
+                </option>
+              ))}
+            </select>
+
+            <button className="rounded bg-black px-4 py-2 text-white">
               Submit Result
             </button>
-
-            {message ? <p className="text-sm text-gray-600">{message}</p> : null}
           </form>
+
+          {message && <p className="mt-3 text-sm text-gray-600">{message}</p>}
         </div>
 
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border p-6">
           <h3 className="text-xl font-semibold">Commissioner Actions</h3>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Link
-              href="/make-pick"
-              className="rounded-2xl border p-5 transition hover:bg-slate-50"
-            >
-              <div className="text-lg font-semibold">Make Draft Pick</div>
-              <div className="mt-2 text-sm text-gray-600">
-                Manually assign a team to a manager.
-              </div>
+            <Link href="/make-pick" className="rounded border p-4">
+              Make Draft Pick
             </Link>
 
-            <Link
-              href="/draft"
-              className="rounded-2xl border p-5 transition hover:bg-slate-50"
-            >
-              <div className="text-lg font-semibold">Open Draft Room</div>
-              <div className="mt-2 text-sm text-gray-600">
-                View current pick and continue the live draft.
-              </div>
+            <Link href="/draft" className="rounded border p-4">
+              Open Draft Room
             </Link>
 
-            <Link
-              href="/history"
-              className="rounded-2xl border p-5 transition hover:bg-slate-50"
-            >
-              <div className="text-lg font-semibold">Review Results History</div>
-              <div className="mt-2 text-sm text-gray-600">
-                Confirm which game results have already been entered.
-              </div>
+            <Link href="/history" className="rounded border p-4">
+              Review Results History
             </Link>
 
-            <Link
-              href="/standings"
-              className="rounded-2xl border p-5 transition hover:bg-slate-50"
-            >
-              <div className="text-lg font-semibold">Standings Detail</div>
-              <div className="mt-2 text-sm text-gray-600">
-                Review expanded standings and roster outcomes.
-              </div>
+            <Link href="/standings" className="rounded border p-4">
+              Standings Detail
             </Link>
           </div>
         </div>
-      </section>
+      </div>
 
-      <section className="mb-8 rounded-2xl border bg-white p-6 shadow-sm">
+      <div className="rounded-2xl border p-6">
         <h3 className="text-xl font-semibold">Recent Entered Results</h3>
 
         <div className="mt-4 space-y-3">
-          {recentResults.length === 0 ? (
-            <div className="rounded-xl border p-4 text-sm text-gray-600">
-              No game results recorded yet.
-            </div>
-          ) : (
-            recentResults.map((game) => (
-              <div key={game.id} className="rounded-xl border p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm text-gray-500">{game.round_name}</div>
-                    <div className="mt-1 font-semibold">
-                      {teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner"} defeated{" "}
-                      {teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser"}
-                    </div>
-                    <div className="mt-1 text-sm text-gray-500">
-                      {new Date(game.created_at).toLocaleString()}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteResult(game.id)}
-                    className="rounded-xl border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
-                  >
-                    Delete
-                  </button>
+          {recentResults.map((game) => (
+            <div key={game.id} className="flex justify-between border p-4">
+              <div>
+                <div className="text-sm text-gray-500">{game.round_name}</div>
+                <div className="font-semibold">
+                  {teamMap.get(game.winning_team_id ?? "")} defeated{" "}
+                  {teamMap.get(game.losing_team_id ?? "")}
                 </div>
               </div>
-            ))
-          )}
-        </div>
-      </section>
 
-      <section className="rounded-2xl border bg-white p-6 shadow-sm">
-        <h3 className="text-xl font-semibold">League Members</h3>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {members.map((member) => (
-            <div key={member.id} className="rounded-xl border p-4">
-              <div className="font-semibold">{member.display_name}</div>
-              <div className="mt-1 text-sm text-gray-600">
-                Commissioner tools can be used to manage picks and results.
-              </div>
+              <button
+                onClick={() => handleDeleteResult(game.id)}
+                className="rounded border border-red-400 px-3 py-1 text-red-600"
+              >
+                Delete
+              </button>
             </div>
           ))}
         </div>
-      </section>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ title, value }: { title: string; value: number }) {
+  return (
+    <div className="rounded-2xl border p-5">
+      <div className="text-sm text-gray-500">{title}</div>
+      <div className="mt-1 text-3xl font-bold">{value}</div>
     </div>
   );
 }
