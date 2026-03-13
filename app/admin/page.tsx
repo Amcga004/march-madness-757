@@ -10,6 +10,10 @@ type Pick = {
 
 type Game = {
   id: string;
+  round_name: string;
+  winning_team_id: string | null;
+  losing_team_id: string | null;
+  created_at: string;
 };
 
 type Member = {
@@ -70,7 +74,10 @@ export default function AdminPage() {
         { data: leagueData },
       ] = await Promise.all([
         supabase.from("picks").select("id"),
-        supabase.from("games").select("id"),
+        supabase
+          .from("games")
+          .select("id, round_name, winning_team_id, losing_team_id, created_at")
+          .order("created_at", { ascending: false }),
         supabase.from("league_members").select("id, display_name"),
         supabase.from("team_results").select("id, eliminated, total_points"),
         supabase
@@ -126,7 +133,10 @@ export default function AdminPage() {
       setLoserTeamId("");
 
       const [{ data: gamesData }, { data: resultsData }] = await Promise.all([
-        supabase.from("games").select("id"),
+        supabase
+          .from("games")
+          .select("id, round_name, winning_team_id, losing_team_id, created_at")
+          .order("created_at", { ascending: false }),
         supabase.from("team_results").select("id, eliminated, total_points"),
       ]);
 
@@ -141,6 +151,9 @@ export default function AdminPage() {
   const totalResults = games.length;
   const teamsAlive = teamResults.filter((team) => team.eliminated === false).length;
   const teamsWithPoints = teamResults.filter((team) => team.total_points > 0).length;
+
+  const teamMap = new Map(teams.map((team) => [team.id, team.school_name]));
+  const recentResults = games.slice(0, 6);
 
   return (
     <div className="mx-auto max-w-7xl p-6">
@@ -285,6 +298,31 @@ export default function AdminPage() {
               </div>
             </Link>
           </div>
+        </div>
+      </section>
+
+      <section className="mb-8 rounded-2xl border bg-white p-6 shadow-sm">
+        <h3 className="text-xl font-semibold">Recent Entered Results</h3>
+
+        <div className="mt-4 space-y-3">
+          {recentResults.length === 0 ? (
+            <div className="rounded-xl border p-4 text-sm text-gray-600">
+              No game results recorded yet.
+            </div>
+          ) : (
+            recentResults.map((game) => (
+              <div key={game.id} className="rounded-xl border p-4">
+                <div className="text-sm text-gray-500">{game.round_name}</div>
+                <div className="mt-1 font-semibold">
+                  {teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner"} defeated{" "}
+                  {teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser"}
+                </div>
+                <div className="mt-1 text-sm text-gray-500">
+                  {new Date(game.created_at).toLocaleString()}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </section>
 
