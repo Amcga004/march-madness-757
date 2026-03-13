@@ -1,5 +1,10 @@
 import { DRAFT_ROUNDS } from "./constants";
-import type { SnakeDraftPick } from "./types";
+
+type SnakeDraftPick = {
+  overallPick: number;
+  round: number;
+  player: string;
+};
 
 export function validateDraftOrder(order: string[]): void {
   if (order.length !== 4) {
