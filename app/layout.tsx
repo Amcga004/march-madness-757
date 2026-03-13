@@ -57,6 +57,13 @@ export default function RootLayout({
                 </Link>
 
                 <Link
+                  href="/bracket"
+                  className="rounded-xl border bg-white px-4 py-2 hover:bg-slate-50"
+                >
+                  Bracket
+                </Link>
+
+                <Link
                   href="/admin"
                   className="rounded-xl border bg-white px-4 py-2 hover:bg-slate-50"
                 >
