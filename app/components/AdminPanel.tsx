@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import TeamLogo from "./TeamLogo";
 
@@ -34,7 +34,7 @@ const ROUNDS = [
 ];
 
 export default function AdminPanel() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [games, setGames] = useState<Game[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -43,29 +43,35 @@ export default function AdminPanel() {
   const [winnerTeamId, setWinnerTeamId] = useState("");
   const [loserTeamId, setLoserTeamId] = useState("");
   const [roundName, setRoundName] = useState("Round of 64");
+  const [seasonYear, setSeasonYear] = useState<number>(2026);
 
   const [status, setStatus] = useState<StatusType>("idle");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     async function loadData() {
-      const [{ data: gameData }, { data: teamData }, { data: leagueData }] =
-        await Promise.all([
-          supabase
-            .from("games")
-            .select("id,round_name,winning_team_id,losing_team_id,created_at")
-            .order("created_at", { ascending: false }),
-          supabase.from("teams").select("id,school_name"),
-          supabase
-            .from("leagues")
-            .select("id")
-            .eq("public_slug", "2026-757-march-madness-draft")
-            .single(),
-        ]);
+      try {
+        const [{ data: gameData }, { data: teamData }, { data: leagueData }] =
+          await Promise.all([
+            supabase
+              .from("games")
+              .select("id,round_name,winning_team_id,losing_team_id,created_at")
+              .order("created_at", { ascending: false }),
+            supabase.from("teams").select("id,school_name"),
+            supabase
+              .from("leagues")
+              .select("id")
+              .eq("public_slug", "2026-757-march-madness-draft")
+              .single(),
+          ]);
 
-      if (gameData) setGames(gameData);
-      if (teamData) setTeams(teamData);
-      if (leagueData) setLeague(leagueData);
+        if (gameData) setGames(gameData as Game[]);
+        if (teamData) setTeams(teamData as Team[]);
+        if (leagueData) setLeague(leagueData as League);
+      } catch {
+        setStatus("error");
+        setMessage("Failed to load admin data.");
+      }
     }
 
     loadData();
@@ -77,74 +83,143 @@ export default function AdminPanel() {
       .select("id,round_name,winning_team_id,losing_team_id,created_at")
       .order("created_at", { ascending: false });
 
-    if (data) setGames(data);
+    if (data) setGames(data as Game[]);
   }
 
   async function submitResult(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!league) return;
+    if (!league) {
+      setStatus("error");
+      setMessage("League not found.");
+      return;
+    }
+
+    if (!winnerTeamId || !loserTeamId) {
+      setStatus("error");
+      setMessage("Please select both a winning team and losing team.");
+      return;
+    }
+
+    if (winnerTeamId === loserTeamId) {
+      setStatus("error");
+      setMessage("Winning team and losing team cannot be the same.");
+      return;
+    }
 
     setStatus("loading");
     setMessage("Saving result...");
 
-    const res = await fetch("/api/record-result", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        leagueId: league.id,
-        winnerTeamId,
-        loserTeamId,
-        roundName,
-      }),
-    });
+    try {
+      const res = await fetch("/api/record-result", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          leagueId: league.id,
+          winnerTeamId,
+          loserTeamId,
+          roundName,
+        }),
+      });
 
-    const result = await res.json();
+      const result = await res.json();
 
-    if (!result.ok) {
+      if (!result.ok) {
+        setStatus("error");
+        setMessage(result.error || "Failed to save result.");
+        return;
+      }
+
+      setStatus("success");
+      setMessage("Game result recorded.");
+      setWinnerTeamId("");
+      setLoserTeamId("");
+      await refreshResults();
+    } catch {
       setStatus("error");
-      setMessage(result.error || "Failed to save result.");
-      return;
+      setMessage("Failed to save result.");
     }
-
-    setStatus("success");
-    setMessage("Game result recorded.");
-    setWinnerTeamId("");
-    setLoserTeamId("");
-    await refreshResults();
   }
 
   async function deleteResult(gameId: string) {
-    if (!league) return;
+    if (!league) {
+      setStatus("error");
+      setMessage("League not found.");
+      return;
+    }
+
     if (!window.confirm("Delete this game result?")) return;
 
     setStatus("loading");
     setMessage("Removing result...");
 
-    const res = await fetch("/api/delete-result", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        gameId,
-        leagueId: league.id,
-      }),
-    });
+    try {
+      const res = await fetch("/api/delete-result", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          gameId,
+          leagueId: league.id,
+        }),
+      });
 
-    const result = await res.json();
+      const result = await res.json();
 
-    if (!result.ok) {
+      if (!result.ok) {
+        setStatus("error");
+        setMessage(result.error || "Delete failed.");
+        return;
+      }
+
+      setStatus("success");
+      setMessage("Game result removed.");
+      await refreshResults();
+    } catch {
       setStatus("error");
-      setMessage(result.error || "Delete failed.");
-      return;
+      setMessage("Delete failed.");
     }
+  }
 
-    setStatus("success");
-    setMessage("Game result removed.");
-    await refreshResults();
+  async function archiveSeason() {
+    const confirmed = window.confirm(
+      `Archive final standings for the ${seasonYear} season? Do this only after all results are entered and standings are final.`
+    );
+    if (!confirmed) return;
+
+    setStatus("loading");
+    setMessage("Archiving current season standings...");
+
+    try {
+      const res = await fetch("/api/admin/archive-season", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          seasonYear,
+        }),
+      });
+
+      const result = await res.json();
+
+      if (!result.ok) {
+        setStatus("error");
+        setMessage(result.error || "Season archive failed.");
+        return;
+      }
+
+      setStatus("success");
+      setMessage(
+        `Season ${result.archivedSeason} archived successfully. ${result.rowsInserted} standings rows saved.`
+      );
+    } catch {
+      setStatus("error");
+      setMessage("Season archive failed.");
+    }
   }
 
   async function resetLeague() {
@@ -156,21 +231,26 @@ export default function AdminPanel() {
     setStatus("loading");
     setMessage("Resetting league data...");
 
-    const res = await fetch("/api/reset-league", {
-      method: "POST",
-    });
+    try {
+      const res = await fetch("/api/reset-league", {
+        method: "POST",
+      });
 
-    const result = await res.json();
+      const result = await res.json();
 
-    if (!result.ok) {
+      if (!result.ok) {
+        setStatus("error");
+        setMessage(result.error || "Reset failed.");
+        return;
+      }
+
+      setStatus("success");
+      setMessage("League reset complete.");
+      await refreshResults();
+    } catch {
       setStatus("error");
-      setMessage(result.error || "Reset failed.");
-      return;
+      setMessage("Reset failed.");
     }
-
-    setStatus("success");
-    setMessage("League reset complete.");
-    await refreshResults();
   }
 
   const teamMap = new Map(teams.map((t) => [t.id, t.school_name]));
@@ -234,7 +314,9 @@ export default function AdminPanel() {
               onChange={(e) => setRoundName(e.target.value)}
             >
               {ROUNDS.map((round) => (
-                <option key={round}>{round}</option>
+                <option key={round} value={round}>
+                  {round}
+                </option>
               ))}
             </select>
 
@@ -277,7 +359,51 @@ export default function AdminPanel() {
           <h3 className="text-xl font-semibold">Commissioner Tools</h3>
 
           <div className="mt-4 grid gap-3">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <div className="flex flex-col gap-3">
+                <div>
+                  <h4 className="font-semibold text-amber-900">
+                    Archive Current Season Standings
+                  </h4>
+                  <p className="mt-1 text-sm text-amber-800">
+                    Save a permanent historical snapshot before resetting the
+                    league.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="w-full sm:max-w-[180px]">
+                    <label
+                      htmlFor="seasonYear"
+                      className="mb-1 block text-xs font-medium uppercase tracking-wide text-amber-900"
+                    >
+                      Season Year
+                    </label>
+                    <input
+                      id="seasonYear"
+                      type="number"
+                      value={seasonYear}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        setSeasonYear(Number.isNaN(value) ? 2026 : value);
+                      }}
+                      className="w-full rounded-xl border border-amber-300 bg-white px-3 py-2"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={archiveSeason}
+                    className="w-full rounded-xl bg-amber-600 px-4 py-3 text-left font-medium text-white hover:bg-amber-700 sm:w-auto"
+                  >
+                    Archive Season
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <button
+              type="button"
               onClick={resetLeague}
               className="w-full rounded-xl border border-red-300 px-4 py-3 text-left text-red-600 hover:bg-red-50"
             >
@@ -311,6 +437,13 @@ export default function AdminPanel() {
             >
               Standings
             </Link>
+
+            <Link
+              href="/seasons"
+              className="rounded-xl border px-4 py-3 hover:bg-slate-50"
+            >
+              Seasons Archive
+            </Link>
           </div>
         </div>
       </section>
@@ -325,8 +458,10 @@ export default function AdminPanel() {
             </div>
           ) : (
             games.slice(0, 10).map((game) => {
-              const winner = teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner";
-              const loser = teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser";
+              const winner =
+                teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner";
+              const loser =
+                teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser";
 
               return (
                 <div
@@ -352,6 +487,7 @@ export default function AdminPanel() {
                   </div>
 
                   <button
+                    type="button"
                     onClick={() => deleteResult(game.id)}
                     className="w-full rounded-lg border border-red-300 px-3 py-2 text-red-600 hover:bg-red-50 sm:w-auto"
                   >
