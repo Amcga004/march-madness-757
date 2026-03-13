@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 type Pick = {
   id: string;
@@ -20,30 +23,124 @@ type TeamResult = {
   total_points: number;
 };
 
-export default async function AdminPage() {
-  const supabase = await createClient();
+type Team = {
+  id: string;
+  school_name: string;
+  seed: number;
+  region: string;
+};
 
-  const [
-    { data: picks },
-    { data: games },
-    { data: members },
-    { data: teamResults },
-  ] = await Promise.all([
-    supabase.from("picks").select("id"),
-    supabase.from("games").select("id"),
-    supabase.from("league_members").select("id, display_name"),
-    supabase.from("team_results").select("id, eliminated, total_points"),
-  ]);
+type League = {
+  id: string;
+  name: string;
+};
 
-  const typedPicks = (picks ?? []) as Pick[];
-  const typedGames = (games ?? []) as Game[];
-  const typedMembers = (members ?? []) as Member[];
-  const typedResults = (teamResults ?? []) as TeamResult[];
+const ROUNDS = [
+  "Round of 64",
+  "Round of 32",
+  "Sweet 16",
+  "Elite Eight",
+  "Final Four",
+  "Championship",
+];
 
-  const totalPicks = typedPicks.length;
-  const totalResults = typedGames.length;
-  const teamsAlive = typedResults.filter((team) => team.eliminated === false).length;
-  const teamsWithPoints = typedResults.filter((team) => team.total_points > 0).length;
+export default function AdminPage() {
+  const supabase = createClient();
+
+  const [picks, setPicks] = useState<Pick[]>([]);
+  const [games, setGames] = useState<Game[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [teamResults, setTeamResults] = useState<TeamResult[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [league, setLeague] = useState<League | null>(null);
+
+  const [winnerTeamId, setWinnerTeamId] = useState("");
+  const [loserTeamId, setLoserTeamId] = useState("");
+  const [roundName, setRoundName] = useState("Round of 64");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    async function loadData() {
+      const [
+        { data: picksData },
+        { data: gamesData },
+        { data: membersData },
+        { data: resultsData },
+        { data: teamsData },
+        { data: leagueData },
+      ] = await Promise.all([
+        supabase.from("picks").select("id"),
+        supabase.from("games").select("id"),
+        supabase.from("league_members").select("id, display_name"),
+        supabase.from("team_results").select("id, eliminated, total_points"),
+        supabase
+          .from("teams")
+          .select("id, school_name, seed, region")
+          .order("region", { ascending: true })
+          .order("seed", { ascending: true }),
+        supabase
+          .from("leagues")
+          .select("id, name")
+          .eq("public_slug", "2026-757-march-madness-draft")
+          .single(),
+      ]);
+
+      if (picksData) setPicks(picksData);
+      if (gamesData) setGames(gamesData);
+      if (membersData) setMembers(membersData);
+      if (resultsData) setTeamResults(resultsData);
+      if (teamsData) setTeams(teamsData);
+      if (leagueData) setLeague(leagueData);
+    }
+
+    loadData();
+  }, [supabase]);
+
+  async function handleSubmitResult(e: React.FormEvent) {
+    e.preventDefault();
+    setMessage("Saving result...");
+
+    if (!league) {
+      setMessage("League not found.");
+      return;
+    }
+
+    const response = await fetch("/api/record-result", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        leagueId: league.id,
+        winnerTeamId,
+        loserTeamId,
+        roundName,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (result.ok) {
+      setMessage("Result saved successfully.");
+      setWinnerTeamId("");
+      setLoserTeamId("");
+
+      const [{ data: gamesData }, { data: resultsData }] = await Promise.all([
+        supabase.from("games").select("id"),
+        supabase.from("team_results").select("id, eliminated, total_points"),
+      ]);
+
+      if (gamesData) setGames(gamesData);
+      if (resultsData) setTeamResults(resultsData);
+    } else {
+      setMessage(result.error || "Something went wrong.");
+    }
+  }
+
+  const totalPicks = picks.length;
+  const totalResults = games.length;
+  const teamsAlive = teamResults.filter((team) => team.eliminated === false).length;
+  const teamsWithPoints = teamResults.filter((team) => team.total_points > 0).length;
 
   return (
     <div className="mx-auto max-w-7xl p-6">
@@ -76,7 +173,74 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      <section className="mb-8 grid gap-6 xl:grid-cols-2">
+      <section className="mb-8 grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <h3 className="text-xl font-semibold">Record Game Result</h3>
+          <p className="mt-2 text-sm text-gray-600">
+            Submit winners and losers here to update scoring and standings.
+          </p>
+
+          <form onSubmit={handleSubmitResult} className="mt-6 space-y-4">
+            <div>
+              <label className="mb-2 block text-sm font-medium">Round</label>
+              <select
+                className="w-full rounded-xl border px-3 py-2"
+                value={roundName}
+                onChange={(e) => setRoundName(e.target.value)}
+              >
+                {ROUNDS.map((round) => (
+                  <option key={round} value={round}>
+                    {round}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">Winning Team</label>
+              <select
+                className="w-full rounded-xl border px-3 py-2"
+                value={winnerTeamId}
+                onChange={(e) => setWinnerTeamId(e.target.value)}
+                required
+              >
+                <option value="">Select winner</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.school_name} • {team.seed} Seed • {team.region}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">Losing Team</label>
+              <select
+                className="w-full rounded-xl border px-3 py-2"
+                value={loserTeamId}
+                onChange={(e) => setLoserTeamId(e.target.value)}
+                required
+              >
+                <option value="">Select loser</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.school_name} • {team.seed} Seed • {team.region}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              className="rounded-xl bg-black px-4 py-2 text-white"
+            >
+              Submit Result
+            </button>
+
+            {message ? <p className="text-sm text-gray-600">{message}</p> : null}
+          </form>
+        </div>
+
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <h3 className="text-xl font-semibold">Commissioner Actions</h3>
 
@@ -88,16 +252,6 @@ export default async function AdminPage() {
               <div className="text-lg font-semibold">Make Draft Pick</div>
               <div className="mt-2 text-sm text-gray-600">
                 Manually assign a team to a manager.
-              </div>
-            </Link>
-
-            <Link
-              href="/results"
-              className="rounded-2xl border p-5 transition hover:bg-slate-50"
-            >
-              <div className="text-lg font-semibold">Record Result</div>
-              <div className="mt-2 text-sm text-gray-600">
-                Enter winner, loser, and round to update scoring.
               </div>
             </Link>
 
@@ -120,32 +274,6 @@ export default async function AdminPage() {
                 Confirm which game results have already been entered.
               </div>
             </Link>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <h3 className="text-xl font-semibold">League Navigation</h3>
-
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Link
-              href="/"
-              className="rounded-2xl border p-5 transition hover:bg-slate-50"
-            >
-              <div className="text-lg font-semibold">Dashboard</div>
-              <div className="mt-2 text-sm text-gray-600">
-                View leaderboard, recent results, and league snapshot.
-              </div>
-            </Link>
-
-            <Link
-              href="/rosters"
-              className="rounded-2xl border p-5 transition hover:bg-slate-50"
-            >
-              <div className="text-lg font-semibold">Rosters</div>
-              <div className="mt-2 text-sm text-gray-600">
-                Review every manager’s teams and current status.
-              </div>
-            </Link>
 
             <Link
               href="/standings"
@@ -153,17 +281,7 @@ export default async function AdminPage() {
             >
               <div className="text-lg font-semibold">Standings Detail</div>
               <div className="mt-2 text-sm text-gray-600">
-                View expanded points, wins, and roster breakdowns.
-              </div>
-            </Link>
-
-            <Link
-              href="/picks"
-              className="rounded-2xl border p-5 transition hover:bg-slate-50"
-            >
-              <div className="text-lg font-semibold">Pick Log</div>
-              <div className="mt-2 text-sm text-gray-600">
-                Review completed draft picks in order.
+                Review expanded standings and roster outcomes.
               </div>
             </Link>
           </div>
@@ -174,11 +292,11 @@ export default async function AdminPage() {
         <h3 className="text-xl font-semibold">League Members</h3>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {typedMembers.map((member) => (
+          {members.map((member) => (
             <div key={member.id} className="rounded-xl border p-4">
               <div className="font-semibold">{member.display_name}</div>
               <div className="mt-1 text-sm text-gray-600">
-                Commissioner access page can be used to manage picks and results.
+                Commissioner tools can be used to manage picks and results.
               </div>
             </div>
           ))}
