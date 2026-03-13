@@ -161,22 +161,22 @@ export default function DraftPage() {
   const recentlyCompleted = [...completedPicks].reverse().slice(0, 10);
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
-      <section className="mb-8">
+    <div className="mx-auto max-w-7xl p-4 sm:p-6">
+      <section className="mb-6 sm:mb-8">
         <h2 className="text-3xl font-bold">Draft Room</h2>
         <p className="mt-2 text-gray-600">
           Live commissioner-controlled snake draft.
         </p>
       </section>
 
-      <section className="mb-8 rounded-2xl border bg-white p-6 shadow-sm">
+      <section className="mb-6 rounded-2xl border bg-white p-5 shadow-sm sm:mb-8 sm:p-6">
         {currentPick && currentMember ? (
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-4">
             <div>
               <div className="text-sm font-semibold uppercase tracking-wide text-gray-500">
                 On the Clock
               </div>
-              <div className="mt-2 flex items-center gap-3">
+              <div className="mt-2 flex flex-wrap items-center gap-3">
                 <ManagerBadge name={currentMember.display_name} />
                 <span className="text-2xl font-bold">{currentMember.display_name}</span>
               </div>
@@ -212,7 +212,7 @@ export default function DraftPage() {
 
       <section className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
         <div className="space-y-6">
-          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
             <h3 className="text-xl font-semibold">Make Current Pick</h3>
 
             {currentPick && currentMember ? (
@@ -222,7 +222,7 @@ export default function DraftPage() {
                   <div className="mt-1 text-lg font-semibold">
                     Pick #{currentPick.overallPick}
                   </div>
-                  <div className="mt-2 flex items-center gap-2">
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     <ManagerBadge name={currentMember.display_name} />
                     <span className="text-sm text-gray-600">
                       {currentMember.display_name} is selecting now
@@ -250,7 +250,7 @@ export default function DraftPage() {
 
                   <button
                     type="submit"
-                    className="rounded-xl bg-black px-4 py-2 text-white"
+                    className="w-full rounded-xl bg-black px-4 py-2 text-white sm:w-auto"
                   >
                     Draft Team
                   </button>
@@ -265,7 +265,7 @@ export default function DraftPage() {
             )}
           </div>
 
-          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
             <h3 className="text-xl font-semibold">Upcoming Picks</h3>
 
             <div className="mt-4 space-y-3">
@@ -281,14 +281,16 @@ export default function DraftPage() {
                       index === 0 ? "border-slate-900 bg-slate-100" : ""
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <div className="font-semibold">Pick #{pick.overallPick}</div>
                         <div className="mt-1 text-sm text-gray-600">
                           Round {pick.round}
                         </div>
                       </div>
-                      <ManagerBadge name={pick.player} />
+                      <div className="self-start sm:self-auto">
+                        <ManagerBadge name={pick.player} />
+                      </div>
                     </div>
                   </div>
                 ))
@@ -297,7 +299,7 @@ export default function DraftPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
           <h3 className="text-xl font-semibold">Recently Completed Picks</h3>
 
           <div className="mt-4 space-y-3">
@@ -308,7 +310,7 @@ export default function DraftPage() {
             ) : (
               recentlyCompleted.map((pick) => (
                 <div key={pick.id} className="rounded-xl border p-4">
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-start gap-3">
                       <TeamLogo teamName={pick.teamName} size={30} />
                       <div>
@@ -321,7 +323,9 @@ export default function DraftPage() {
                         </div>
                       </div>
                     </div>
-                    <ManagerBadge name={pick.owner} />
+                    <div className="self-start sm:self-auto">
+                      <ManagerBadge name={pick.owner} />
+                    </div>
                   </div>
                 </div>
               ))

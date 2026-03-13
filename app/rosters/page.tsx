@@ -34,8 +34,14 @@ export default async function RostersPage() {
 
   const [{ data: members }, { data: picks }, { data: teams }, { data: teamResults }] =
     await Promise.all([
-      supabase.from("league_members").select("*").order("draft_slot", { ascending: true }),
-      supabase.from("picks").select("*").order("overall_pick", { ascending: true }),
+      supabase
+        .from("league_members")
+        .select("*")
+        .order("draft_slot", { ascending: true }),
+      supabase
+        .from("picks")
+        .select("*")
+        .order("overall_pick", { ascending: true }),
       supabase.from("teams").select("*"),
       supabase.from("team_results").select("*"),
     ]);
@@ -46,29 +52,33 @@ export default async function RostersPage() {
   const typedResults = (teamResults ?? []) as TeamResult[];
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
-      <section className="mb-8">
+    <div className="mx-auto max-w-7xl p-4 sm:p-6">
+      <section className="mb-6 sm:mb-8">
         <h2 className="text-3xl font-bold">Team Rosters</h2>
         <p className="mt-2 text-slate-600">
           Every manager’s drafted teams, point totals, and survival status.
         </p>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-5 xl:grid-cols-2">
         {typedMembers.map((member) => {
           const memberPicks = typedPicks.filter((p) => p.member_id === member.id);
 
           return (
             <div
               key={member.id}
-              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
             >
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="text-2xl font-bold">{member.display_name}</h3>
-                  <p className="mt-1 text-sm text-slate-500">Draft Slot {member.draft_slot}</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Draft Slot {member.draft_slot}
+                  </p>
                 </div>
-                <ManagerBadge name={member.display_name} />
+                <div className="self-start sm:self-auto">
+                  <ManagerBadge name={member.display_name} />
+                </div>
               </div>
 
               <div className="mt-5 space-y-3">
@@ -86,14 +96,14 @@ export default async function RostersPage() {
                         key={pick.id}
                         className="rounded-xl border border-slate-200 p-4 shadow-sm"
                       >
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                           <div className="flex items-start gap-3">
-                            <TeamLogo teamName={team?.school_name ?? "TBD"} size={30} />
-                            <div>
+                            <TeamLogo teamName={team?.school_name ?? "TBD"} size={32} />
+                            <div className="min-w-0">
                               <div className="text-sm font-medium text-slate-500">
                                 Pick #{pick.overall_pick}
                               </div>
-                              <div className="mt-1 text-lg font-semibold">
+                              <div className="mt-1 text-base font-semibold sm:text-lg">
                                 {team?.school_name}
                               </div>
                               <div className="mt-1 text-sm text-slate-500">
@@ -102,7 +112,7 @@ export default async function RostersPage() {
                             </div>
                           </div>
 
-                          <div className="text-right">
+                          <div className="flex items-center justify-between sm:block sm:text-right">
                             <div className="text-sm text-slate-500">Points</div>
                             <div className="mt-1 text-xl font-bold">
                               {result?.total_points ?? 0}

@@ -288,11 +288,11 @@ function ConnectorColumn({
   matchups: Matchup[];
 }) {
   return (
-    <div className="min-w-[240px]">
-      <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+    <div className="min-w-[220px] sm:min-w-[240px]">
+      <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
         {title}
       </h4>
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {matchups.map((matchup, index) => (
           <div key={`${title}-${index}`} className="relative">
             <MatchupCard matchup={matchup} />
@@ -369,29 +369,29 @@ export default async function BracketPage() {
   );
 
   return (
-    <div className="mx-auto max-w-[1700px] p-6">
-      <section className="mb-8">
+    <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
+      <section className="mb-6 sm:mb-8">
         <h2 className="text-3xl font-bold">Tournament Bracket</h2>
         <p className="mt-2 text-gray-600">
           Bracket view updates automatically as results are entered by the commissioner.
         </p>
       </section>
 
-      <div className="space-y-10">
+      <div className="space-y-8 sm:space-y-10">
         {regionBrackets.map((region) => (
-          <section key={region.region} className="rounded-2xl border bg-white p-6 shadow-sm">
-            <h3 className="mb-6 text-2xl font-bold">{region.region} Region</h3>
+          <section key={region.region} className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
+            <h3 className="mb-5 text-2xl font-bold">{region.region} Region</h3>
 
             <div className="overflow-x-auto">
-              <div className="flex min-w-max gap-10 pb-4">
+              <div className="flex min-w-max gap-6 pb-4 sm:gap-10">
                 <ConnectorColumn title="Round of 64" matchups={region.round64} />
                 <ConnectorColumn title="Round of 32" matchups={region.round32} />
                 <ConnectorColumn title="Sweet 16" matchups={region.sweet16} />
-                <div className="min-w-[240px]">
-                  <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                <div className="min-w-[220px] sm:min-w-[240px]">
+                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
                     Elite Eight
                   </h4>
-                  <div className="space-y-6">
+                  <div className="space-y-4 sm:space-y-6">
                     {region.elite8.map((matchup, index) => (
                       <MatchupCard key={`elite-${region.region}-${index}`} matchup={matchup} />
                     ))}
@@ -402,27 +402,27 @@ export default async function BracketPage() {
           </section>
         ))}
 
-        <section className="rounded-2xl border bg-white p-6 shadow-sm">
-          <h3 className="mb-6 text-2xl font-bold">Final Four & Championship</h3>
+        <section className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
+          <h3 className="mb-5 text-2xl font-bold">Final Four & Championship</h3>
 
           <div className="overflow-x-auto">
-            <div className="flex min-w-max gap-10 pb-4">
-              <div className="min-w-[260px]">
-                <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+            <div className="flex min-w-max gap-6 pb-4 sm:gap-10">
+              <div className="min-w-[220px] sm:min-w-[260px]">
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
                   Final Four 1
                 </h4>
                 <MatchupCard matchup={semifinal1} />
               </div>
 
-              <div className="min-w-[260px]">
-                <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+              <div className="min-w-[220px] sm:min-w-[260px]">
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
                   Final Four 2
                 </h4>
                 <MatchupCard matchup={semifinal2} />
               </div>
 
-              <div className="min-w-[260px]">
-                <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+              <div className="min-w-[220px] sm:min-w-[260px]">
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
                   Championship
                 </h4>
                 <MatchupCard matchup={championship} />
