@@ -112,6 +112,15 @@ export default function DraftPage() {
     };
   });
 
+  async function refreshPicks() {
+    const { data: pickData } = await supabase
+      .from("picks")
+      .select("id,overall_pick,snake_round,member_id,team_id")
+      .order("overall_pick", { ascending: true });
+
+    if (pickData) setPicks(pickData);
+  }
+
   async function handleDraftPick(e: React.FormEvent) {
     e.preventDefault();
 
@@ -143,15 +152,30 @@ export default function DraftPage() {
       return;
     }
 
-    const { data: pickData } = await supabase
-      .from("picks")
-      .select("id,overall_pick,snake_round,member_id,team_id")
-      .order("overall_pick", { ascending: true });
-
-    if (pickData) setPicks(pickData);
-
+    await refreshPicks();
     setSelectedTeamId("");
     setMessage("Pick saved.");
+  }
+
+  async function undoLastPick() {
+    const confirmed = window.confirm("Undo the most recent draft pick?");
+    if (!confirmed) return;
+
+    setMessage("Reversing last pick...");
+
+    const res = await fetch("/api/undo-last-pick", {
+      method: "POST",
+    });
+
+    const result = await res.json();
+
+    if (!result.ok) {
+      setMessage(result.error || "Undo failed.");
+      return;
+    }
+
+    await refreshPicks();
+    setMessage("Last pick removed.");
   }
 
   const upcomingPicks = snake
@@ -248,12 +272,22 @@ export default function DraftPage() {
                     </select>
                   </div>
 
-                  <button
-                    type="submit"
-                    className="w-full rounded-xl bg-black px-4 py-2 text-white sm:w-auto"
-                  >
-                    Draft Team
-                  </button>
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="submit"
+                      className="w-full rounded-xl bg-black px-4 py-2 text-white sm:w-auto"
+                    >
+                      Draft Team
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={undoLastPick}
+                      className="w-full rounded-xl border border-red-300 px-4 py-2 text-red-600 hover:bg-red-50 sm:w-auto"
+                    >
+                      Undo Last Pick
+                    </button>
+                  </div>
 
                   {message ? <p className="text-sm text-gray-600">{message}</p> : null}
                 </form>
