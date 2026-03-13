@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import ManagerBadge from "./components/ManagerBadge";
+import TeamLogo from "./components/TeamLogo";
 
 type Member = {
   id: string;
@@ -37,17 +38,14 @@ type Team = {
 function StatCard({
   title,
   value,
-  subtext,
 }: {
   title: string;
   value: number;
-  subtext?: string;
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="text-sm font-medium text-slate-500">{title}</div>
       <div className="mt-2 text-3xl font-extrabold tracking-tight">{value}</div>
-      {subtext ? <div className="mt-1 text-sm text-slate-500">{subtext}</div> : null}
     </div>
   );
 }
@@ -57,20 +55,10 @@ export default async function DashboardPage() {
 
   const [{ data: members }, { data: picks }, { data: teamResults }, { data: games }, { data: teams }] =
     await Promise.all([
-      supabase
-        .from("league_members")
-        .select("*")
-        .order("draft_slot", { ascending: true }),
-      supabase
-        .from("picks")
-        .select("*")
-        .order("overall_pick", { ascending: true }),
+      supabase.from("league_members").select("*").order("draft_slot", { ascending: true }),
+      supabase.from("picks").select("*").order("overall_pick", { ascending: true }),
       supabase.from("team_results").select("*"),
-      supabase
-        .from("games")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(6),
+      supabase.from("games").select("*").order("created_at", { ascending: false }).limit(6),
       supabase.from("teams").select("id, school_name"),
     ]);
 
@@ -146,9 +134,7 @@ export default async function DashboardPage() {
             <div className="text-xs uppercase tracking-wide text-slate-400">
               League Motto
             </div>
-            <div className="mt-1 text-lg font-semibold">
-              Survive and advance
-            </div>
+            <div className="mt-1 text-lg font-semibold">Survive and advance</div>
           </div>
         </div>
       </section>
@@ -214,9 +200,12 @@ export default async function DashboardPage() {
                 typedGames.map((game) => (
                   <div key={game.id} className="rounded-xl border border-slate-200 p-4">
                     <div className="text-sm font-medium text-slate-500">{game.round_name}</div>
-                    <div className="mt-1 text-base font-semibold text-slate-900">
-                      {teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner"} defeated{" "}
-                      {teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser"}
+                    <div className="mt-1 flex items-center gap-2 text-base font-semibold text-slate-900">
+                      <TeamLogo teamName={teamMap.get(game.winning_team_id ?? "") ?? "TBD"} size={24} />
+                      <span>{teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner"}</span>
+                      <span className="text-slate-400">defeated</span>
+                      <TeamLogo teamName={teamMap.get(game.losing_team_id ?? "") ?? "TBD"} size={24} />
+                      <span>{teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser"}</span>
                     </div>
                     <div className="mt-1 text-sm text-slate-500">
                       {new Date(game.created_at).toLocaleString()}
@@ -239,11 +228,14 @@ export default async function DashboardPage() {
                 recentPicks.map((pick) => (
                   <div key={pick.overallPick} className="rounded-xl border border-slate-200 p-4">
                     <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-sm font-medium text-slate-500">
-                          Pick #{pick.overallPick}
+                      <div className="flex items-start gap-3">
+                        <TeamLogo teamName={pick.teamName} size={28} />
+                        <div>
+                          <div className="text-sm font-medium text-slate-500">
+                            Pick #{pick.overallPick}
+                          </div>
+                          <div className="mt-1 text-base font-semibold">{pick.teamName}</div>
                         </div>
-                        <div className="mt-1 text-base font-semibold">{pick.teamName}</div>
                       </div>
                       <ManagerBadge name={pick.manager} />
                     </div>

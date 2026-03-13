@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import ManagerBadge from "../components/ManagerBadge";
+import TeamLogo from "../components/TeamLogo";
 
 type Member = {
   id: string;
@@ -33,14 +34,8 @@ export default async function RostersPage() {
 
   const [{ data: members }, { data: picks }, { data: teams }, { data: teamResults }] =
     await Promise.all([
-      supabase
-        .from("league_members")
-        .select("*")
-        .order("draft_slot", { ascending: true }),
-      supabase
-        .from("picks")
-        .select("*")
-        .order("overall_pick", { ascending: true }),
+      supabase.from("league_members").select("*").order("draft_slot", { ascending: true }),
+      supabase.from("picks").select("*").order("overall_pick", { ascending: true }),
       supabase.from("teams").select("*"),
       supabase.from("team_results").select("*"),
     ]);
@@ -71,9 +66,7 @@ export default async function RostersPage() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <h3 className="text-2xl font-bold">{member.display_name}</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Draft Slot {member.draft_slot}
-                  </p>
+                  <p className="mt-1 text-sm text-slate-500">Draft Slot {member.draft_slot}</p>
                 </div>
                 <ManagerBadge name={member.display_name} />
               </div>
@@ -94,15 +87,18 @@ export default async function RostersPage() {
                         className="rounded-xl border border-slate-200 p-4 shadow-sm"
                       >
                         <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <div className="text-sm font-medium text-slate-500">
-                              Pick #{pick.overall_pick}
-                            </div>
-                            <div className="mt-1 text-lg font-semibold">
-                              {team?.school_name}
-                            </div>
-                            <div className="mt-1 text-sm text-slate-500">
-                              {team?.seed} Seed • {team?.region}
+                          <div className="flex items-start gap-3">
+                            <TeamLogo teamName={team?.school_name ?? "TBD"} size={30} />
+                            <div>
+                              <div className="text-sm font-medium text-slate-500">
+                                Pick #{pick.overall_pick}
+                              </div>
+                              <div className="mt-1 text-lg font-semibold">
+                                {team?.school_name}
+                              </div>
+                              <div className="mt-1 text-sm text-slate-500">
+                                {team?.seed} Seed • {team?.region}
+                              </div>
                             </div>
                           </div>
 
