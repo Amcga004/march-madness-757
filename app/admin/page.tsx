@@ -1,4 +1,4 @@
-"use client";
+""use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -103,6 +103,19 @@ export default function AdminPage() {
     loadData();
   }, [supabase]);
 
+  async function refreshLeagueData() {
+    const [{ data: gamesData }, { data: resultsData }] = await Promise.all([
+      supabase
+        .from("games")
+        .select("id, round_name, winning_team_id, losing_team_id, created_at")
+        .order("created_at", { ascending: false }),
+      supabase.from("team_results").select("id, eliminated, total_points"),
+    ]);
+
+    if (gamesData) setGames(gamesData);
+    if (resultsData) setTeamResults(resultsData);
+  }
+
   async function handleSubmitResult(e: React.FormEvent) {
     e.preventDefault();
     setMessage("Saving result...");
@@ -131,19 +144,44 @@ export default function AdminPage() {
       setMessage("Result saved successfully.");
       setWinnerTeamId("");
       setLoserTeamId("");
-
-      const [{ data: gamesData }, { data: resultsData }] = await Promise.all([
-        supabase
-          .from("games")
-          .select("id, round_name, winning_team_id, losing_team_id, created_at")
-          .order("created_at", { ascending: false }),
-        supabase.from("team_results").select("id, eliminated, total_points"),
-      ]);
-
-      if (gamesData) setGames(gamesData);
-      if (resultsData) setTeamResults(resultsData);
+      await refreshLeagueData();
     } else {
       setMessage(result.error || "Something went wrong.");
+    }
+  }
+
+  async function handleDeleteResult(gameId: string) {
+    if (!league) {
+      setMessage("League not found.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this result and recalculate scoring?"
+    );
+
+    if (!confirmed) return;
+
+    setMessage("Deleting result...");
+
+    const response = await fetch("/api/delete-result", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        gameId,
+        leagueId: league.id,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (result.ok) {
+      setMessage("Result deleted and standings recalculated.");
+      await refreshLeagueData();
+    } else {
+      setMessage(result.error || "Failed to delete result.");
     }
   }
 
@@ -312,13 +350,25 @@ export default function AdminPage() {
           ) : (
             recentResults.map((game) => (
               <div key={game.id} className="rounded-xl border p-4">
-                <div className="text-sm text-gray-500">{game.round_name}</div>
-                <div className="mt-1 font-semibold">
-                  {teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner"} defeated{" "}
-                  {teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser"}
-                </div>
-                <div className="mt-1 text-sm text-gray-500">
-                  {new Date(game.created_at).toLocaleString()}
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-sm text-gray-500">{game.round_name}</div>
+                    <div className="mt-1 font-semibold">
+                      {teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner"} defeated{" "}
+                      {teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser"}
+                    </div>
+                    <div className="mt-1 text-sm text-gray-500">
+                      {new Date(game.created_at).toLocaleString()}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteResult(game.id)}
+                    className="rounded-xl border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             ))
