@@ -15,14 +15,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-slate-100 text-slate-900">
-
-        {/* Header */}
         <header className="border-b bg-white shadow-sm">
           <div className="mx-auto max-w-7xl px-6 py-4">
-
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-
-              {/* Title */}
               <div>
                 <h1 className="text-2xl font-bold">
                   2026 757 March Madness Draft
@@ -32,9 +27,7 @@ export default function RootLayout({
                 </p>
               </div>
 
-              {/* Navigation */}
               <nav className="flex flex-wrap gap-3 text-sm">
-
                 <Link
                   href="/"
                   className="rounded-xl border bg-white px-4 py-2 hover:bg-slate-50"
@@ -63,20 +56,20 @@ export default function RootLayout({
                   Results
                 </Link>
 
+                <Link
+                  href="/admin"
+                  className="rounded-xl border bg-white px-4 py-2 hover:bg-slate-50"
+                >
+                  Admin
+                </Link>
               </nav>
-
             </div>
           </div>
         </header>
 
-        {/* Live Leaderboard */}
         <LeaderboardBar />
 
-        {/* Page Content */}
-        <main>
-          {children}
-        </main>
-
+        <main>{children}</main>
       </body>
     </html>
   );
