@@ -12,6 +12,7 @@ type Game = {
   round_name: string;
   winning_team_id: string | null;
   losing_team_id: string | null;
+  created_at: string;
 };
 
 type Pick = {
@@ -316,7 +317,7 @@ export default async function BracketPage() {
         .order("seed", { ascending: true }),
       supabase
         .from("games")
-        .select("id, round_name, winning_team_id, losing_team_id"),
+        .select("id, round_name, winning_team_id, losing_team_id, created_at"),
       supabase.from("picks").select("id, member_id, team_id"),
       supabase.from("league_members").select("id, display_name"),
     ]);
@@ -325,6 +326,8 @@ export default async function BracketPage() {
   const typedGames = (games ?? []) as Game[];
   const typedPicks = (picks ?? []) as Pick[];
   const typedMembers = (members ?? []) as Member[];
+
+  const latestUpdated = typedGames[0]?.created_at ?? null;
 
   const memberNameById = new Map(typedMembers.map((m) => [m.id, m.display_name]));
   const managerByTeamId = new Map(
@@ -371,10 +374,20 @@ export default async function BracketPage() {
   return (
     <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
       <section className="mb-6 sm:mb-8">
-        <h2 className="text-3xl font-bold">Tournament Bracket</h2>
-        <p className="mt-2 text-gray-600">
-          Bracket view updates automatically as results are entered by the commissioner.
-        </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-3xl font-bold">Tournament Bracket</h2>
+            <p className="mt-2 text-gray-600">
+              Bracket view updates automatically as results are entered by the commissioner.
+            </p>
+          </div>
+
+          <div className="text-sm text-slate-500">
+            {latestUpdated
+              ? `Last updated: ${new Date(latestUpdated).toLocaleString()}`
+              : "No results entered yet"}
+          </div>
+        </div>
       </section>
 
       <div className="space-y-8 sm:space-y-10">

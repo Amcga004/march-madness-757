@@ -29,10 +29,15 @@ type TeamResult = {
   eliminated: boolean;
 };
 
+type Game = {
+  id: string;
+  created_at: string;
+};
+
 export default async function RostersPage() {
   const supabase = await createClient();
 
-  const [{ data: members }, { data: picks }, { data: teams }, { data: teamResults }] =
+  const [{ data: members }, { data: picks }, { data: teams }, { data: teamResults }, { data: games }] =
     await Promise.all([
       supabase
         .from("league_members")
@@ -44,20 +49,38 @@ export default async function RostersPage() {
         .order("overall_pick", { ascending: true }),
       supabase.from("teams").select("*"),
       supabase.from("team_results").select("*"),
+      supabase
+        .from("games")
+        .select("id, created_at")
+        .order("created_at", { ascending: false })
+        .limit(1),
     ]);
 
   const typedMembers = (members ?? []) as Member[];
   const typedPicks = (picks ?? []) as Pick[];
   const typedTeams = (teams ?? []) as Team[];
   const typedResults = (teamResults ?? []) as TeamResult[];
+  const typedGames = (games ?? []) as Game[];
+
+  const latestUpdated = typedGames[0]?.created_at ?? null;
 
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
       <section className="mb-6 sm:mb-8">
-        <h2 className="text-3xl font-bold">Team Rosters</h2>
-        <p className="mt-2 text-slate-600">
-          Every manager’s drafted teams, point totals, and survival status.
-        </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-3xl font-bold">Team Rosters</h2>
+            <p className="mt-2 text-slate-600">
+              Every manager’s drafted teams, point totals, and survival status.
+            </p>
+          </div>
+
+          <div className="text-sm text-slate-500">
+            {latestUpdated
+              ? `Last updated: ${new Date(latestUpdated).toLocaleString()}`
+              : "No results entered yet"}
+          </div>
+        </div>
       </section>
 
       <div className="grid gap-5 xl:grid-cols-2">
