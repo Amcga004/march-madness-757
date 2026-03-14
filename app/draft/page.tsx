@@ -59,6 +59,7 @@ export default function DraftPage() {
   const [picks, setPicks] = useState<Pick[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [message, setMessage] = useState("");
+  const [teamSearch, setTeamSearch] = useState("");
 
   const [pendingPickTeamId, setPendingPickTeamId] = useState<string | null>(null);
   const [pendingPickTeamName, setPendingPickTeamName] = useState("");
@@ -123,6 +124,17 @@ export default function DraftPage() {
 
   const draftedTeamIds = new Set(picks.map((pick) => pick.team_id));
   const availableTeams = teams.filter((team) => !draftedTeamIds.has(team.id));
+
+  const filteredAvailableTeams = availableTeams.filter((team) => {
+    const query = teamSearch.trim().toLowerCase();
+    if (!query) return true;
+
+    return (
+      team.school_name.toLowerCase().includes(query) ||
+      team.region.toLowerCase().includes(query) ||
+      String(team.seed).includes(query)
+    );
+  });
 
   const memberMap = new Map(members.map((m) => [m.id, m.display_name]));
   const teamMap = new Map(teams.map((t) => [t.id, t]));
@@ -192,6 +204,7 @@ export default function DraftPage() {
 
     await refreshPicks();
     setSelectedTeamId("");
+    setTeamSearch("");
     setMessage("Pick saved.");
     return true;
   }
@@ -338,6 +351,17 @@ export default function DraftPage() {
 
                 <form onSubmit={handleDraftPick} className="mt-6 space-y-4">
                   <div>
+                    <label className="mb-2 block text-sm font-medium">Search Teams</label>
+                    <input
+                      type="text"
+                      value={teamSearch}
+                      onChange={(e) => setTeamSearch(e.target.value)}
+                      placeholder="Search by school, region, or seed"
+                      className="w-full rounded-xl border px-3 py-2"
+                    />
+                  </div>
+
+                  <div>
                     <label className="mb-2 block text-sm font-medium">Select Team</label>
                     <select
                       className="w-full rounded-xl border px-3 py-2"
@@ -346,13 +370,19 @@ export default function DraftPage() {
                       required
                     >
                       <option value="">Choose a team</option>
-                      {availableTeams.map((team) => (
+                      {filteredAvailableTeams.map((team) => (
                         <option key={team.id} value={team.id}>
                           {team.school_name} • {team.seed} Seed • {team.region}
                         </option>
                       ))}
                     </select>
                   </div>
+
+                  {teamSearch && filteredAvailableTeams.length === 0 ? (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                      No teams match your search.
+                    </div>
+                  ) : null}
 
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <button

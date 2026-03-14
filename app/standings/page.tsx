@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import ManagerBadge from "../components/ManagerBadge";
 import TeamLogo from "../components/TeamLogo";
 import TeamStatusBadge from "../components/TeamStatusBadge";
+import AutoRefreshStandings from "../components/AutoRefreshStandings";
 
 type Member = {
   id: string;
@@ -131,6 +132,8 @@ export default async function StandingsPage() {
 
   return (
     <div className="mx-auto max-w-7xl p-6">
+      <AutoRefreshStandings />
+
       <section className="mb-8">
         <h2 className="text-3xl font-bold">Standings</h2>
         <p className="mt-2 text-slate-600">
