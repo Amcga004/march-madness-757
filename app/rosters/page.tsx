@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import ManagerBadge from "../components/ManagerBadge";
 import TeamLogo from "../components/TeamLogo";
+import TeamStatusBadge from "../components/TeamStatusBadge";
 
 type Member = {
   id: string;
@@ -130,7 +131,8 @@ export default async function RostersPage() {
                                 {team?.school_name}
                               </div>
                               <div className="mt-1 text-sm text-slate-500">
-                                {team?.seed} Seed • {team?.region}
+                                {team?.seed ? `${team.seed} Seed` : "—"}
+                                {team?.region ? ` • ${team.region}` : ""}
                               </div>
                             </div>
                           </div>
@@ -144,21 +146,9 @@ export default async function RostersPage() {
                         </div>
 
                         <div className="mt-4">
-                          {result ? (
-                            result.eliminated ? (
-                              <span className="inline-flex rounded-full border border-red-300 bg-red-50 px-3 py-1 text-sm font-medium text-red-700">
-                                Eliminated
-                              </span>
-                            ) : (
-                              <span className="inline-flex rounded-full border border-green-300 bg-green-50 px-3 py-1 text-sm font-medium text-green-700">
-                                Still Alive
-                              </span>
-                            )
-                          ) : (
-                            <span className="inline-flex rounded-full border border-slate-300 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
-                              No games yet
-                            </span>
-                          )}
+                          <TeamStatusBadge
+                            isEliminated={result ? result.eliminated : null}
+                          />
                         </div>
                       </div>
                     );

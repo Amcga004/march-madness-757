@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import ManagerBadge from "../components/ManagerBadge";
 import TeamLogo from "../components/TeamLogo";
+import TeamStatusBadge from "../components/TeamStatusBadge";
 
 type Member = {
   id: string;
@@ -147,10 +148,7 @@ export default async function StandingsPage() {
           title="Most Live Teams"
           value={Math.max(...standings.map((s) => s.liveTeams), 0)}
         />
-        <SummaryCard
-          title="Managers Ranked"
-          value={standings.length}
-        />
+        <SummaryCard title="Managers Ranked" value={standings.length} />
         <SummaryCard
           title="Total Drafted Teams"
           value={standings.reduce((sum, s) => sum + s.draftedTeams, 0)}
@@ -183,7 +181,7 @@ export default async function StandingsPage() {
                   <div className="text-sm text-slate-500">Live Teams</div>
                   <div className="mt-1 text-2xl font-bold">{entry.liveTeams}</div>
                 </div>
-                <div className="rounded-xl bg-slate-50 p-4 col-span-2 sm:col-span-1">
+                <div className="col-span-2 rounded-xl bg-slate-50 p-4 sm:col-span-1">
                   <div className="text-sm text-slate-500">Drafted</div>
                   <div className="mt-1 text-2xl font-bold">{entry.draftedTeams}</div>
                 </div>
@@ -220,19 +218,7 @@ export default async function StandingsPage() {
                     </div>
 
                     <div className="mt-4">
-                      {team.eliminated === false ? (
-                        <span className="inline-flex rounded-full border border-green-300 bg-green-50 px-3 py-1 text-sm font-medium text-green-700">
-                          Still Alive
-                        </span>
-                      ) : team.eliminated === true ? (
-                        <span className="inline-flex rounded-full border border-red-300 bg-red-50 px-3 py-1 text-sm font-medium text-red-700">
-                          Eliminated
-                        </span>
-                      ) : (
-                        <span className="inline-flex rounded-full border border-slate-300 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
-                          No result yet
-                        </span>
-                      )}
+                      <TeamStatusBadge isEliminated={team.eliminated} />
                     </div>
                   </div>
                 ))
