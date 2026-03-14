@@ -5,6 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import { getSnakeDraftOrder } from "@/lib/draft";
 import ManagerBadge from "../components/ManagerBadge";
 import TeamLogo from "../components/TeamLogo";
+import DraftPickBanner from "../components/draft/DraftPickBanner";
+import DraftConfirmationModal from "../components/draft/DraftConfirmationModal";
+import DraftBoardGrid from "../components/draft/DraftBoardGrid";
 
 type Member = {
   id: string;
@@ -32,8 +35,23 @@ type League = {
   name: string;
 };
 
+type DraftBoardPick = {
+  id: string;
+  pick_number: number;
+  round_number: number;
+  manager_name: string;
+  team_name: string;
+};
+
+const MANAGER_BANNER_COLOR_MAP: Record<string, string> = {
+  Andrew: "bg-blue-600 text-white",
+  Wesley: "bg-green-600 text-white",
+  Eric: "bg-purple-600 text-white",
+  Greg: "bg-orange-500 text-white",
+};
+
 export default function DraftPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [league, setLeague] = useState<League | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -42,29 +60,37 @@ export default function DraftPage() {
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [message, setMessage] = useState("");
 
+  const [pendingPickTeamId, setPendingPickTeamId] = useState<string | null>(null);
+  const [pendingPickTeamName, setPendingPickTeamName] = useState("");
+  const [isSubmittingPick, setIsSubmittingPick] = useState(false);
+
   useEffect(() => {
     async function loadData() {
-      const [{ data: leagueData }, { data: memberData }, { data: teamData }, { data: pickData }] =
-        await Promise.all([
-          supabase
-            .from("leagues")
-            .select("id,name")
-            .eq("public_slug", "2026-757-march-madness-draft")
-            .single(),
-          supabase
-            .from("league_members")
-            .select("id,display_name,draft_slot")
-            .order("draft_slot", { ascending: true }),
-          supabase
-            .from("teams")
-            .select("id,school_name,seed,region")
-            .order("region", { ascending: true })
-            .order("seed", { ascending: true }),
-          supabase
-            .from("picks")
-            .select("id,overall_pick,snake_round,member_id,team_id")
-            .order("overall_pick", { ascending: true }),
-        ]);
+      const [
+        { data: leagueData },
+        { data: memberData },
+        { data: teamData },
+        { data: pickData },
+      ] = await Promise.all([
+        supabase
+          .from("leagues")
+          .select("id,name")
+          .eq("public_slug", "2026-757-march-madness-draft")
+          .single(),
+        supabase
+          .from("league_members")
+          .select("id,display_name,draft_slot")
+          .order("draft_slot", { ascending: true }),
+        supabase
+          .from("teams")
+          .select("id,school_name,seed,region")
+          .order("region", { ascending: true })
+          .order("seed", { ascending: true }),
+        supabase
+          .from("picks")
+          .select("id,overall_pick,snake_round,member_id,team_id")
+          .order("overall_pick", { ascending: true }),
+      ]);
 
       if (leagueData) setLeague(leagueData);
       if (memberData) setMembers(memberData);
@@ -112,6 +138,20 @@ export default function DraftPage() {
     };
   });
 
+  const currentManagerName = currentMember?.display_name ?? "Current Manager";
+  const totalPicks = snake.length || teams.length || 32;
+  const currentRoundLabel = currentPick ? `Round ${currentPick.round}` : undefined;
+
+  const draftBoardPicks = useMemo<DraftBoardPick[]>(() => {
+    return completedPicks.map((pick) => ({
+      id: pick.id,
+      pick_number: pick.overall_pick,
+      round_number: pick.snake_round,
+      manager_name: pick.owner,
+      team_name: pick.teamName,
+    }));
+  }, [completedPicks]);
+
   async function refreshPicks() {
     const { data: pickData } = await supabase
       .from("picks")
@@ -121,12 +161,10 @@ export default function DraftPage() {
     if (pickData) setPicks(pickData);
   }
 
-  async function handleDraftPick(e: React.FormEvent) {
-    e.preventDefault();
-
-    if (!league || !currentMember || !currentPick || !selectedTeamId) {
+  async function submitDraftPick(teamId: string) {
+    if (!league || !currentMember || !currentPick || !teamId) {
       setMessage("Missing required draft information.");
-      return;
+      return false;
     }
 
     setMessage("Saving pick...");
@@ -139,7 +177,7 @@ export default function DraftPage() {
       body: JSON.stringify({
         leagueId: league.id,
         memberId: currentMember.id,
-        teamId: selectedTeamId,
+        teamId,
         overallPick: currentPick.overallPick,
         snakeRound: currentPick.round,
       }),
@@ -149,12 +187,44 @@ export default function DraftPage() {
 
     if (!result.ok) {
       setMessage(result.error || "Failed to save pick.");
-      return;
+      return false;
     }
 
     await refreshPicks();
     setSelectedTeamId("");
     setMessage("Pick saved.");
+    return true;
+  }
+
+  async function handleDraftPick(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!selectedTeamId) {
+      setMessage("Please select a team.");
+      return;
+    }
+
+    const selectedTeam = teams.find((team) => team.id === selectedTeamId);
+
+    setPendingPickTeamId(selectedTeamId);
+    setPendingPickTeamName(selectedTeam?.school_name ?? "Selected Team");
+  }
+
+  async function confirmDraftPick() {
+    if (!pendingPickTeamId) return;
+
+    setIsSubmittingPick(true);
+
+    try {
+      const ok = await submitDraftPick(pendingPickTeamId);
+
+      if (ok) {
+        setPendingPickTeamId(null);
+        setPendingPickTeamName("");
+      }
+    } finally {
+      setIsSubmittingPick(false);
+    }
   }
 
   async function undoLastPick() {
@@ -192,6 +262,18 @@ export default function DraftPage() {
           Live commissioner-controlled snake draft.
         </p>
       </section>
+
+      {currentPick && currentMember ? (
+        <div className="mb-6 sm:mb-8">
+          <DraftPickBanner
+            currentPickNumber={currentPick.overallPick}
+            totalPicks={totalPicks}
+            currentManagerName={currentManagerName}
+            roundLabel={currentRoundLabel}
+            managerColorClass={MANAGER_BANNER_COLOR_MAP[currentManagerName]}
+          />
+        </div>
+      ) : null}
 
       <section className="mb-6 rounded-2xl border bg-white p-5 shadow-sm sm:mb-8 sm:p-6">
         {currentPick && currentMember ? (
@@ -331,6 +413,8 @@ export default function DraftPage() {
               )}
             </div>
           </div>
+
+          <DraftBoardGrid picks={draftBoardPicks} />
         </div>
 
         <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
@@ -367,6 +451,19 @@ export default function DraftPage() {
           </div>
         </div>
       </section>
+
+      <DraftConfirmationModal
+        isOpen={!!pendingPickTeamId}
+        teamName={pendingPickTeamName}
+        managerName={currentManagerName}
+        isSubmitting={isSubmittingPick}
+        onCancel={() => {
+          if (isSubmittingPick) return;
+          setPendingPickTeamId(null);
+          setPendingPickTeamName("");
+        }}
+        onConfirm={confirmDraftPick}
+      />
     </div>
   );
 }
