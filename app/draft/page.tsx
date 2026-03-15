@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getSnakeDraftOrder } from "@/lib/draft";
+import { getCanonicalTeamName, getTeamSearchTerms } from "@/lib/teamIdentity";
 import ManagerBadge from "../components/ManagerBadge";
 import TeamLogo from "../components/TeamLogo";
 import DraftPickBanner from "../components/draft/DraftPickBanner";
@@ -122,22 +123,29 @@ export default function DraftPage() {
     (m) => m.display_name === currentPick?.player
   );
 
+  const normalizedTeams = teams.map((team) => ({
+    ...team,
+    school_name: getCanonicalTeamName(team.school_name),
+  }));
+
   const draftedTeamIds = new Set(picks.map((pick) => pick.team_id));
-  const availableTeams = teams.filter((team) => !draftedTeamIds.has(team.id));
+  const availableTeams = normalizedTeams.filter((team) => !draftedTeamIds.has(team.id));
 
   const filteredAvailableTeams = availableTeams.filter((team) => {
     const query = teamSearch.trim().toLowerCase();
     if (!query) return true;
 
-    return (
-      team.school_name.toLowerCase().includes(query) ||
-      team.region.toLowerCase().includes(query) ||
-      String(team.seed).includes(query)
-    );
+    const searchable = [
+      ...getTeamSearchTerms(team.school_name),
+      team.region,
+      String(team.seed),
+    ].map((value) => value.toLowerCase());
+
+    return searchable.some((value) => value.includes(query));
   });
 
   const memberMap = new Map(members.map((m) => [m.id, m.display_name]));
-  const teamMap = new Map(teams.map((t) => [t.id, t]));
+  const teamMap = new Map(normalizedTeams.map((t) => [t.id, t]));
 
   const completedPicks = picks.map((pick) => {
     const team = teamMap.get(pick.team_id);
@@ -151,7 +159,7 @@ export default function DraftPage() {
   });
 
   const currentManagerName = currentMember?.display_name ?? "Current Manager";
-  const totalPicks = snake.length || teams.length || 32;
+  const totalPicks = snake.length || normalizedTeams.length || 64;
   const currentRoundLabel = currentPick ? `Round ${currentPick.round}` : undefined;
 
   const draftBoardPicks = useMemo<DraftBoardPick[]>(() => {
@@ -217,7 +225,7 @@ export default function DraftPage() {
       return;
     }
 
-    const selectedTeam = teams.find((team) => team.id === selectedTeamId);
+    const selectedTeam = normalizedTeams.find((team) => team.id === selectedTeamId);
 
     setPendingPickTeamId(selectedTeamId);
     setPendingPickTeamName(selectedTeam?.school_name ?? "Selected Team");
@@ -356,7 +364,7 @@ export default function DraftPage() {
                       type="text"
                       value={teamSearch}
                       onChange={(e) => setTeamSearch(e.target.value)}
-                      placeholder="Search by school, region, or seed"
+                      placeholder="Search by school, alias, region, or seed"
                       className="w-full rounded-xl border px-3 py-2"
                     />
                   </div>
