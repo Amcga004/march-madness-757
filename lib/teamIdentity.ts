@@ -82,6 +82,7 @@ const TEAM_IDENTITIES: TeamIdentity[] = [
   { canonical: "PLAY-IN: VCU / Illinois", aliases: ["play-in: vcu / illinois", "vcu / illinois"] },
   { canonical: "PLAY-IN: N.C. State / Texas", aliases: ["play-in: n.c. state / texas", "nc state / texas"] },
   { canonical: "PLAY-IN: SMU / Miami (OH)", aliases: ["play-in: smu / miami (oh)", "smu / miami (oh)", "smu / miami oh"] },
+  { canonical: "PLAY-IN: Howard / UMBC", aliases: ["play-in: howard / umbc", "howard / umbc"] },
 ];
 
 const ALIAS_TO_CANONICAL = new Map<string, string>();
@@ -94,14 +95,14 @@ for (const team of TEAM_IDENTITIES) {
   }
 }
 
-function cleanName(value: string) {
+function cleanName(value: string): string {
   return value
     .trim()
     .replace(/[’]/g, "'")
     .replace(/\s+/g, " ");
 }
 
-export function getCanonicalTeamName(input: string) {
+export function getCanonicalTeamName(input: string): string {
   const cleaned = cleanName(input);
 
   if (cleaned.startsWith("PLAY-IN:")) {
@@ -112,7 +113,7 @@ export function getCanonicalTeamName(input: string) {
   return ALIAS_TO_CANONICAL.get(cleaned.toLowerCase()) ?? cleaned;
 }
 
-export function getTeamLogoDomain(input: string) {
+export function getTeamLogoDomain(input: string): string | undefined {
   const canonical = getCanonicalTeamName(input);
 
   if (canonical.startsWith("PLAY-IN:")) {
@@ -123,7 +124,7 @@ export function getTeamLogoDomain(input: string) {
   return TEAM_IDENTITIES.find((team) => team.canonical === canonical)?.domain;
 }
 
-export function getTeamSearchTerms(input: string) {
+export function getTeamSearchTerms(input: string): string[] {
   const canonical = getCanonicalTeamName(input);
   const entry = TEAM_IDENTITIES.find((team) => team.canonical === canonical);
 
