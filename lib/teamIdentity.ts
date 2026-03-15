@@ -38,13 +38,12 @@ const TEAM_IDENTITIES: TeamIdentity[] = [
   { canonical: "Saint Mary's", domain: "stmarys-ca.edu", aliases: ["saint mary's", "saint marys", "saint mary's (ca)", "st. mary's", "st mary's"] },
   { canonical: "Texas A&M", domain: "tamu.edu", aliases: ["texas a&m", "texas am", "a&m", "aggies"] },
   { canonical: "Houston", domain: "uh.edu", aliases: ["houston", "uh"] },
-  { canonical: "Arizona", domain: "arizona.edu", aliases: ["arizona"] },
-  { canonical: "Indiana State", domain: "indstate.edu", aliases: ["indiana state", "indiana st", "indiana st."] },
+  { canonical: "Idaho", domain: "uidaho.edu", aliases: ["idaho"] },
 
-  { canonical: "Miami FL", domain: "miami.edu", aliases: ["miami fl", "miami (fl)", "miami florida", "miami"] },
+  { canonical: "Arizona", domain: "arizona.edu", aliases: ["arizona"] },
   { canonical: "LIU", domain: "liu.edu", aliases: ["liu", "long island university", "long island"] },
   { canonical: "Villanova", domain: "villanova.edu", aliases: ["villanova"] },
-  { canonical: "Oklahoma State", domain: "okstate.edu", aliases: ["oklahoma state", "oklahoma st", "oklahoma st.", "oak st", "osu cowboys"] },
+  { canonical: "Utah State", domain: "usu.edu", aliases: ["utah state", "utah st", "utah st.", "usu"] },
   { canonical: "Wisconsin", domain: "wisc.edu", aliases: ["wisconsin"] },
   { canonical: "High Point", domain: "highpoint.edu", aliases: ["high point"] },
   { canonical: "Arkansas", domain: "uark.edu", aliases: ["arkansas"] },
@@ -54,8 +53,8 @@ const TEAM_IDENTITIES: TeamIdentity[] = [
   { canonical: "Texas", domain: "utexas.edu", aliases: ["texas", "ut"] },
   { canonical: "Gonzaga", domain: "gonzaga.edu", aliases: ["gonzaga"] },
   { canonical: "Kennesaw State", domain: "kennesaw.edu", aliases: ["kennesaw state", "kennesaw st", "kennesaw st."] },
+  { canonical: "Miami FL", domain: "miami.edu", aliases: ["miami fl", "miami (fl)", "miami florida", "miami"] },
   { canonical: "Missouri", domain: "missouri.edu", aliases: ["missouri", "mizzou"] },
-  { canonical: "Mississippi", domain: "olemiss.edu", aliases: ["mississippi", "ole miss"] },
   { canonical: "Purdue", domain: "purdue.edu", aliases: ["purdue"] },
   { canonical: "Queens NC", domain: "queens.edu", aliases: ["queens nc", "queens (nc)", "queens university of charlotte", "queens"] },
 
@@ -78,11 +77,14 @@ const TEAM_IDENTITIES: TeamIdentity[] = [
   { canonical: "Iowa State", domain: "iastate.edu", aliases: ["iowa state", "iowa st", "iowa st.", "isu"] },
   { canonical: "Tennessee State", domain: "tnstate.edu", aliases: ["tennessee state", "tennessee st", "tennessee st."] },
 
+  { canonical: "Oklahoma State", domain: "okstate.edu", aliases: ["oklahoma state", "oklahoma st", "oklahoma st.", "oak st", "osu cowboys"] },
+  { canonical: "Mississippi", domain: "olemiss.edu", aliases: ["mississippi", "ole miss"] },
+  { canonical: "Indiana State", domain: "indstate.edu", aliases: ["indiana state", "indiana st", "indiana st."] },
+
   { canonical: "PLAY-IN: Lehigh / Prairie View", aliases: ["play-in: lehigh / prairie view", "lehigh / prairie view"] },
-  { canonical: "PLAY-IN: VCU / Illinois", aliases: ["play-in: vcu / illinois", "vcu / illinois"] },
   { canonical: "PLAY-IN: N.C. State / Texas", aliases: ["play-in: n.c. state / texas", "nc state / texas"] },
-  { canonical: "PLAY-IN: SMU / Miami (OH)", aliases: ["play-in: smu / miami (oh)", "smu / miami (oh)", "smu / miami oh"] },
   { canonical: "PLAY-IN: Howard / UMBC", aliases: ["play-in: howard / umbc", "howard / umbc"] },
+  { canonical: "PLAY-IN: SMU / Miami (OH)", aliases: ["play-in: smu / miami (oh)", "smu / miami (oh)", "smu / miami oh"] },
 ];
 
 const ALIAS_TO_CANONICAL = new Map<string, string>();
