@@ -27,7 +27,8 @@ export default function AdminPage() {
   const [picksCount, setPicksCount] = useState(0);
 
   const [email, setEmail] = useState("amacbfs@gmail.com");
-  const [isSendingMagicLink, setIsSendingMagicLink] = useState(false);
+  const [password, setPassword] = useState("");
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const [isRunningLottery, setIsRunningLottery] = useState(false);
   const [lotteryResults, setLotteryResults] = useState<
@@ -62,32 +63,29 @@ export default function AdminPage() {
 
   const isCommissioner = signedInMember?.role === "commissioner";
 
-  async function sendMagicLink() {
-    if (!email.trim()) {
-      setStatus("Please enter your email.");
+  async function signInWithPassword() {
+    if (!email.trim() || !password.trim()) {
+      setStatus("Please enter both email and password.");
       return;
     }
 
-    setIsSendingMagicLink(true);
+    setIsSigningIn(true);
     setStatus("");
 
-const redirectTo = `https://www.757mmdraft.com/auth/callback?next=/admin`;
-
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
-      options: {
-        emailRedirectTo: redirectTo,
-      },
+      password,
     });
 
     if (error) {
-      setStatus(error.message || "Failed to send magic link.");
-      setIsSendingMagicLink(false);
+      setStatus(error.message || "Failed to sign in.");
+      setIsSigningIn(false);
       return;
     }
 
-    setStatus("Magic link sent. Check your email, open the link, and you should return to the admin panel signed in.");
-    setIsSendingMagicLink(false);
+    await loadData();
+    setIsSigningIn(false);
+    setStatus("Signed in successfully.");
   }
 
   async function signOut() {
@@ -193,9 +191,9 @@ const redirectTo = `https://www.757mmdraft.com/auth/callback?next=/admin`;
 
         {!authUser ? (
           <div className="mt-5 max-w-md rounded-xl border bg-slate-50 p-4">
-            <div className="text-base font-semibold">Commissioner Magic Link Login</div>
+            <div className="text-base font-semibold">Commissioner Email Login</div>
             <div className="mt-1 text-sm text-slate-600">
-              Send a magic link to your commissioner email
+              Sign in with your commissioner email and password
             </div>
 
             <input
@@ -206,12 +204,20 @@ const redirectTo = `https://www.757mmdraft.com/auth/callback?next=/admin`;
               className="mt-4 w-full rounded-xl border px-3 py-2"
             />
 
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              className="mt-3 w-full rounded-xl border px-3 py-2"
+            />
+
             <button
-              onClick={sendMagicLink}
-              disabled={isSendingMagicLink}
+              onClick={signInWithPassword}
+              disabled={isSigningIn}
               className="mt-3 rounded-xl bg-black px-4 py-2 text-white disabled:opacity-50"
             >
-              {isSendingMagicLink ? "Sending..." : "Send Magic Link"}
+              {isSigningIn ? "Signing In..." : "Sign In"}
             </button>
           </div>
         ) : null}
