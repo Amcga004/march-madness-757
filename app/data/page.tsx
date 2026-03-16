@@ -50,6 +50,16 @@ type ComparisonRow = {
   winner: ComparisonWinner;
 };
 
+type ProjectionSummary = {
+  favorite: "a" | "b" | "tie";
+  probabilityA: number;
+  probabilityB: number;
+  edgeScore: number;
+  confidenceLabel: string;
+};
+
+const NONE_VALUE = "none";
+
 function formatMetric(value: number | null, digits = 1) {
   if (value === null || value === undefined) return "—";
   return value.toFixed(digits);
@@ -60,32 +70,39 @@ function formatRank(value: number | null) {
   return String(value);
 }
 
+function parseRecord(record: string | null) {
+  if (!record) return null;
+  const [wins, losses] = record.split("-").map(Number);
+  if (Number.isNaN(wins) || Number.isNaN(losses)) return null;
+  return { wins, losses };
+}
+
 function parseRecordWins(record: string | null) {
-  if (!record) return -1;
-  const [wins] = record.split("-");
-  const parsed = Number(wins);
-  return Number.isNaN(parsed) ? -1 : parsed;
+  const parsed = parseRecord(record);
+  return parsed ? parsed.wins : -1;
 }
 
 function parseRecordLosses(record: string | null) {
-  if (!record) return 999;
-  const [, losses] = record.split("-");
-  const parsed = Number(losses);
-  return Number.isNaN(parsed) ? 999 : parsed;
+  const parsed = parseRecord(record);
+  return parsed ? parsed.losses : 999;
 }
 
 function parseQuadWins(record: string | null) {
-  if (!record) return -1;
-  const [wins] = record.split("-");
-  const parsed = Number(wins);
-  return Number.isNaN(parsed) ? -1 : parsed;
+  const parsed = parseRecord(record);
+  return parsed ? parsed.wins : -1;
 }
 
 function parseQuadLosses(record: string | null) {
-  if (!record) return 999;
-  const [, losses] = record.split("-");
-  const parsed = Number(losses);
-  return Number.isNaN(parsed) ? 999 : parsed;
+  const parsed = parseRecord(record);
+  return parsed ? parsed.losses : 999;
+}
+
+function getWinningPercentage(record: string | null) {
+  const parsed = parseRecord(record);
+  if (!parsed) return null;
+  const total = parsed.wins + parsed.losses;
+  if (total === 0) return null;
+  return parsed.wins / total;
 }
 
 function getCompositeRank(team: Team) {
@@ -138,7 +155,94 @@ function getComparisonWinner(
 
 function getComparisonCellClass(winner: ComparisonWinner, side: "a" | "b") {
   if (winner === "tie") return "text-slate-700";
-  return winner === side ? "font-semibold text-emerald-700" : "text-slate-500";
+  return winner === side
+    ? "font-semibold text-emerald-700 bg-emerald-50"
+    : "text-slate-500";
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getScaledDifference(
+  valueA: number | null,
+  valueB: number | null,
+  scale: number,
+  direction: "higher" | "lower"
+) {
+  if (valueA === null || valueA === undefined || valueB === null || valueB === undefined) {
+    return 0;
+  }
+
+  if (scale <= 0) return 0;
+
+  const raw = direction === "higher" ? valueA - valueB : valueB - valueA;
+  return clamp(raw / scale, -1, 1);
+}
+
+function getRecordDifference(recordA: string | null, recordB: string | null) {
+  const pctA = getWinningPercentage(recordA);
+  const pctB = getWinningPercentage(recordB);
+
+  if (pctA === null || pctB === null) return 0;
+  return clamp((pctA - pctB) / 0.2, -1, 1);
+}
+
+function getQuadDifference(recordA: string | null, recordB: string | null) {
+  const parsedA = parseRecord(recordA);
+  const parsedB = parseRecord(recordB);
+
+  if (!parsedA || !parsedB) return 0;
+
+  const scoreA = parsedA.wins - parsedA.losses * 0.6;
+  const scoreB = parsedB.wins - parsedB.losses * 0.6;
+
+  return clamp((scoreA - scoreB) / 6, -1, 1);
+}
+
+function getProjectionSummary(teamA: Team, teamB: Team): ProjectionSummary {
+  const compositeA = getCompositeRank(teamA);
+  const compositeB = getCompositeRank(teamB);
+
+  const components = [
+    getScaledDifference(teamA.seed, teamB.seed, 8, "lower") * 3,
+    getRecordDifference(teamA.record, teamB.record) * 7,
+    getScaledDifference(teamA.kenpom_rank, teamB.kenpom_rank, 40, "lower") * 16,
+    getScaledDifference(teamA.bpi_rank, teamB.bpi_rank, 40, "lower") * 14,
+    getScaledDifference(teamA.net_rank, teamB.net_rank, 40, "lower") * 14,
+    getScaledDifference(compositeA, compositeB, 30, "lower") * 18,
+    getScaledDifference(teamA.off_efficiency, teamB.off_efficiency, 12, "higher") * 8,
+    getScaledDifference(teamA.def_efficiency, teamB.def_efficiency, 12, "lower") * 8,
+    getScaledDifference(teamA.off_efg_pct, teamB.off_efg_pct, 8, "higher") * 4,
+    getScaledDifference(teamA.def_efg_pct, teamB.def_efg_pct, 8, "lower") * 4,
+    getScaledDifference(teamA.sos_net_rating, teamB.sos_net_rating, 8, "higher") * 2,
+    getQuadDifference(teamA.quad1_record, teamB.quad1_record) * 5,
+    getQuadDifference(teamA.quad2_record, teamB.quad2_record) * 3,
+  ];
+
+  const edgeScore = components.reduce((sum, value) => sum + value, 0);
+  const probabilityA = clamp(Math.round(50 + edgeScore), 5, 95);
+  const probabilityB = 100 - probabilityA;
+
+  let confidenceLabel = "Slight edge";
+  const absoluteEdge = Math.abs(edgeScore);
+
+  if (absoluteEdge >= 18) confidenceLabel = "Strong edge";
+  else if (absoluteEdge >= 10) confidenceLabel = "Moderate edge";
+  else if (absoluteEdge >= 5) confidenceLabel = "Slight edge";
+  else confidenceLabel = "Near toss-up";
+
+  let favorite: "a" | "b" | "tie" = "tie";
+  if (probabilityA > probabilityB) favorite = "a";
+  if (probabilityB > probabilityA) favorite = "b";
+
+  return {
+    favorite,
+    probabilityA,
+    probabilityB,
+    edgeScore,
+    confidenceLabel,
+  };
 }
 
 function SortButton({
@@ -185,8 +289,8 @@ export default function DataPage() {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("composite_rank");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const [compareTeamAId, setCompareTeamAId] = useState("");
-  const [compareTeamBId, setCompareTeamBId] = useState("");
+  const [compareTeamAId, setCompareTeamAId] = useState<string>(NONE_VALUE);
+  const [compareTeamBId, setCompareTeamBId] = useState<string>(NONE_VALUE);
 
   useEffect(() => {
     async function loadData() {
@@ -198,8 +302,7 @@ export default function DataPage() {
         .not("school_name", "like", "PLAY-IN:%");
 
       if (data) {
-        const typedTeams = data as Team[];
-        setTeams(typedTeams);
+        setTeams(data as Team[]);
       }
     }
 
@@ -209,18 +312,6 @@ export default function DataPage() {
   const sortedTeamsForDropdown = useMemo(() => {
     return [...teams].sort((a, b) => a.school_name.localeCompare(b.school_name));
   }, [teams]);
-
-  useEffect(() => {
-    if (sortedTeamsForDropdown.length === 0) return;
-
-    if (!compareTeamAId) {
-      setCompareTeamAId(sortedTeamsForDropdown[0]?.id ?? "");
-    }
-
-    if (!compareTeamBId) {
-      setCompareTeamBId(sortedTeamsForDropdown[1]?.id ?? sortedTeamsForDropdown[0]?.id ?? "");
-    }
-  }, [sortedTeamsForDropdown, compareTeamAId, compareTeamBId]);
 
   function handleSort(nextKey: SortKey) {
     if (sortKey === nextKey) {
@@ -334,17 +425,28 @@ export default function DataPage() {
   }, [teams, search, sortKey, sortDirection]);
 
   const compareTeamA = useMemo(
-    () => teams.find((team) => team.id === compareTeamAId) ?? null,
+    () =>
+      compareTeamAId === NONE_VALUE
+        ? null
+        : teams.find((team) => team.id === compareTeamAId) ?? null,
     [teams, compareTeamAId]
   );
 
   const compareTeamB = useMemo(
-    () => teams.find((team) => team.id === compareTeamBId) ?? null,
+    () =>
+      compareTeamBId === NONE_VALUE
+        ? null
+        : teams.find((team) => team.id === compareTeamBId) ?? null,
     [teams, compareTeamBId]
   );
 
+  const shouldShowComparison =
+    compareTeamA !== null &&
+    compareTeamB !== null &&
+    compareTeamA.id !== compareTeamB.id;
+
   const comparisonRows = useMemo<ComparisonRow[]>(() => {
-    if (!compareTeamA || !compareTeamB) return [];
+    if (!shouldShowComparison || !compareTeamA || !compareTeamB) return [];
 
     const compositeA = getCompositeRank(compareTeamA);
     const compositeB = getCompositeRank(compareTeamB);
@@ -447,7 +549,23 @@ export default function DataPage() {
         winner: getComparisonWinner(compareTeamA.quad2_record, compareTeamB.quad2_record, "record"),
       },
     ];
-  }, [compareTeamA, compareTeamB]);
+  }, [compareTeamA, compareTeamB, shouldShowComparison]);
+
+  const comparisonSummary = useMemo(() => {
+    if (!shouldShowComparison || !compareTeamA || !compareTeamB) return null;
+
+    const winsA = comparisonRows.filter((row) => row.winner === "a").length;
+    const winsB = comparisonRows.filter((row) => row.winner === "b").length;
+    const ties = comparisonRows.filter((row) => row.winner === "tie").length;
+    const projection = getProjectionSummary(compareTeamA, compareTeamB);
+
+    return {
+      winsA,
+      winsB,
+      ties,
+      projection,
+    };
+  }, [comparisonRows, compareTeamA, compareTeamB, shouldShowComparison]);
 
   return (
     <div className="mx-auto max-w-[1600px] p-4 sm:p-6">
@@ -525,8 +643,9 @@ export default function DataPage() {
               Compare Two Teams
             </h3>
             <p className="mt-2 max-w-3xl text-sm text-slate-600">
-              Select any two field teams and compare their profile side by side across
-              ranking, efficiency, tempo, résumé, and quadrant performance.
+              Select any two field teams and compare them side by side. The projection
+              panel is a profile-based directional model built from ranking, efficiency,
+              résumé, and quadrant data, not a true game simulation.
             </p>
           </div>
         </div>
@@ -541,8 +660,13 @@ export default function DataPage() {
               value={compareTeamAId}
               onChange={(e) => setCompareTeamAId(e.target.value)}
             >
+              <option value={NONE_VALUE}>None</option>
               {sortedTeamsForDropdown.map((team) => (
-                <option key={team.id} value={team.id}>
+                <option
+                  key={team.id}
+                  value={team.id}
+                  disabled={compareTeamBId !== NONE_VALUE && compareTeamBId === team.id}
+                >
                   {team.school_name}
                 </option>
               ))}
@@ -558,8 +682,13 @@ export default function DataPage() {
               value={compareTeamBId}
               onChange={(e) => setCompareTeamBId(e.target.value)}
             >
+              <option value={NONE_VALUE}>None</option>
               {sortedTeamsForDropdown.map((team) => (
-                <option key={team.id} value={team.id}>
+                <option
+                  key={team.id}
+                  value={team.id}
+                  disabled={compareTeamAId !== NONE_VALUE && compareTeamAId === team.id}
+                >
                   {team.school_name}
                 </option>
               ))}
@@ -567,56 +696,128 @@ export default function DataPage() {
           </div>
         </div>
 
-        {compareTeamA && compareTeamB ? (
-          <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-950 text-white">
-                  <tr>
-                    <th className="px-4 py-4 text-left">
-                      <div className="flex items-center gap-3">
-                        <TeamLogo teamName={compareTeamA.school_name} size={30} />
-                        <div>
-                          <div className="font-semibold">{compareTeamA.school_name}</div>
-                          <div className="text-xs text-slate-300">
-                            {compareTeamA.seed} Seed • {compareTeamA.region}
-                          </div>
-                        </div>
-                      </div>
-                    </th>
-                    <th className="px-4 py-4 text-center font-semibold">Metric</th>
-                    <th className="px-4 py-4 text-right">
-                      <div className="flex items-center justify-end gap-3">
-                        <div className="text-right">
-                          <div className="font-semibold">{compareTeamB.school_name}</div>
-                          <div className="text-xs text-slate-300">
-                            {compareTeamB.seed} Seed • {compareTeamB.region}
-                          </div>
-                        </div>
-                        <TeamLogo teamName={compareTeamB.school_name} size={30} />
-                      </div>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {comparisonRows.map((row) => (
-                    <tr key={row.label} className="border-t border-slate-200">
-                      <td className={`px-4 py-3 ${getComparisonCellClass(row.winner, "a")}`}>
-                        {row.displayA}
-                      </td>
-                      <td className="px-4 py-3 text-center font-medium text-slate-900">
-                        {row.label}
-                      </td>
-                      <td className={`px-4 py-3 text-right ${getComparisonCellClass(row.winner, "b")}`}>
-                        {row.displayB}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {shouldShowComparison && compareTeamA && compareTeamB && comparisonSummary ? (
+          <>
+            <div className="mt-6 grid gap-4 xl:grid-cols-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Category Leads
+                </div>
+                <div className="mt-2 text-sm text-slate-700">
+                  <span className="font-semibold text-slate-900">{compareTeamA.school_name}</span>{" "}
+                  leads {comparisonSummary.winsA}
+                </div>
+                <div className="mt-1 text-sm text-slate-700">
+                  <span className="font-semibold text-slate-900">{compareTeamB.school_name}</span>{" "}
+                  leads {comparisonSummary.winsB}
+                </div>
+                <div className="mt-1 text-sm text-slate-500">
+                  Ties: {comparisonSummary.ties}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Projected Favorite
+                </div>
+                <div className="mt-2 text-lg font-bold text-slate-900">
+                  {comparisonSummary.projection.favorite === "a"
+                    ? compareTeamA.school_name
+                    : comparisonSummary.projection.favorite === "b"
+                      ? compareTeamB.school_name
+                      : "Toss-Up"}
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {comparisonSummary.projection.confidenceLabel}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Estimated Edge
+                </div>
+                <div className="mt-2 text-lg font-bold text-slate-900">
+                  {comparisonSummary.projection.probabilityA}% /{" "}
+                  {comparisonSummary.projection.probabilityB}%
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {compareTeamA.school_name} vs. {compareTeamB.school_name}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Model Score
+                </div>
+                <div className="mt-2 text-lg font-bold text-slate-900">
+                  {comparisonSummary.projection.edgeScore > 0 ? "+" : ""}
+                  {comparisonSummary.projection.edgeScore.toFixed(1)}
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  Positive favors Team A, negative favors Team B
+                </div>
+              </div>
             </div>
+
+            <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-950 text-white">
+                    <tr>
+                      <th className="px-4 py-4 text-left">
+                        <div className="flex items-center gap-3">
+                          <TeamLogo teamName={compareTeamA.school_name} size={30} />
+                          <div>
+                            <div className="font-semibold">{compareTeamA.school_name}</div>
+                            <div className="text-xs text-slate-300">
+                              {compareTeamA.seed} Seed • {compareTeamA.region}
+                            </div>
+                          </div>
+                        </div>
+                      </th>
+                      <th className="px-4 py-4 text-center font-semibold">Metric</th>
+                      <th className="px-4 py-4 text-right">
+                        <div className="flex items-center justify-end gap-3">
+                          <div className="text-right">
+                            <div className="font-semibold">{compareTeamB.school_name}</div>
+                            <div className="text-xs text-slate-300">
+                              {compareTeamB.seed} Seed • {compareTeamB.region}
+                            </div>
+                          </div>
+                          <TeamLogo teamName={compareTeamB.school_name} size={30} />
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comparisonRows.map((row) => (
+                      <tr key={row.label} className="border-t border-slate-200">
+                        <td className={`px-4 py-3 ${getComparisonCellClass(row.winner, "a")}`}>
+                          {row.displayA}
+                        </td>
+                        <td className="px-4 py-3 text-center font-medium text-slate-900">
+                          {row.label}
+                        </td>
+                        <td
+                          className={`px-4 py-3 text-right ${getComparisonCellClass(
+                            row.winner,
+                            "b"
+                          )}`}
+                        >
+                          {row.displayB}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
+            Select two different teams to activate the comparison board.
           </div>
-        ) : null}
+        )}
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -793,9 +994,7 @@ export default function DataPage() {
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 text-slate-700">
-                        {team.record ?? "—"}
-                      </td>
+                      <td className="px-4 py-3 text-slate-700">{team.record ?? "—"}</td>
 
                       <td className="px-4 py-3 text-right text-slate-700">
                         {formatRank(team.kenpom_rank)}
