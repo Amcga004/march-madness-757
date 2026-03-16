@@ -1,4 +1,7 @@
-import { createClient } from "@/lib/supabase/server";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import TeamLogo from "../components/TeamLogo";
 
 type Team = {
@@ -13,59 +16,256 @@ type Team = {
   conference_record: string | null;
   off_efficiency: number | null;
   def_efficiency: number | null;
+  quad1_record: string | null;
+  quad2_record: string | null;
+  adj_tempo: number | null;
+  sos_net_rating: number | null;
+  off_efg_pct: number | null;
+  def_efg_pct: number | null;
 };
 
-function formatMetric(value: number | null) {
+type SortKey =
+  | "school_name"
+  | "record"
+  | "kenpom_rank"
+  | "bpi_rank"
+  | "net_rank"
+  | "composite_rank"
+  | "off_efficiency"
+  | "def_efficiency"
+  | "off_efg_pct"
+  | "def_efg_pct"
+  | "adj_tempo"
+  | "sos_net_rating"
+  | "quad1_record"
+  | "quad2_record";
+
+type SortDirection = "asc" | "desc";
+
+function formatMetric(value: number | null, digits = 1) {
   if (value === null || value === undefined) return "—";
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  return value.toFixed(digits);
 }
 
-export default async function DataPage({
-  searchParams,
+function formatRank(value: number | null) {
+  if (value === null || value === undefined) return "—";
+  return String(value);
+}
+
+function parseRecordWins(record: string | null) {
+  if (!record) return -1;
+  const [wins] = record.split("-");
+  const parsed = Number(wins);
+  return Number.isNaN(parsed) ? -1 : parsed;
+}
+
+function parseRecordLosses(record: string | null) {
+  if (!record) return 999;
+  const [, losses] = record.split("-");
+  const parsed = Number(losses);
+  return Number.isNaN(parsed) ? 999 : parsed;
+}
+
+function parseQuadWins(record: string | null) {
+  if (!record) return -1;
+  const [wins] = record.split("-");
+  const parsed = Number(wins);
+  return Number.isNaN(parsed) ? -1 : parsed;
+}
+
+function parseQuadLosses(record: string | null) {
+  if (!record) return 999;
+  const [, losses] = record.split("-");
+  const parsed = Number(losses);
+  return Number.isNaN(parsed) ? 999 : parsed;
+}
+
+function getCompositeRank(team: Team) {
+  const ranks = [team.kenpom_rank, team.bpi_rank, team.net_rank].filter(
+    (value): value is number => value !== null && value !== undefined
+  );
+
+  if (ranks.length === 0) return null;
+
+  const average = ranks.reduce((sum, value) => sum + value, 0) / ranks.length;
+  return average;
+}
+
+function SortButton({
+  label,
+  sortKey,
+  activeSortKey,
+  direction,
+  onClick,
+  align = "left",
 }: {
-  searchParams?: Promise<{ q?: string }>;
+  label: string;
+  sortKey: SortKey;
+  activeSortKey: SortKey;
+  direction: SortDirection;
+  onClick: (key: SortKey) => void;
+  align?: "left" | "right" | "center";
 }) {
-  const supabase = await createClient();
-  const resolvedSearchParams = (await searchParams) ?? {};
-  const query = resolvedSearchParams.q?.trim().toLowerCase() ?? "";
+  const isActive = activeSortKey === sortKey;
+  const arrow = isActive ? (direction === "asc" ? "▲" : "▼") : "";
 
-  const { data } = await supabase
-    .from("teams")
-    .select(
-      "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency"
-    )
-    .not("school_name", "like", "PLAY-IN:%");
+  const alignmentClass =
+    align === "right"
+      ? "justify-end text-right"
+      : align === "center"
+      ? "justify-center text-center"
+      : "justify-start text-left";
 
-  const teams = ((data ?? []) as Team[])
-    .filter((team) => {
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(sortKey)}
+      className={`flex w-full items-center gap-2 ${alignmentClass} font-semibold text-white`}
+    >
+      <span>{label}</span>
+      <span className="text-[10px] text-slate-300">{arrow}</span>
+    </button>
+  );
+}
+
+export default function DataPage() {
+  const supabase = useMemo(() => createClient(), []);
+
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("composite_rank");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+  useEffect(() => {
+    async function loadData() {
+      const { data } = await supabase
+        .from("teams")
+        .select(
+          "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency,quad1_record,quad2_record,adj_tempo,sos_net_rating,off_efg_pct,def_efg_pct"
+        )
+        .not("school_name", "like", "PLAY-IN:%");
+
+      if (data) {
+        setTeams(data as Team[]);
+      }
+    }
+
+    loadData();
+  }, [supabase]);
+
+  function handleSort(nextKey: SortKey) {
+    if (sortKey === nextKey) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(nextKey);
+    setSortDirection("asc");
+  }
+
+  const filteredAndSortedTeams = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    const filtered = teams.filter((team) => {
       if (!query) return true;
+
+      const compositeRank = getCompositeRank(team);
 
       const searchable = [
         team.school_name,
         team.region,
         String(team.seed),
         team.record ?? "",
-        team.conference_record ?? "",
+        team.quad1_record ?? "",
+        team.quad2_record ?? "",
         team.kenpom_rank ? `kenpom ${team.kenpom_rank}` : "",
         team.bpi_rank ? `bpi ${team.bpi_rank}` : "",
         team.net_rank ? `net ${team.net_rank}` : "",
+        compositeRank ? `composite ${compositeRank.toFixed(2)}` : "",
       ]
         .join(" ")
         .toLowerCase();
 
       return searchable.includes(query);
-    })
-    .sort((a, b) => {
-      const aRank = a.kenpom_rank ?? 9999;
-      const bRank = b.kenpom_rank ?? 9999;
-
-      if (aRank !== bRank) return aRank - bRank;
-      if (a.seed !== b.seed) return a.seed - b.seed;
-      return a.school_name.localeCompare(b.school_name);
     });
 
+    const sorted = [...filtered].sort((a, b) => {
+      const compositeA = getCompositeRank(a);
+      const compositeB = getCompositeRank(b);
+
+      let comparison = 0;
+
+      switch (sortKey) {
+        case "school_name":
+          comparison = a.school_name.localeCompare(b.school_name);
+          break;
+        case "record":
+          comparison = parseRecordWins(a.record) - parseRecordWins(b.record);
+          if (comparison === 0) {
+            comparison = parseRecordLosses(a.record) - parseRecordLosses(b.record);
+          }
+          comparison *= -1;
+          break;
+        case "kenpom_rank":
+          comparison = (a.kenpom_rank ?? 9999) - (b.kenpom_rank ?? 9999);
+          break;
+        case "bpi_rank":
+          comparison = (a.bpi_rank ?? 9999) - (b.bpi_rank ?? 9999);
+          break;
+        case "net_rank":
+          comparison = (a.net_rank ?? 9999) - (b.net_rank ?? 9999);
+          break;
+        case "composite_rank":
+          comparison = (compositeA ?? 9999) - (compositeB ?? 9999);
+          break;
+        case "off_efficiency":
+          comparison = (a.off_efficiency ?? -9999) - (b.off_efficiency ?? -9999);
+          break;
+        case "def_efficiency":
+          comparison = (a.def_efficiency ?? 9999) - (b.def_efficiency ?? 9999);
+          break;
+        case "off_efg_pct":
+          comparison = (a.off_efg_pct ?? -9999) - (b.off_efg_pct ?? -9999);
+          break;
+        case "def_efg_pct":
+          comparison = (a.def_efg_pct ?? 9999) - (b.def_efg_pct ?? 9999);
+          break;
+        case "adj_tempo":
+          comparison = (a.adj_tempo ?? -9999) - (b.adj_tempo ?? -9999);
+          break;
+        case "sos_net_rating":
+          comparison = (a.sos_net_rating ?? -9999) - (b.sos_net_rating ?? -9999);
+          break;
+        case "quad1_record":
+          comparison = parseQuadWins(a.quad1_record) - parseQuadWins(b.quad1_record);
+          if (comparison === 0) {
+            comparison = parseQuadLosses(a.quad1_record) - parseQuadLosses(b.quad1_record);
+          }
+          comparison *= -1;
+          break;
+        case "quad2_record":
+          comparison = parseQuadWins(a.quad2_record) - parseQuadWins(b.quad2_record);
+          if (comparison === 0) {
+            comparison = parseQuadLosses(a.quad2_record) - parseQuadLosses(b.quad2_record);
+          }
+          comparison *= -1;
+          break;
+        default:
+          comparison = 0;
+      }
+
+      if (comparison === 0) {
+        comparison = a.school_name.localeCompare(b.school_name);
+      }
+
+      return sortDirection === "asc" ? comparison : comparison * -1;
+    });
+
+    return sorted;
+  }, [teams, search, sortKey, sortDirection]);
+
   return (
-    <div className="mx-auto max-w-7xl p-4 sm:p-6">
+    <div className="mx-auto max-w-[1600px] p-4 sm:p-6">
       <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:mb-8 sm:p-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -73,11 +273,11 @@ export default async function DataPage({
               Team Analytics Reference
             </div>
             <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
-              2026 Team Data Board
+              2026 Field Data Board
             </h2>
-            <p className="mt-3 max-w-3xl text-sm text-slate-600 sm:text-base">
-              Central reference table for tournament teams and pre-draft analytics,
-              including seed, region, KenPom, BPI, NET, record, and efficiency data.
+            <p className="mt-3 max-w-4xl text-sm text-slate-600 sm:text-base">
+              Tournament field reference board with ranking, efficiency, tempo,
+              résumé, and composite profile data across KenPom, BPI, and NET.
             </p>
           </div>
 
@@ -85,79 +285,281 @@ export default async function DataPage({
             <div className="text-xs uppercase tracking-wide text-slate-400">
               Teams Shown
             </div>
-            <div className="mt-1 text-lg font-semibold">{teams.length}</div>
+            <div className="mt-1 text-lg font-semibold">
+              {filteredAndSortedTeams.length}
+            </div>
           </div>
         </div>
 
-        <form method="get" className="mt-6">
-          <label htmlFor="team-search" className="mb-2 block text-sm font-medium text-slate-700">
-            Search Teams
-          </label>
-          <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_auto]">
+          <div>
+            <label
+              htmlFor="team-search"
+              className="mb-2 block text-sm font-medium text-slate-700"
+            >
+              Search Teams
+            </label>
             <input
               id="team-search"
-              name="q"
-              defaultValue={resolvedSearchParams.q ?? ""}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by team, region, seed, record, or ranking"
               className="w-full rounded-xl border border-slate-300 px-3 py-2"
             />
-            <button
-              type="submit"
-              className="rounded-xl bg-slate-950 px-4 py-2 text-white"
-            >
-              Search
-            </button>
           </div>
-        </form>
+
+          <div className="grid grid-cols-2 gap-3 lg:min-w-[260px]">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Default Sort
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-900">
+                Composite Rank
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Current Sort
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-900">
+                {sortKey.replaceAll("_", " ")}
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="sticky top-0 bg-slate-950 text-white">
+          <table className="min-w-[1500px] w-full text-sm">
+            <thead className="bg-slate-950 text-white">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold">Team</th>
-                <th className="px-4 py-3 text-left font-semibold">Seed</th>
-                <th className="px-4 py-3 text-left font-semibold">Region</th>
-                <th className="px-4 py-3 text-left font-semibold">KenPom</th>
-                <th className="px-4 py-3 text-left font-semibold">BPI</th>
-                <th className="px-4 py-3 text-left font-semibold">NET</th>
-                <th className="px-4 py-3 text-left font-semibold">Record</th>
-                <th className="px-4 py-3 text-left font-semibold">Conf</th>
-                <th className="px-4 py-3 text-left font-semibold">Off Eff</th>
-                <th className="px-4 py-3 text-left font-semibold">Def Eff</th>
+                <th className="px-4 py-3 text-left">
+                  <SortButton
+                    label="Team"
+                    sortKey="school_name"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                  />
+                </th>
+                <th className="px-4 py-3 text-left">
+                  <SortButton
+                    label="Record"
+                    sortKey="record"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="KP"
+                    sortKey="kenpom_rank"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="BPI"
+                    sortKey="bpi_rank"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="NET"
+                    sortKey="net_rank"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Composite"
+                    sortKey="composite_rank"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Off Eff"
+                    sortKey="off_efficiency"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Def Eff"
+                    sortKey="def_efficiency"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Off eFG%"
+                    sortKey="off_efg_pct"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Def eFG%"
+                    sortKey="def_efg_pct"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Adj Tempo"
+                    sortKey="adj_tempo"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="SOS Net"
+                    sortKey="sos_net_rating"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-left">
+                  <SortButton
+                    label="Quad 1"
+                    sortKey="quad1_record"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                  />
+                </th>
+                <th className="px-4 py-3 text-left">
+                  <SortButton
+                    label="Quad 2"
+                    sortKey="quad2_record"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                  />
+                </th>
               </tr>
             </thead>
+
             <tbody>
-              {teams.length === 0 ? (
+              {filteredAndSortedTeams.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-6 text-center text-slate-500">
+                  <td colSpan={14} className="px-4 py-8 text-center text-slate-500">
                     No teams matched your search.
                   </td>
                 </tr>
               ) : (
-                teams.map((team) => (
-                  <tr
-                    key={team.id}
-                    className="border-t border-slate-200 hover:bg-slate-50"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <TeamLogo teamName={team.school_name} size={28} />
-                        <span className="font-medium text-slate-900">{team.school_name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">{team.seed}</td>
-                    <td className="px-4 py-3 text-slate-700">{team.region}</td>
-                    <td className="px-4 py-3 text-slate-700">{team.kenpom_rank ?? "—"}</td>
-                    <td className="px-4 py-3 text-slate-700">{team.bpi_rank ?? "—"}</td>
-                    <td className="px-4 py-3 text-slate-700">{team.net_rank ?? "—"}</td>
-                    <td className="px-4 py-3 text-slate-700">{team.record ?? "—"}</td>
-                    <td className="px-4 py-3 text-slate-700">{team.conference_record ?? "—"}</td>
-                    <td className="px-4 py-3 text-slate-700">{formatMetric(team.off_efficiency)}</td>
-                    <td className="px-4 py-3 text-slate-700">{formatMetric(team.def_efficiency)}</td>
-                  </tr>
-                ))
+                filteredAndSortedTeams.map((team) => {
+                  const compositeRank = getCompositeRank(team);
+
+                  return (
+                    <tr
+                      key={team.id}
+                      className="border-t border-slate-200 hover:bg-slate-50"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <TeamLogo teamName={team.school_name} size={28} />
+                          <div>
+                            <div className="font-medium text-slate-900">
+                              {team.school_name}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {team.seed} Seed • {team.region}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-700">
+                        {team.record ?? "—"}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {formatRank(team.kenpom_rank)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {formatRank(team.bpi_rank)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {formatRank(team.net_rank)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                        {compositeRank === null ? "—" : compositeRank.toFixed(2)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {formatMetric(team.off_efficiency)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {formatMetric(team.def_efficiency)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {formatMetric(team.off_efg_pct, 1)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {formatMetric(team.def_efg_pct, 1)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {formatMetric(team.adj_tempo, 1)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {team.sos_net_rating === null || team.sos_net_rating === undefined
+                          ? "—"
+                          : team.sos_net_rating.toFixed(2)}
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-700">
+                        {team.quad1_record ?? "—"}
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-700">
+                        {team.quad2_record ?? "—"}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
