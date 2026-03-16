@@ -87,8 +87,50 @@ function getCompositeRank(team: Team) {
 
   if (ranks.length === 0) return null;
 
-  const average = ranks.reduce((sum, value) => sum + value, 0) / ranks.length;
-  return average;
+  return ranks.reduce((sum, value) => sum + value, 0) / ranks.length;
+}
+
+function getComparisonWinner(
+  valueA: number | string | null,
+  valueB: number | string | null,
+  mode: "higher" | "lower" | "record"
+) {
+  if (valueA === null || valueA === undefined || valueB === null || valueB === undefined) {
+    return "tie";
+  }
+
+  if (mode === "record") {
+    const winsA = parseQuadWins(String(valueA));
+    const winsB = parseQuadWins(String(valueB));
+    const lossesA = parseQuadLosses(String(valueA));
+    const lossesB = parseQuadLosses(String(valueB));
+
+    if (winsA > winsB) return "a";
+    if (winsB > winsA) return "b";
+    if (lossesA < lossesB) return "a";
+    if (lossesB < lossesA) return "b";
+    return "tie";
+  }
+
+  const numA = typeof valueA === "string" ? Number(valueA) : valueA;
+  const numB = typeof valueB === "string" ? Number(valueB) : valueB;
+
+  if (Number.isNaN(numA) || Number.isNaN(numB)) return "tie";
+
+  if (mode === "higher") {
+    if (numA > numB) return "a";
+    if (numB > numA) return "b";
+    return "tie";
+  }
+
+  if (numA < numB) return "a";
+  if (numB < numA) return "b";
+  return "tie";
+}
+
+function getComparisonCellClass(winner: "a" | "b" | "tie", side: "a" | "b") {
+  if (winner === "tie") return "text-slate-700";
+  return winner === side ? "font-semibold text-emerald-700" : "text-slate-500";
 }
 
 function SortButton({
@@ -113,8 +155,8 @@ function SortButton({
     align === "right"
       ? "justify-end text-right"
       : align === "center"
-      ? "justify-center text-center"
-      : "justify-start text-left";
+        ? "justify-center text-center"
+        : "justify-start text-left";
 
   return (
     <button
@@ -135,6 +177,8 @@ export default function DataPage() {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("composite_rank");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [compareTeamAId, setCompareTeamAId] = useState("");
+  const [compareTeamBId, setCompareTeamBId] = useState("");
 
   useEffect(() => {
     async function loadData() {
@@ -146,12 +190,29 @@ export default function DataPage() {
         .not("school_name", "like", "PLAY-IN:%");
 
       if (data) {
-        setTeams(data as Team[]);
+        const typedTeams = data as Team[];
+        setTeams(typedTeams);
       }
     }
 
     loadData();
   }, [supabase]);
+
+  const sortedTeamsForDropdown = useMemo(() => {
+    return [...teams].sort((a, b) => a.school_name.localeCompare(b.school_name));
+  }, [teams]);
+
+  useEffect(() => {
+    if (sortedTeamsForDropdown.length === 0) return;
+
+    if (!compareTeamAId) {
+      setCompareTeamAId(sortedTeamsForDropdown[0]?.id ?? "");
+    }
+
+    if (!compareTeamBId) {
+      setCompareTeamBId(sortedTeamsForDropdown[1]?.id ?? sortedTeamsForDropdown[0]?.id ?? "");
+    }
+  }, [sortedTeamsForDropdown, compareTeamAId, compareTeamBId]);
 
   function handleSort(nextKey: SortKey) {
     if (sortKey === nextKey) {
@@ -264,6 +325,152 @@ export default function DataPage() {
     return sorted;
   }, [teams, search, sortKey, sortDirection]);
 
+  const compareTeamA = useMemo(
+    () => teams.find((team) => team.id === compareTeamAId) ?? null,
+    [teams, compareTeamAId]
+  );
+
+  const compareTeamB = useMemo(
+    () => teams.find((team) => team.id === compareTeamBId) ?? null,
+    [teams, compareTeamBId]
+  );
+
+  const comparisonRows = useMemo(() => {
+    if (!compareTeamA || !compareTeamB) return [];
+
+    const compositeA = getCompositeRank(compareTeamA);
+    const compositeB = getCompositeRank(compareTeamB);
+
+    return [
+      {
+        label: "Seed",
+        valueA: compareTeamA.seed,
+        valueB: compareTeamB.seed,
+        displayA: String(compareTeamA.seed),
+        displayB: String(compareTeamB.seed),
+        winner: getComparisonWinner(compareTeamA.seed, compareTeamB.seed, "lower"),
+      },
+      {
+        label: "Region",
+        valueA: compareTeamA.region,
+        valueB: compareTeamB.region,
+        displayA: compareTeamA.region,
+        displayB: compareTeamB.region,
+        winner: "tie" as const,
+      },
+      {
+        label: "Overall Record",
+        valueA: compareTeamA.record,
+        valueB: compareTeamB.record,
+        displayA: compareTeamA.record ?? "—",
+        displayB: compareTeamB.record ?? "—",
+        winner: getComparisonWinner(compareTeamA.record, compareTeamB.record, "record"),
+      },
+      {
+        label: "KenPom Rank",
+        valueA: compareTeamA.kenpom_rank,
+        valueB: compareTeamB.kenpom_rank,
+        displayA: formatRank(compareTeamA.kenpom_rank),
+        displayB: formatRank(compareTeamB.kenpom_rank),
+        winner: getComparisonWinner(compareTeamA.kenpom_rank, compareTeamB.kenpom_rank, "lower"),
+      },
+      {
+        label: "BPI Rank",
+        valueA: compareTeamA.bpi_rank,
+        valueB: compareTeamB.bpi_rank,
+        displayA: formatRank(compareTeamA.bpi_rank),
+        displayB: formatRank(compareTeamB.bpi_rank),
+        winner: getComparisonWinner(compareTeamA.bpi_rank, compareTeamB.bpi_rank, "lower"),
+      },
+      {
+        label: "NET Rank",
+        valueA: compareTeamA.net_rank,
+        valueB: compareTeamB.net_rank,
+        displayA: formatRank(compareTeamA.net_rank),
+        displayB: formatRank(compareTeamB.net_rank),
+        winner: getComparisonWinner(compareTeamA.net_rank, compareTeamB.net_rank, "lower"),
+      },
+      {
+        label: "Composite Rank",
+        valueA: compositeA,
+        valueB: compositeB,
+        displayA: compositeA === null ? "—" : compositeA.toFixed(2),
+        displayB: compositeB === null ? "—" : compositeB.toFixed(2),
+        winner: getComparisonWinner(compositeA, compositeB, "lower"),
+      },
+      {
+        label: "KenPom Off Eff",
+        valueA: compareTeamA.off_efficiency,
+        valueB: compareTeamB.off_efficiency,
+        displayA: formatMetric(compareTeamA.off_efficiency),
+        displayB: formatMetric(compareTeamB.off_efficiency),
+        winner: getComparisonWinner(compareTeamA.off_efficiency, compareTeamB.off_efficiency, "higher"),
+      },
+      {
+        label: "KenPom Def Eff",
+        valueA: compareTeamA.def_efficiency,
+        valueB: compareTeamB.def_efficiency,
+        displayA: formatMetric(compareTeamA.def_efficiency),
+        displayB: formatMetric(compareTeamB.def_efficiency),
+        winner: getComparisonWinner(compareTeamA.def_efficiency, compareTeamB.def_efficiency, "lower"),
+      },
+      {
+        label: "Off eFG%",
+        valueA: compareTeamA.off_efg_pct,
+        valueB: compareTeamB.off_efg_pct,
+        displayA: formatMetric(compareTeamA.off_efg_pct),
+        displayB: formatMetric(compareTeamB.off_efg_pct),
+        winner: getComparisonWinner(compareTeamA.off_efg_pct, compareTeamB.off_efg_pct, "higher"),
+      },
+      {
+        label: "Def eFG%",
+        valueA: compareTeamA.def_efg_pct,
+        valueB: compareTeamB.def_efg_pct,
+        displayA: formatMetric(compareTeamA.def_efg_pct),
+        displayB: formatMetric(compareTeamB.def_efg_pct),
+        winner: getComparisonWinner(compareTeamA.def_efg_pct, compareTeamB.def_efg_pct, "lower"),
+      },
+      {
+        label: "Adj Tempo",
+        valueA: compareTeamA.adj_tempo,
+        valueB: compareTeamB.adj_tempo,
+        displayA: formatMetric(compareTeamA.adj_tempo),
+        displayB: formatMetric(compareTeamB.adj_tempo),
+        winner: getComparisonWinner(compareTeamA.adj_tempo, compareTeamB.adj_tempo, "higher"),
+      },
+      {
+        label: "SOS Net",
+        valueA: compareTeamA.sos_net_rating,
+        valueB: compareTeamB.sos_net_rating,
+        displayA:
+          compareTeamA.sos_net_rating === null || compareTeamA.sos_net_rating === undefined
+            ? "—"
+            : compareTeamA.sos_net_rating.toFixed(2),
+        displayB:
+          compareTeamB.sos_net_rating === null || compareTeamB.sos_net_rating === undefined
+            ? "—"
+            : compareTeamB.sos_net_rating.toFixed(2),
+        winner: getComparisonWinner(compareTeamA.sos_net_rating, compareTeamB.sos_net_rating, "higher"),
+      },
+      {
+        label: "Quad 1",
+        valueA: compareTeamA.quad1_record,
+        valueB: compareTeamB.quad1_record,
+        displayA: compareTeamA.quad1_record ?? "—",
+        displayB: compareTeamB.quad1_record ?? "—",
+        winner: getComparisonWinner(compareTeamA.quad1_record, compareTeamB.quad1_record, "record"),
+      },
+      {
+        label: "Quad 2",
+        valueA: compareTeamA.quad2_record,
+        valueB: compareTeamB.quad2_record,
+        displayA: compareTeamA.quad2_record ?? "—",
+        displayB: compareTeamB.quad2_record ?? "—",
+        winner: getComparisonWinner(compareTeamA.quad2_record, compareTeamB.quad2_record, "record"),
+      },
+    ];
+  }, [compareTeamA, compareTeamB]);
+
   return (
     <div className="mx-auto max-w-[1600px] p-4 sm:p-6">
       <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:mb-8 sm:p-8">
@@ -328,6 +535,110 @@ export default function DataPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:mb-8 sm:p-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 sm:text-sm">
+              Head-to-Head Comparison
+            </div>
+            <h3 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+              Compare Two Teams
+            </h3>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">
+              Select any two field teams and compare their profile side by side across
+              ranking, efficiency, tempo, résumé, and quadrant performance.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Team A
+            </label>
+            <select
+              className="w-full rounded-xl border border-slate-300 px-3 py-2"
+              value={compareTeamAId}
+              onChange={(e) => setCompareTeamAId(e.target.value)}
+            >
+              {sortedTeamsForDropdown.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.school_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Team B
+            </label>
+            <select
+              className="w-full rounded-xl border border-slate-300 px-3 py-2"
+              value={compareTeamBId}
+              onChange={(e) => setCompareTeamBId(e.target.value)}
+            >
+              {sortedTeamsForDropdown.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.school_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {compareTeamA && compareTeamB ? (
+          <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-950 text-white">
+                  <tr>
+                    <th className="px-4 py-4 text-left">
+                      <div className="flex items-center gap-3">
+                        <TeamLogo teamName={compareTeamA.school_name} size={30} />
+                        <div>
+                          <div className="font-semibold">{compareTeamA.school_name}</div>
+                          <div className="text-xs text-slate-300">
+                            {compareTeamA.seed} Seed • {compareTeamA.region}
+                          </div>
+                        </div>
+                      </div>
+                    </th>
+                    <th className="px-4 py-4 text-center font-semibold">Metric</th>
+                    <th className="px-4 py-4 text-right">
+                      <div className="flex items-center justify-end gap-3">
+                        <div className="text-right">
+                          <div className="font-semibold">{compareTeamB.school_name}</div>
+                          <div className="text-xs text-slate-300">
+                            {compareTeamB.seed} Seed • {compareTeamB.region}
+                          </div>
+                        </div>
+                        <TeamLogo teamName={compareTeamB.school_name} size={30} />
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparisonRows.map((row) => (
+                    <tr key={row.label} className="border-t border-slate-200">
+                      <td className={`px-4 py-3 ${getComparisonCellClass(row.winner, "a")}`}>
+                        {row.displayA}
+                      </td>
+                      <td className="px-4 py-3 text-center font-medium text-slate-900">
+                        {row.label}
+                      </td>
+                      <td className={`px-4 py-3 text-right ${getComparisonCellClass(row.winner, "b")}`}>
+                        {row.displayB}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
