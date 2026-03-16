@@ -31,6 +31,10 @@ type SortKey =
   | "bpi_rank"
   | "net_rank"
   | "composite_rank"
+  | "value_score"
+  | "risk_score"
+  | "contender_score"
+  | "upset_score"
   | "off_efficiency"
   | "def_efficiency"
   | "off_efg_pct"
@@ -41,24 +45,28 @@ type SortKey =
   | "quad2_record";
 
 type SortDirection = "asc" | "desc";
-type ComparisonWinner = "a" | "b" | "tie";
 
-type ComparisonRow = {
-  label: string;
-  displayA: string;
-  displayB: string;
-  winner: ComparisonWinner;
+type TeamIntelligence = {
+  compositeRank: number | null;
+  valueScore: number | null;
+  riskScore: number | null;
+  contenderScore: number | null;
+  upsetScore: number | null;
+  archetypeTags: string[];
 };
 
-type ProjectionSummary = {
-  favorite: "a" | "b" | "tie";
-  probabilityA: number;
-  probabilityB: number;
-  edgeScore: number;
-  confidenceLabel: string;
-};
+function clamp(value: number, min = 0, max = 100) {
+  return Math.max(min, Math.min(max, value));
+}
 
-const NONE_VALUE = "none";
+function average(values: Array<number | null | undefined>) {
+  const valid = values.filter(
+    (value): value is number => typeof value === "number" && !Number.isNaN(value)
+  );
+
+  if (valid.length === 0) return null;
+  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+}
 
 function formatMetric(value: number | null, digits = 1) {
   if (value === null || value === undefined) return "—";
@@ -70,179 +78,216 @@ function formatRank(value: number | null) {
   return String(value);
 }
 
-function parseRecord(record: string | null) {
-  if (!record) return null;
-  const [wins, losses] = record.split("-").map(Number);
-  if (Number.isNaN(wins) || Number.isNaN(losses)) return null;
-  return { wins, losses };
-}
-
 function parseRecordWins(record: string | null) {
-  const parsed = parseRecord(record);
-  return parsed ? parsed.wins : -1;
+  if (!record) return -1;
+  const [wins] = record.split("-");
+  const parsed = Number(wins);
+  return Number.isNaN(parsed) ? -1 : parsed;
 }
 
 function parseRecordLosses(record: string | null) {
-  const parsed = parseRecord(record);
-  return parsed ? parsed.losses : 999;
+  if (!record) return 999;
+  const [, losses] = record.split("-");
+  const parsed = Number(losses);
+  return Number.isNaN(parsed) ? 999 : parsed;
 }
 
 function parseQuadWins(record: string | null) {
-  const parsed = parseRecord(record);
-  return parsed ? parsed.wins : -1;
+  if (!record) return -1;
+  const [wins] = record.split("-");
+  const parsed = Number(wins);
+  return Number.isNaN(parsed) ? -1 : parsed;
 }
 
 function parseQuadLosses(record: string | null) {
-  const parsed = parseRecord(record);
-  return parsed ? parsed.losses : 999;
+  if (!record) return 999;
+  const [, losses] = record.split("-");
+  const parsed = Number(losses);
+  return Number.isNaN(parsed) ? 999 : parsed;
 }
 
-function getWinningPercentage(record: string | null) {
-  const parsed = parseRecord(record);
-  if (!parsed) return null;
-  const total = parsed.wins + parsed.losses;
-  if (total === 0) return null;
-  return parsed.wins / total;
+function parseWinPct(record: string | null) {
+  if (!record) return null;
+
+  const [winsString, lossesString] = record.split("-");
+  const wins = Number(winsString);
+  const losses = Number(lossesString);
+
+  if (Number.isNaN(wins) || Number.isNaN(losses) || wins + losses === 0) {
+    return null;
+  }
+
+  return wins / (wins + losses);
 }
 
 function getCompositeRank(team: Team) {
-  const ranks = [team.kenpom_rank, team.bpi_rank, team.net_rank].filter(
-    (value): value is number => value !== null && value !== undefined
-  );
-
-  if (ranks.length === 0) return null;
-
-  return ranks.reduce((sum, value) => sum + value, 0) / ranks.length;
+  return average([team.kenpom_rank, team.bpi_rank, team.net_rank]);
 }
 
-function getComparisonWinner(
-  valueA: number | string | null,
-  valueB: number | string | null,
-  mode: "higher" | "lower" | "record"
-): ComparisonWinner {
-  if (valueA === null || valueA === undefined || valueB === null || valueB === undefined) {
-    return "tie";
+function getTeamIntelligence(team: Team): TeamIntelligence {
+  const compositeRank = getCompositeRank(team);
+  const quad1Wins = parseQuadWins(team.quad1_record);
+  const quad1Losses = parseQuadLosses(team.quad1_record);
+  const quad2Wins = parseQuadWins(team.quad2_record);
+  const quad2Losses = parseQuadLosses(team.quad2_record);
+  const quad1Pct =
+    quad1Wins >= 0 && quad1Losses < 999 && quad1Wins + quad1Losses > 0
+      ? quad1Wins / (quad1Wins + quad1Losses)
+      : null;
+  const quad2Pct =
+    quad2Wins >= 0 && quad2Losses < 999 && quad2Wins + quad2Losses > 0
+      ? quad2Wins / (quad2Wins + quad2Losses)
+      : null;
+
+  const seedValue = typeof team.seed === "number" ? team.seed * 8 : null;
+  const valueScore =
+    compositeRank !== null && seedValue !== null
+      ? Number((seedValue - compositeRank).toFixed(2))
+      : null;
+
+  let riskBase = 0;
+
+  if (compositeRank !== null && seedValue !== null && compositeRank > seedValue + 8) {
+    riskBase += Math.min(35, (compositeRank - seedValue - 8) * 2.5);
   }
 
-  if (mode === "record") {
-    const winsA = parseQuadWins(String(valueA));
-    const winsB = parseQuadWins(String(valueB));
-    const lossesA = parseQuadLosses(String(valueA));
-    const lossesB = parseQuadLosses(String(valueB));
-
-    if (winsA > winsB) return "a";
-    if (winsB > winsA) return "b";
-    if (lossesA < lossesB) return "a";
-    if (lossesB < lossesA) return "b";
-    return "tie";
+  if (team.def_efficiency !== null) {
+    if (team.def_efficiency >= 103) riskBase += 18;
+    else if (team.def_efficiency >= 100) riskBase += 10;
   }
 
-  const numA = typeof valueA === "string" ? Number(valueA) : valueA;
-  const numB = typeof valueB === "string" ? Number(valueB) : valueB;
-
-  if (Number.isNaN(numA) || Number.isNaN(numB)) return "tie";
-
-  if (mode === "higher") {
-    if (numA > numB) return "a";
-    if (numB > numA) return "b";
-    return "tie";
+  if (quad1Pct !== null) {
+    if (quad1Pct < 0.35) riskBase += 20;
+    else if (quad1Pct < 0.45) riskBase += 10;
+  } else {
+    riskBase += 6;
   }
 
-  if (numA < numB) return "a";
-  if (numB < numA) return "b";
-  return "tie";
-}
-
-function getComparisonCellClass(winner: ComparisonWinner, side: "a" | "b") {
-  if (winner === "tie") return "text-slate-700";
-  return winner === side
-    ? "font-semibold text-emerald-700 bg-emerald-50"
-    : "text-slate-500";
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function getScaledDifference(
-  valueA: number | null,
-  valueB: number | null,
-  scale: number,
-  direction: "higher" | "lower"
-) {
-  if (valueA === null || valueA === undefined || valueB === null || valueB === undefined) {
-    return 0;
+  if (team.sos_net_rating !== null) {
+    if (team.sos_net_rating < 0) riskBase += 12;
+    else if (team.sos_net_rating < 3) riskBase += 6;
   }
 
-  if (scale <= 0) return 0;
+  const riskScore = Number(clamp(riskBase).toFixed(1));
 
-  const raw = direction === "higher" ? valueA - valueB : valueB - valueA;
-  return clamp(raw / scale, -1, 1);
-}
+  let contenderBase = 0;
 
-function getRecordDifference(recordA: string | null, recordB: string | null) {
-  const pctA = getWinningPercentage(recordA);
-  const pctB = getWinningPercentage(recordB);
+  if (compositeRank !== null) {
+    contenderBase += clamp(42 - compositeRank, 0, 40);
+  }
 
-  if (pctA === null || pctB === null) return 0;
-  return clamp((pctA - pctB) / 0.2, -1, 1);
-}
+  if (team.off_efficiency !== null) {
+    contenderBase += clamp((team.off_efficiency - 110) * 1.4, 0, 22);
+  }
 
-function getQuadDifference(recordA: string | null, recordB: string | null) {
-  const parsedA = parseRecord(recordA);
-  const parsedB = parseRecord(recordB);
+  if (team.def_efficiency !== null) {
+    contenderBase += clamp((102 - team.def_efficiency) * 2.2, 0, 24);
+  }
 
-  if (!parsedA || !parsedB) return 0;
+  if (quad1Pct !== null) {
+    contenderBase += clamp((quad1Pct - 0.4) * 35, 0, 14);
+  }
 
-  const scoreA = parsedA.wins - parsedA.losses * 0.6;
-  const scoreB = parsedB.wins - parsedB.losses * 0.6;
+  const contenderScore = Number(clamp(contenderBase).toFixed(1));
 
-  return clamp((scoreA - scoreB) / 6, -1, 1);
-}
+  let upsetBase = 0;
 
-function getProjectionSummary(teamA: Team, teamB: Team): ProjectionSummary {
-  const compositeA = getCompositeRank(teamA);
-  const compositeB = getCompositeRank(teamB);
+  if (team.seed >= 8) upsetBase += 20;
+  else if (team.seed >= 6) upsetBase += 12;
 
-  const components = [
-    getScaledDifference(teamA.seed, teamB.seed, 8, "lower") * 3,
-    getRecordDifference(teamA.record, teamB.record) * 7,
-    getScaledDifference(teamA.kenpom_rank, teamB.kenpom_rank, 40, "lower") * 16,
-    getScaledDifference(teamA.bpi_rank, teamB.bpi_rank, 40, "lower") * 14,
-    getScaledDifference(teamA.net_rank, teamB.net_rank, 40, "lower") * 14,
-    getScaledDifference(compositeA, compositeB, 30, "lower") * 18,
-    getScaledDifference(teamA.off_efficiency, teamB.off_efficiency, 12, "higher") * 8,
-    getScaledDifference(teamA.def_efficiency, teamB.def_efficiency, 12, "lower") * 8,
-    getScaledDifference(teamA.off_efg_pct, teamB.off_efg_pct, 8, "higher") * 4,
-    getScaledDifference(teamA.def_efg_pct, teamB.def_efg_pct, 8, "lower") * 4,
-    getScaledDifference(teamA.sos_net_rating, teamB.sos_net_rating, 8, "higher") * 2,
-    getQuadDifference(teamA.quad1_record, teamB.quad1_record) * 5,
-    getQuadDifference(teamA.quad2_record, teamB.quad2_record) * 3,
-  ];
+  if (valueScore !== null && valueScore > 0) {
+    upsetBase += clamp(valueScore * 2.5, 0, 25);
+  }
 
-  const edgeScore = components.reduce((sum, value) => sum + value, 0);
-  const probabilityA = clamp(Math.round(50 + edgeScore), 5, 95);
-  const probabilityB = 100 - probabilityA;
+  if (team.off_efficiency !== null) {
+    upsetBase += clamp((team.off_efficiency - 112) * 1.1, 0, 15);
+  }
 
-  let confidenceLabel = "Slight edge";
-  const absoluteEdge = Math.abs(edgeScore);
+  if (team.def_efficiency !== null) {
+    upsetBase += clamp((101.5 - team.def_efficiency) * 1.4, 0, 15);
+  }
 
-  if (absoluteEdge >= 18) confidenceLabel = "Strong edge";
-  else if (absoluteEdge >= 10) confidenceLabel = "Moderate edge";
-  else if (absoluteEdge >= 5) confidenceLabel = "Slight edge";
-  else confidenceLabel = "Near toss-up";
+  if (quad1Pct !== null) {
+    upsetBase += clamp((quad1Pct - 0.35) * 24, 0, 10);
+  }
 
-  let favorite: "a" | "b" | "tie" = "tie";
-  if (probabilityA > probabilityB) favorite = "a";
-  if (probabilityB > probabilityA) favorite = "b";
+  const upsetScore = Number(clamp(upsetBase).toFixed(1));
+
+  const archetypeTags: string[] = [];
+
+  if (team.off_efficiency !== null && team.off_efficiency >= 123) {
+    archetypeTags.push("Elite Offense");
+  }
+
+  if (team.def_efficiency !== null && team.def_efficiency <= 96) {
+    archetypeTags.push("Elite Defense");
+  }
+
+  if (
+    team.off_efficiency !== null &&
+    team.off_efficiency >= 118 &&
+    team.def_efficiency !== null &&
+    team.def_efficiency <= 99
+  ) {
+    archetypeTags.push("Balanced Contender");
+  }
+
+  if (team.adj_tempo !== null && team.adj_tempo >= 70) {
+    archetypeTags.push("Tempo Pressure");
+  }
+
+  if (valueScore !== null && valueScore >= 10) {
+    archetypeTags.push("Undervalued Seed");
+  }
+
+  if (riskScore >= 45) {
+    archetypeTags.push("Fragile Resume");
+  }
+
+  if (upsetScore >= 45 && team.seed >= 8) {
+    archetypeTags.push("Bracket Buster");
+  }
+
+  if (compositeRank !== null && compositeRank <= 20 && team.seed >= 5) {
+    archetypeTags.push("Analytics Darling");
+  }
 
   return {
-    favorite,
-    probabilityA,
-    probabilityB,
-    edgeScore,
-    confidenceLabel,
+    compositeRank: compositeRank === null ? null : Number(compositeRank.toFixed(2)),
+    valueScore,
+    riskScore,
+    contenderScore,
+    upsetScore,
+    archetypeTags,
   };
+}
+
+function getComparisonCellClass(
+  winner: "a" | "b" | "tie",
+  side: "a" | "b"
+) {
+  if (winner === "tie") return "text-slate-700";
+  if (winner === side) return "bg-emerald-50 text-emerald-700 font-semibold";
+  return "text-slate-500";
+}
+
+function compareMetricValues(
+  aValue: number | null,
+  bValue: number | null,
+  betterDirection: "higher" | "lower"
+): "a" | "b" | "tie" {
+  if (aValue === null && bValue === null) return "tie";
+  if (aValue !== null && bValue === null) return "a";
+  if (aValue === null && bValue !== null) return "b";
+  if (aValue === null || bValue === null) return "tie";
+
+  if (aValue === bValue) return "tie";
+
+  if (betterDirection === "higher") {
+    return aValue > bValue ? "a" : "b";
+  }
+
+  return aValue < bValue ? "a" : "b";
 }
 
 function SortButton({
@@ -267,8 +312,8 @@ function SortButton({
     align === "right"
       ? "justify-end text-right"
       : align === "center"
-        ? "justify-center text-center"
-        : "justify-start text-left";
+      ? "justify-center text-center"
+      : "justify-start text-left";
 
   return (
     <button
@@ -282,6 +327,34 @@ function SortButton({
   );
 }
 
+function CompareMetricRow({
+  label,
+  aValue,
+  bValue,
+  formatter,
+  betterDirection,
+}: {
+  label: string;
+  aValue: number | null;
+  bValue: number | null;
+  formatter: (value: number | null) => string;
+  betterDirection: "higher" | "lower";
+}) {
+  const winner = compareMetricValues(aValue, bValue, betterDirection);
+
+  return (
+    <tr className="border-t border-slate-200">
+      <td className={`px-4 py-3 ${getComparisonCellClass(winner, "a")}`}>
+        {formatter(aValue)}
+      </td>
+      <td className="px-4 py-3 text-center font-medium text-slate-900">{label}</td>
+      <td className={`px-4 py-3 ${getComparisonCellClass(winner, "b")} text-right`}>
+        {formatter(bValue)}
+      </td>
+    </tr>
+  );
+}
+
 export default function DataPage() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -289,8 +362,14 @@ export default function DataPage() {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("composite_rank");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const [compareTeamAId, setCompareTeamAId] = useState<string>(NONE_VALUE);
-  const [compareTeamBId, setCompareTeamBId] = useState<string>(NONE_VALUE);
+  const [compareTeamAId, setCompareTeamAId] = useState("none");
+  const [compareTeamBId, setCompareTeamBId] = useState("none");
+
+  const compareOptions = useMemo(() => {
+  return [...teams].sort((a, b) =>
+    a.school_name.localeCompare(b.school_name)
+  );
+}, [teams]);
 
   useEffect(() => {
     async function loadData() {
@@ -309,10 +388,6 @@ export default function DataPage() {
     loadData();
   }, [supabase]);
 
-  const sortedTeamsForDropdown = useMemo(() => {
-    return [...teams].sort((a, b) => a.school_name.localeCompare(b.school_name));
-  }, [teams]);
-
   function handleSort(nextKey: SortKey) {
     if (sortKey === nextKey) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
@@ -327,9 +402,9 @@ export default function DataPage() {
     const query = search.trim().toLowerCase();
 
     const filtered = teams.filter((team) => {
-      if (!query) return true;
+      const intelligence = getTeamIntelligence(team);
 
-      const compositeRank = getCompositeRank(team);
+      if (!query) return true;
 
       const searchable = [
         team.school_name,
@@ -341,7 +416,8 @@ export default function DataPage() {
         team.kenpom_rank ? `kenpom ${team.kenpom_rank}` : "",
         team.bpi_rank ? `bpi ${team.bpi_rank}` : "",
         team.net_rank ? `net ${team.net_rank}` : "",
-        compositeRank ? `composite ${compositeRank.toFixed(2)}` : "",
+        intelligence.compositeRank ? `composite ${intelligence.compositeRank.toFixed(2)}` : "",
+        ...intelligence.archetypeTags,
       ]
         .join(" ")
         .toLowerCase();
@@ -350,8 +426,8 @@ export default function DataPage() {
     });
 
     const sorted = [...filtered].sort((a, b) => {
-      const compositeA = getCompositeRank(a);
-      const compositeB = getCompositeRank(b);
+      const aIntel = getTeamIntelligence(a);
+      const bIntel = getTeamIntelligence(b);
 
       let comparison = 0;
 
@@ -376,7 +452,19 @@ export default function DataPage() {
           comparison = (a.net_rank ?? 9999) - (b.net_rank ?? 9999);
           break;
         case "composite_rank":
-          comparison = (compositeA ?? 9999) - (compositeB ?? 9999);
+          comparison = (aIntel.compositeRank ?? 9999) - (bIntel.compositeRank ?? 9999);
+          break;
+        case "value_score":
+          comparison = (aIntel.valueScore ?? -9999) - (bIntel.valueScore ?? -9999);
+          break;
+        case "risk_score":
+          comparison = (aIntel.riskScore ?? -9999) - (bIntel.riskScore ?? -9999);
+          break;
+        case "contender_score":
+          comparison = (aIntel.contenderScore ?? -9999) - (bIntel.contenderScore ?? -9999);
+          break;
+        case "upset_score":
+          comparison = (aIntel.upsetScore ?? -9999) - (bIntel.upsetScore ?? -9999);
           break;
         case "off_efficiency":
           comparison = (a.off_efficiency ?? -9999) - (b.off_efficiency ?? -9999);
@@ -424,151 +512,29 @@ export default function DataPage() {
     return sorted;
   }, [teams, search, sortKey, sortDirection]);
 
-  const compareTeamA = useMemo(
-    () =>
-      compareTeamAId === NONE_VALUE
-        ? null
-        : teams.find((team) => team.id === compareTeamAId) ?? null,
-    [teams, compareTeamAId]
-  );
+  const compareTeamA = useMemo(() => {
+    if (compareTeamAId === "none") return null;
+    return teams.find((team) => team.id === compareTeamAId) ?? null;
+  }, [teams, compareTeamAId]);
 
-  const compareTeamB = useMemo(
-    () =>
-      compareTeamBId === NONE_VALUE
-        ? null
-        : teams.find((team) => team.id === compareTeamBId) ?? null,
-    [teams, compareTeamBId]
-  );
+  const compareTeamB = useMemo(() => {
+    if (compareTeamBId === "none") return null;
+    return teams.find((team) => team.id === compareTeamBId) ?? null;
+  }, [teams, compareTeamBId]);
 
-  const shouldShowComparison =
-    compareTeamA !== null &&
-    compareTeamB !== null &&
-    compareTeamA.id !== compareTeamB.id;
-
-  const comparisonRows = useMemo<ComparisonRow[]>(() => {
-    if (!shouldShowComparison || !compareTeamA || !compareTeamB) return [];
-
-    const compositeA = getCompositeRank(compareTeamA);
-    const compositeB = getCompositeRank(compareTeamB);
-
-    return [
-      {
-        label: "Seed",
-        displayA: String(compareTeamA.seed),
-        displayB: String(compareTeamB.seed),
-        winner: getComparisonWinner(compareTeamA.seed, compareTeamB.seed, "lower"),
-      },
-      {
-        label: "Region",
-        displayA: compareTeamA.region,
-        displayB: compareTeamB.region,
-        winner: "tie",
-      },
-      {
-        label: "Overall Record",
-        displayA: compareTeamA.record ?? "—",
-        displayB: compareTeamB.record ?? "—",
-        winner: getComparisonWinner(compareTeamA.record, compareTeamB.record, "record"),
-      },
-      {
-        label: "KenPom Rank",
-        displayA: formatRank(compareTeamA.kenpom_rank),
-        displayB: formatRank(compareTeamB.kenpom_rank),
-        winner: getComparisonWinner(compareTeamA.kenpom_rank, compareTeamB.kenpom_rank, "lower"),
-      },
-      {
-        label: "BPI Rank",
-        displayA: formatRank(compareTeamA.bpi_rank),
-        displayB: formatRank(compareTeamB.bpi_rank),
-        winner: getComparisonWinner(compareTeamA.bpi_rank, compareTeamB.bpi_rank, "lower"),
-      },
-      {
-        label: "NET Rank",
-        displayA: formatRank(compareTeamA.net_rank),
-        displayB: formatRank(compareTeamB.net_rank),
-        winner: getComparisonWinner(compareTeamA.net_rank, compareTeamB.net_rank, "lower"),
-      },
-      {
-        label: "Composite Rank",
-        displayA: compositeA === null ? "—" : compositeA.toFixed(2),
-        displayB: compositeB === null ? "—" : compositeB.toFixed(2),
-        winner: getComparisonWinner(compositeA, compositeB, "lower"),
-      },
-      {
-        label: "KenPom Off Eff",
-        displayA: formatMetric(compareTeamA.off_efficiency),
-        displayB: formatMetric(compareTeamB.off_efficiency),
-        winner: getComparisonWinner(compareTeamA.off_efficiency, compareTeamB.off_efficiency, "higher"),
-      },
-      {
-        label: "KenPom Def Eff",
-        displayA: formatMetric(compareTeamA.def_efficiency),
-        displayB: formatMetric(compareTeamB.def_efficiency),
-        winner: getComparisonWinner(compareTeamA.def_efficiency, compareTeamB.def_efficiency, "lower"),
-      },
-      {
-        label: "Off eFG%",
-        displayA: formatMetric(compareTeamA.off_efg_pct),
-        displayB: formatMetric(compareTeamB.off_efg_pct),
-        winner: getComparisonWinner(compareTeamA.off_efg_pct, compareTeamB.off_efg_pct, "higher"),
-      },
-      {
-        label: "Def eFG%",
-        displayA: formatMetric(compareTeamA.def_efg_pct),
-        displayB: formatMetric(compareTeamB.def_efg_pct),
-        winner: getComparisonWinner(compareTeamA.def_efg_pct, compareTeamB.def_efg_pct, "lower"),
-      },
-      {
-        label: "Adj Tempo",
-        displayA: formatMetric(compareTeamA.adj_tempo),
-        displayB: formatMetric(compareTeamB.adj_tempo),
-        winner: getComparisonWinner(compareTeamA.adj_tempo, compareTeamB.adj_tempo, "higher"),
-      },
-      {
-        label: "SOS Net",
-        displayA:
-          compareTeamA.sos_net_rating === null || compareTeamA.sos_net_rating === undefined
-            ? "—"
-            : compareTeamA.sos_net_rating.toFixed(2),
-        displayB:
-          compareTeamB.sos_net_rating === null || compareTeamB.sos_net_rating === undefined
-            ? "—"
-            : compareTeamB.sos_net_rating.toFixed(2),
-        winner: getComparisonWinner(compareTeamA.sos_net_rating, compareTeamB.sos_net_rating, "higher"),
-      },
-      {
-        label: "Quad 1",
-        displayA: compareTeamA.quad1_record ?? "—",
-        displayB: compareTeamB.quad1_record ?? "—",
-        winner: getComparisonWinner(compareTeamA.quad1_record, compareTeamB.quad1_record, "record"),
-      },
-      {
-        label: "Quad 2",
-        displayA: compareTeamA.quad2_record ?? "—",
-        displayB: compareTeamB.quad2_record ?? "—",
-        winner: getComparisonWinner(compareTeamA.quad2_record, compareTeamB.quad2_record, "record"),
-      },
-    ];
-  }, [compareTeamA, compareTeamB, shouldShowComparison]);
-
-  const comparisonSummary = useMemo(() => {
-    if (!shouldShowComparison || !compareTeamA || !compareTeamB) return null;
-
-    const winsA = comparisonRows.filter((row) => row.winner === "a").length;
-    const winsB = comparisonRows.filter((row) => row.winner === "b").length;
-    const ties = comparisonRows.filter((row) => row.winner === "tie").length;
-    const projection = getProjectionSummary(compareTeamA, compareTeamB);
+  const comparisonState = useMemo(() => {
+    if (!compareTeamA || !compareTeamB) return null;
 
     return {
-      winsA,
-      winsB,
-      ties,
-      projection,
+      teamA: compareTeamA,
+      teamB: compareTeamB,
+      intelA: getTeamIntelligence(compareTeamA),
+      intelB: getTeamIntelligence(compareTeamB),
     };
-  }, [comparisonRows, compareTeamA, compareTeamB, shouldShowComparison]);
+  }, [compareTeamA, compareTeamB]);
 
   return (
-    <div className="mx-auto max-w-[1600px] p-4 sm:p-6">
+    <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
       <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:mb-8 sm:p-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -578,9 +544,9 @@ export default function DataPage() {
             <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
               2026 Field Data Board
             </h2>
-            <p className="mt-3 max-w-4xl text-sm text-slate-600 sm:text-base">
-              Tournament field reference board with ranking, efficiency, tempo,
-              résumé, and composite profile data across KenPom, BPI, and NET.
+            <p className="mt-3 max-w-5xl text-sm text-slate-600 sm:text-base">
+              Tournament field reference board with rankings, efficiency, résumé,
+              value, risk, contender profile, upset potential, and comparison tools.
             </p>
           </div>
 
@@ -606,12 +572,12 @@ export default function DataPage() {
               id="team-search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by team, region, seed, record, or ranking"
+              placeholder="Search by team, region, seed, record, ranking, or archetype"
               className="w-full rounded-xl border border-slate-300 px-3 py-2"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 lg:min-w-[260px]">
+          <div className="grid grid-cols-2 gap-3 lg:min-w-[300px]">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
               <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 Default Sort
@@ -633,196 +599,238 @@ export default function DataPage() {
         </div>
       </section>
 
-      <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:mb-8 sm:p-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:mb-8 sm:p-6">
+        <div className="flex flex-col gap-4">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 sm:text-sm">
-              Head-to-Head Comparison
-            </div>
-            <h3 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
-              Compare Two Teams
-            </h3>
-            <p className="mt-2 max-w-3xl text-sm text-slate-600">
-              Select any two field teams and compare them side by side. The projection
-              panel is a profile-based directional model built from ranking, efficiency,
-              résumé, and quadrant data, not a true game simulation.
+            <h3 className="text-xl font-bold text-slate-950">Team Comparison</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Choose any two tournament teams to compare their profile side by side.
             </p>
           </div>
-        </div>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Team A
-            </label>
-            <select
-              className="w-full rounded-xl border border-slate-300 px-3 py-2"
-              value={compareTeamAId}
-              onChange={(e) => setCompareTeamAId(e.target.value)}
-            >
-              <option value={NONE_VALUE}>None</option>
-              {sortedTeamsForDropdown.map((team) => (
-                <option
-                  key={team.id}
-                  value={team.id}
-                  disabled={compareTeamBId !== NONE_VALUE && compareTeamBId === team.id}
-                >
-                  {team.school_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Team B
-            </label>
-            <select
-              className="w-full rounded-xl border border-slate-300 px-3 py-2"
-              value={compareTeamBId}
-              onChange={(e) => setCompareTeamBId(e.target.value)}
-            >
-              <option value={NONE_VALUE}>None</option>
-              {sortedTeamsForDropdown.map((team) => (
-                <option
-                  key={team.id}
-                  value={team.id}
-                  disabled={compareTeamAId !== NONE_VALUE && compareTeamAId === team.id}
-                >
-                  {team.school_name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {shouldShowComparison && compareTeamA && compareTeamB && comparisonSummary ? (
-          <>
-            <div className="mt-6 grid gap-4 xl:grid-cols-4">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Category Leads
-                </div>
-                <div className="mt-2 text-sm text-slate-700">
-                  <span className="font-semibold text-slate-900">{compareTeamA.school_name}</span>{" "}
-                  leads {comparisonSummary.winsA}
-                </div>
-                <div className="mt-1 text-sm text-slate-700">
-                  <span className="font-semibold text-slate-900">{compareTeamB.school_name}</span>{" "}
-                  leads {comparisonSummary.winsB}
-                </div>
-                <div className="mt-1 text-sm text-slate-500">
-                  Ties: {comparisonSummary.ties}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Projected Favorite
-                </div>
-                <div className="mt-2 text-lg font-bold text-slate-900">
-                  {comparisonSummary.projection.favorite === "a"
-                    ? compareTeamA.school_name
-                    : comparisonSummary.projection.favorite === "b"
-                      ? compareTeamB.school_name
-                      : "Toss-Up"}
-                </div>
-                <div className="mt-1 text-sm text-slate-600">
-                  {comparisonSummary.projection.confidenceLabel}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Estimated Edge
-                </div>
-                <div className="mt-2 text-lg font-bold text-slate-900">
-                  {comparisonSummary.projection.probabilityA}% /{" "}
-                  {comparisonSummary.projection.probabilityB}%
-                </div>
-                <div className="mt-1 text-sm text-slate-600">
-                  {compareTeamA.school_name} vs. {compareTeamB.school_name}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Model Score
-                </div>
-                <div className="mt-2 text-lg font-bold text-slate-900">
-                  {comparisonSummary.projection.edgeScore > 0 ? "+" : ""}
-                  {comparisonSummary.projection.edgeScore.toFixed(1)}
-                </div>
-                <div className="mt-1 text-sm text-slate-600">
-                  Positive favors Team A, negative favors Team B
-                </div>
-              </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Team A
+              </label>
+              <select
+                value={compareTeamAId}
+                onChange={(e) => setCompareTeamAId(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2"
+              >
+                <option value="none">None</option>
+                {compareOptions.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.school_name}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-950 text-white">
-                    <tr>
-                      <th className="px-4 py-4 text-left">
-                        <div className="flex items-center gap-3">
-                          <TeamLogo teamName={compareTeamA.school_name} size={30} />
-                          <div>
-                            <div className="font-semibold">{compareTeamA.school_name}</div>
-                            <div className="text-xs text-slate-300">
-                              {compareTeamA.seed} Seed • {compareTeamA.region}
-                            </div>
-                          </div>
-                        </div>
-                      </th>
-                      <th className="px-4 py-4 text-center font-semibold">Metric</th>
-                      <th className="px-4 py-4 text-right">
-                        <div className="flex items-center justify-end gap-3">
-                          <div className="text-right">
-                            <div className="font-semibold">{compareTeamB.school_name}</div>
-                            <div className="text-xs text-slate-300">
-                              {compareTeamB.seed} Seed • {compareTeamB.region}
-                            </div>
-                          </div>
-                          <TeamLogo teamName={compareTeamB.school_name} size={30} />
-                        </div>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {comparisonRows.map((row) => (
-                      <tr key={row.label} className="border-t border-slate-200">
-                        <td className={`px-4 py-3 ${getComparisonCellClass(row.winner, "a")}`}>
-                          {row.displayA}
-                        </td>
-                        <td className="px-4 py-3 text-center font-medium text-slate-900">
-                          {row.label}
-                        </td>
-                        <td
-                          className={`px-4 py-3 text-right ${getComparisonCellClass(
-                            row.winner,
-                            "b"
-                          )}`}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Team B
+              </label>
+              <select
+                value={compareTeamBId}
+                onChange={(e) => setCompareTeamBId(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2"
+              >
+                <option value="none">None</option>
+                {compareOptions.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.school_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {!comparisonState ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+              Select two teams to activate the comparison view.
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <TeamLogo teamName={comparisonState.teamA.school_name} size={36} />
+                    <div>
+                      <div className="text-lg font-semibold text-slate-950">
+                        {comparisonState.teamA.school_name}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        {comparisonState.teamA.seed} Seed • {comparisonState.teamA.region} • {comparisonState.teamA.record ?? "—"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {comparisonState.intelA.archetypeTags.length > 0 ? (
+                      comparisonState.intelA.archetypeTags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
                         >
-                          {row.displayB}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          {tag}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-slate-500">No archetype tags</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <TeamLogo teamName={comparisonState.teamB.school_name} size={36} />
+                    <div>
+                      <div className="text-lg font-semibold text-slate-950">
+                        {comparisonState.teamB.school_name}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        {comparisonState.teamB.seed} Seed • {comparisonState.teamB.region} • {comparisonState.teamB.record ?? "—"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {comparisonState.intelB.archetypeTags.length > 0 ? (
+                      comparisonState.intelB.archetypeTags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
+                        >
+                          {tag}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-slate-500">No archetype tags</span>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </>
-        ) : (
-          <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-            Select two different teams to activate the comparison board.
-          </div>
-        )}
+
+              <div className="overflow-hidden rounded-2xl border border-slate-200">
+                <div className="overflow-x-auto">
+                  <table className="min-w-[900px] w-full text-sm">
+                    <thead className="bg-slate-950 text-white">
+                      <tr>
+                        <th className="px-4 py-3 text-left">{comparisonState.teamA.school_name}</th>
+                        <th className="px-4 py-3 text-center">Metric</th>
+                        <th className="px-4 py-3 text-right">{comparisonState.teamB.school_name}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white">
+                      <CompareMetricRow
+                        label="Composite Rank"
+                        aValue={comparisonState.intelA.compositeRank}
+                        bValue={comparisonState.intelB.compositeRank}
+                        formatter={(value) => (value === null ? "—" : value.toFixed(2))}
+                        betterDirection="lower"
+                      />
+                      <CompareMetricRow
+                        label="Value Score"
+                        aValue={comparisonState.intelA.valueScore}
+                        bValue={comparisonState.intelB.valueScore}
+                        formatter={(value) => (value === null ? "—" : value.toFixed(1))}
+                        betterDirection="higher"
+                      />
+                      <CompareMetricRow
+                        label="Risk Score"
+                        aValue={comparisonState.intelA.riskScore}
+                        bValue={comparisonState.intelB.riskScore}
+                        formatter={(value) => (value === null ? "—" : value.toFixed(1))}
+                        betterDirection="lower"
+                      />
+                      <CompareMetricRow
+                        label="Contender Score"
+                        aValue={comparisonState.intelA.contenderScore}
+                        bValue={comparisonState.intelB.contenderScore}
+                        formatter={(value) => (value === null ? "—" : value.toFixed(1))}
+                        betterDirection="higher"
+                      />
+                      <CompareMetricRow
+                        label="Upset Score"
+                        aValue={comparisonState.intelA.upsetScore}
+                        bValue={comparisonState.intelB.upsetScore}
+                        formatter={(value) => (value === null ? "—" : value.toFixed(1))}
+                        betterDirection="higher"
+                      />
+                      <CompareMetricRow
+                        label="KenPom Rank"
+                        aValue={comparisonState.teamA.kenpom_rank ?? null}
+                        bValue={comparisonState.teamB.kenpom_rank ?? null}
+                        formatter={(value) => (value === null ? "—" : String(value))}
+                        betterDirection="lower"
+                      />
+                      <CompareMetricRow
+                        label="BPI Rank"
+                        aValue={comparisonState.teamA.bpi_rank ?? null}
+                        bValue={comparisonState.teamB.bpi_rank ?? null}
+                        formatter={(value) => (value === null ? "—" : String(value))}
+                        betterDirection="lower"
+                      />
+                      <CompareMetricRow
+                        label="NET Rank"
+                        aValue={comparisonState.teamA.net_rank ?? null}
+                        bValue={comparisonState.teamB.net_rank ?? null}
+                        formatter={(value) => (value === null ? "—" : String(value))}
+                        betterDirection="lower"
+                      />
+                      <CompareMetricRow
+                        label="Off Efficiency"
+                        aValue={comparisonState.teamA.off_efficiency ?? null}
+                        bValue={comparisonState.teamB.off_efficiency ?? null}
+                        formatter={(value) => (value === null ? "—" : value.toFixed(1))}
+                        betterDirection="higher"
+                      />
+                      <CompareMetricRow
+                        label="Def Efficiency"
+                        aValue={comparisonState.teamA.def_efficiency ?? null}
+                        bValue={comparisonState.teamB.def_efficiency ?? null}
+                        formatter={(value) => (value === null ? "—" : value.toFixed(1))}
+                        betterDirection="lower"
+                      />
+                      <CompareMetricRow
+                        label="Off eFG%"
+                        aValue={comparisonState.teamA.off_efg_pct ?? null}
+                        bValue={comparisonState.teamB.off_efg_pct ?? null}
+                        formatter={(value) => (value === null ? "—" : value.toFixed(1))}
+                        betterDirection="higher"
+                      />
+                      <CompareMetricRow
+                        label="Def eFG%"
+                        aValue={comparisonState.teamA.def_efg_pct ?? null}
+                        bValue={comparisonState.teamB.def_efg_pct ?? null}
+                        formatter={(value) => (value === null ? "—" : value.toFixed(1))}
+                        betterDirection="lower"
+                      />
+                      <CompareMetricRow
+                        label="Adj Tempo"
+                        aValue={comparisonState.teamA.adj_tempo ?? null}
+                        bValue={comparisonState.teamB.adj_tempo ?? null}
+                        formatter={(value) => (value === null ? "—" : value.toFixed(1))}
+                        betterDirection="higher"
+                      />
+                      <CompareMetricRow
+                        label="SOS Net Rating"
+                        aValue={comparisonState.teamA.sos_net_rating ?? null}
+                        bValue={comparisonState.teamB.sos_net_rating ?? null}
+                        formatter={(value) => (value === null ? "—" : value.toFixed(2))}
+                        betterDirection="higher"
+                      />
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-[1500px] w-full text-sm">
+          <table className="min-w-[2100px] w-full text-sm">
             <thead className="bg-slate-950 text-white">
               <tr>
                 <th className="px-4 py-3 text-left">
@@ -877,6 +885,46 @@ export default function DataPage() {
                   <SortButton
                     label="Composite"
                     sortKey="composite_rank"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Value"
+                    sortKey="value_score"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Risk"
+                    sortKey="risk_score"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Contender"
+                    sortKey="contender_score"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Upset"
+                    sortKey="upset_score"
                     activeSortKey={sortKey}
                     direction={sortDirection}
                     onClick={handleSort}
@@ -961,19 +1009,20 @@ export default function DataPage() {
                     onClick={handleSort}
                   />
                 </th>
+                <th className="px-4 py-3 text-left">Archetypes</th>
               </tr>
             </thead>
 
             <tbody>
               {filteredAndSortedTeams.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={19} className="px-4 py-8 text-center text-slate-500">
                     No teams matched your search.
                   </td>
                 </tr>
               ) : (
                 filteredAndSortedTeams.map((team) => {
-                  const compositeRank = getCompositeRank(team);
+                  const intel = getTeamIntelligence(team);
 
                   return (
                     <tr
@@ -994,7 +1043,9 @@ export default function DataPage() {
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 text-slate-700">{team.record ?? "—"}</td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {team.record ?? "—"}
+                      </td>
 
                       <td className="px-4 py-3 text-right text-slate-700">
                         {formatRank(team.kenpom_rank)}
@@ -1009,7 +1060,23 @@ export default function DataPage() {
                       </td>
 
                       <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                        {compositeRank === null ? "—" : compositeRank.toFixed(2)}
+                        {intel.compositeRank === null ? "—" : intel.compositeRank.toFixed(2)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {intel.valueScore === null ? "—" : intel.valueScore.toFixed(1)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {intel.riskScore === null ? "—" : intel.riskScore.toFixed(1)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {intel.contenderScore === null ? "—" : intel.contenderScore.toFixed(1)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {intel.upsetScore === null ? "—" : intel.upsetScore.toFixed(1)}
                       </td>
 
                       <td className="px-4 py-3 text-right text-slate-700">
@@ -1033,9 +1100,7 @@ export default function DataPage() {
                       </td>
 
                       <td className="px-4 py-3 text-right text-slate-700">
-                        {team.sos_net_rating === null || team.sos_net_rating === undefined
-                          ? "—"
-                          : team.sos_net_rating.toFixed(2)}
+                        {team.sos_net_rating == null ? "—" : team.sos_net_rating.toFixed(2)}
                       </td>
 
                       <td className="px-4 py-3 text-slate-700">
@@ -1044,6 +1109,23 @@ export default function DataPage() {
 
                       <td className="px-4 py-3 text-slate-700">
                         {team.quad2_record ?? "—"}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          {intel.archetypeTags.length > 0 ? (
+                            intel.archetypeTags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700"
+                              >
+                                {tag}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
