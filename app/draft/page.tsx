@@ -53,6 +53,17 @@ type DraftBoardPick = {
 
 type LotteryRevealSlot = 1 | 2 | 3 | 4;
 
+type PickWithMetrics = Pick & {
+  owner: string;
+  teamName: string;
+  seed: number | null;
+  region: string;
+  compositeRank: number | null;
+  valueScore: number | null;
+  offEfficiency: number | null;
+  defEfficiency: number | null;
+};
+
 const MANAGER_BANNER_COLOR_MAP: Record<string, string> = {
   Andrew: "bg-blue-600 text-white",
   Wesley: "bg-green-600 text-white",
@@ -65,8 +76,96 @@ function formatMetric(value: number | null) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
+function formatComposite(value: number | null) {
+  if (value === null || value === undefined) return "—";
+  return value.toFixed(2);
+}
+
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getCompositeRank(team: Team) {
+  const ranks = [team.kenpom_rank, team.bpi_rank, team.net_rank].filter(
+    (value): value is number => value !== null && value !== undefined
+  );
+
+  if (ranks.length === 0) return null;
+
+  return ranks.reduce((sum, value) => sum + value, 0) / ranks.length;
+}
+
+function getExpectedRankFromSeed(seed: number | null) {
+  if (seed === null || seed === undefined) return null;
+  return (seed - 1) * 4 + 2.5;
+}
+
+function getValueScore(team: Team) {
+  const composite = getCompositeRank(team);
+  const expected = getExpectedRankFromSeed(team.seed);
+
+  if (composite === null || expected === null) return null;
+
+  return expected - composite;
+}
+
+function average(values: number[]) {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function BestAvailableList({
+  title,
+  subtitle,
+  teams,
+  valueFormatter,
+}: {
+  title: string;
+  subtitle: string;
+  teams: Team[];
+  valueFormatter: (team: Team) => string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <h3 className="text-xl font-semibold">{title}</h3>
+      <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+
+      <div className="mt-4 space-y-3">
+        {teams.length === 0 ? (
+          <div className="rounded-xl border p-4 text-sm text-slate-600">
+            No teams available.
+          </div>
+        ) : (
+          teams.map((team, index) => (
+            <div key={team.id} className="rounded-xl border p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <TeamLogo teamName={team.school_name} size={28} />
+                  <div>
+                    <div className="font-semibold">
+                      #{index + 1} {team.school_name}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {team.seed} Seed • {team.region} • Record {team.record ?? "—"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                    Metric
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900">
+                    {valueFormatter(team)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function DraftPage() {
@@ -179,16 +278,23 @@ export default function DraftPage() {
   const memberMap = new Map(members.map((m) => [m.id, m.display_name]));
   const teamMap = new Map(normalizedTeams.map((t) => [t.id, t]));
 
-  const completedPicks = picks.map((pick) => {
-    const team = teamMap.get(pick.team_id);
-    return {
-      ...pick,
-      owner: memberMap.get(pick.member_id) ?? "Unknown",
-      teamName: team?.school_name ?? "Unknown Team",
-      seed: team?.seed ?? null,
-      region: team?.region ?? "",
-    };
-  });
+  const completedPicks = useMemo<PickWithMetrics[]>(() => {
+    return picks.map((pick) => {
+      const team = teamMap.get(pick.team_id);
+
+      return {
+        ...pick,
+        owner: memberMap.get(pick.member_id) ?? "Unknown",
+        teamName: team?.school_name ?? "Unknown Team",
+        seed: team?.seed ?? null,
+        region: team?.region ?? "",
+        compositeRank: team ? getCompositeRank(team) : null,
+        valueScore: team ? getValueScore(team) : null,
+        offEfficiency: team?.off_efficiency ?? null,
+        defEfficiency: team?.def_efficiency ?? null,
+      };
+    });
+  }, [picks, teamMap, memberMap]);
 
   const currentManagerName = currentMember?.display_name ?? "Current Manager";
   const totalPicks = snake.length || normalizedTeams.length || 64;
@@ -210,6 +316,83 @@ export default function DraftPage() {
 
   const lotteryDisplayOrder: LotteryRevealSlot[] = [4, 3, 2, 1];
   const lotteryLocked = picks.length > 0;
+
+  const bestAvailableOverall = useMemo(() => {
+    return [...availableTeams]
+      .filter((team) => getCompositeRank(team) !== null)
+      .sort((a, b) => (getCompositeRank(a) ?? 9999) - (getCompositeRank(b) ?? 9999))
+      .slice(0, 5);
+  }, [availableTeams]);
+
+  const bestValueRemaining = useMemo(() => {
+    return [...availableTeams]
+      .filter((team) => getValueScore(team) !== null)
+      .sort((a, b) => (getValueScore(b) ?? -9999) - (getValueScore(a) ?? -9999))
+      .slice(0, 5);
+  }, [availableTeams]);
+
+  const bestOffenseRemaining = useMemo(() => {
+    return [...availableTeams]
+      .filter((team) => team.off_efficiency !== null)
+      .sort((a, b) => (b.off_efficiency ?? -9999) - (a.off_efficiency ?? -9999))
+      .slice(0, 5);
+  }, [availableTeams]);
+
+  const bestDefenseRemaining = useMemo(() => {
+    return [...availableTeams]
+      .filter((team) => team.def_efficiency !== null)
+      .sort((a, b) => (a.def_efficiency ?? 9999) - (b.def_efficiency ?? 9999))
+      .slice(0, 5);
+  }, [availableTeams]);
+
+  const bestDraftedPick = useMemo(() => {
+    return [...completedPicks]
+      .filter((pick) => pick.compositeRank !== null)
+      .sort((a, b) => (a.compositeRank ?? 9999) - (b.compositeRank ?? 9999))[0] ?? null;
+  }, [completedPicks]);
+
+  const bestValueDraftedPick = useMemo(() => {
+    return [...completedPicks]
+      .filter((pick) => pick.valueScore !== null)
+      .sort((a, b) => (b.valueScore ?? -9999) - (a.valueScore ?? -9999))[0] ?? null;
+  }, [completedPicks]);
+
+  const biggestReachPick = useMemo(() => {
+    return [...completedPicks]
+      .filter((pick) => pick.valueScore !== null)
+      .sort((a, b) => (a.valueScore ?? 9999) - (b.valueScore ?? 9999))[0] ?? null;
+  }, [completedPicks]);
+
+  const bestRemainingTeam = bestAvailableOverall[0] ?? null;
+
+  const managerRecap = useMemo(() => {
+    return orderedMembers.map((member) => {
+      const memberPicks = completedPicks.filter((pick) => pick.member_id === member.id);
+
+      const compositeValues = memberPicks
+        .map((pick) => pick.compositeRank)
+        .filter((value): value is number => value !== null && value !== undefined);
+
+      const seedValues = memberPicks
+        .map((pick) => pick.seed)
+        .filter((value): value is number => value !== null && value !== undefined);
+
+      const avgComposite = average(compositeValues);
+      const avgSeed = average(seedValues);
+
+      return {
+        id: member.id,
+        name: member.display_name,
+        totalPicks: memberPicks.length,
+        avgComposite,
+        avgSeed,
+        bestPick:
+          [...memberPicks]
+            .filter((pick) => pick.compositeRank !== null)
+            .sort((a, b) => (a.compositeRank ?? 9999) - (b.compositeRank ?? 9999))[0] ?? null,
+      };
+    });
+  }, [orderedMembers, completedPicks]);
 
   async function refreshPicks() {
     const { data: pickData } = await supabase
@@ -589,7 +772,7 @@ export default function DraftPage() {
                         </div>
                       </div>
 
-                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <div className="mt-4 grid gap-3 sm:grid-cols-4">
                         <div className="rounded-xl border bg-white p-3">
                           <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
                             Rankings
@@ -626,6 +809,18 @@ export default function DraftPage() {
                           </div>
                           <div className="mt-1 text-sm text-slate-700">
                             Def: <span className="font-semibold">{formatMetric(selectedTeam.def_efficiency)}</span>
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border bg-white p-3">
+                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Draft Signal
+                          </div>
+                          <div className="mt-2 text-sm text-slate-700">
+                            Composite: <span className="font-semibold">{formatComposite(getCompositeRank(selectedTeam))}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-slate-700">
+                            Value Score: <span className="font-semibold">{formatComposite(getValueScore(selectedTeam))}</span>
                           </div>
                         </div>
                       </div>
@@ -665,6 +860,36 @@ export default function DraftPage() {
             )}
           </div>
 
+          <div className="grid gap-6 2xl:grid-cols-2">
+            <BestAvailableList
+              title="Best Available Overall"
+              subtitle="Top remaining teams by composite rank"
+              teams={bestAvailableOverall}
+              valueFormatter={(team) => `Composite ${formatComposite(getCompositeRank(team))}`}
+            />
+
+            <BestAvailableList
+              title="Best Value Remaining"
+              subtitle="Biggest positive gap between seed expectation and composite rank"
+              teams={bestValueRemaining}
+              valueFormatter={(team) => `Value ${formatComposite(getValueScore(team))}`}
+            />
+
+            <BestAvailableList
+              title="Best Offense Remaining"
+              subtitle="Top remaining teams by offensive efficiency"
+              teams={bestOffenseRemaining}
+              valueFormatter={(team) => `Off Eff ${formatMetric(team.off_efficiency)}`}
+            />
+
+            <BestAvailableList
+              title="Best Defense Remaining"
+              subtitle="Top remaining teams by defensive efficiency"
+              teams={bestDefenseRemaining}
+              valueFormatter={(team) => `Def Eff ${formatMetric(team.def_efficiency)}`}
+            />
+          </div>
+
           <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
             <h3 className="text-xl font-semibold">Upcoming Picks</h3>
 
@@ -699,39 +924,194 @@ export default function DraftPage() {
           </div>
 
           <DraftBoardGrid picks={draftBoardPicks} />
-        </div>
 
-        <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-          <h3 className="text-xl font-semibold">Recently Completed Picks</h3>
+          <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
+            <h3 className="text-xl font-semibold">Draft Recap</h3>
 
-          <div className="mt-4 space-y-3">
-            {recentlyCompleted.length === 0 ? (
-              <div className="rounded-xl border p-4 text-sm text-gray-600">
-                No picks made yet.
+            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border bg-slate-50 p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Picks Made
+                </div>
+                <div className="mt-2 text-2xl font-bold">{picks.length}</div>
               </div>
-            ) : (
-              recentlyCompleted.map((pick) => (
-                <div key={pick.id} className="rounded-xl border p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="flex items-start gap-3">
-                      <TeamLogo teamName={pick.teamName} size={30} />
+
+              <div className="rounded-xl border bg-slate-50 p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Best Pick Drafted
+                </div>
+                <div className="mt-2 text-sm font-semibold text-slate-900">
+                  {bestDraftedPick ? bestDraftedPick.teamName : "—"}
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {bestDraftedPick
+                    ? `Composite ${formatComposite(bestDraftedPick.compositeRank)}`
+                    : "No picks yet"}
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-slate-50 p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Best Value Drafted
+                </div>
+                <div className="mt-2 text-sm font-semibold text-slate-900">
+                  {bestValueDraftedPick ? bestValueDraftedPick.teamName : "—"}
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {bestValueDraftedPick
+                    ? `Value ${formatComposite(bestValueDraftedPick.valueScore)}`
+                    : "No picks yet"}
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-slate-50 p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Best Remaining Team
+                </div>
+                <div className="mt-2 text-sm font-semibold text-slate-900">
+                  {bestRemainingTeam ? bestRemainingTeam.school_name : "—"}
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {bestRemainingTeam
+                    ? `Composite ${formatComposite(getCompositeRank(bestRemainingTeam))}`
+                    : "Draft complete"}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 xl:grid-cols-2">
+              <div className="rounded-xl border p-4">
+                <div className="text-sm font-semibold text-slate-900">
+                  Biggest Reach So Far
+                </div>
+                {biggestReachPick ? (
+                  <div className="mt-3">
+                    <div className="flex items-center gap-3">
+                      <TeamLogo teamName={biggestReachPick.teamName} size={30} />
                       <div>
                         <div className="font-semibold">
-                          Pick #{pick.overall_pick} • {pick.teamName}
+                          Pick #{biggestReachPick.overall_pick} • {biggestReachPick.teamName}
                         </div>
-                        <div className="mt-1 text-sm text-gray-600">
-                          {pick.seed ? `${pick.seed} Seed • ` : ""}
-                          {pick.region}
+                        <div className="text-sm text-slate-600">
+                          {biggestReachPick.owner} • Value {formatComposite(biggestReachPick.valueScore)}
                         </div>
                       </div>
                     </div>
-                    <div className="self-start sm:self-auto">
-                      <ManagerBadge name={pick.owner} />
+                  </div>
+                ) : (
+                  <div className="mt-3 text-sm text-slate-600">No picks yet.</div>
+                )}
+              </div>
+
+              <div className="rounded-xl border p-4">
+                <div className="text-sm font-semibold text-slate-900">
+                  Strongest Analytic Pick So Far
+                </div>
+                {bestDraftedPick ? (
+                  <div className="mt-3">
+                    <div className="flex items-center gap-3">
+                      <TeamLogo teamName={bestDraftedPick.teamName} size={30} />
+                      <div>
+                        <div className="font-semibold">
+                          Pick #{bestDraftedPick.overall_pick} • {bestDraftedPick.teamName}
+                        </div>
+                        <div className="text-sm text-slate-600">
+                          {bestDraftedPick.owner} • Composite {formatComposite(bestDraftedPick.compositeRank)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 text-sm text-slate-600">No picks yet.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              {managerRecap.map((manager) => (
+                <div key={manager.id} className="rounded-xl border p-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex items-center gap-3">
+                      <ManagerBadge name={manager.name} />
+                      <div>
+                        <div className="font-semibold text-slate-900">{manager.name}</div>
+                        <div className="text-sm text-slate-600">
+                          {manager.totalPicks} picks made
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[520px]">
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <div className="text-xs uppercase tracking-wide text-slate-500">
+                          Avg Composite
+                        </div>
+                        <div className="mt-1 font-semibold text-slate-900">
+                          {formatComposite(manager.avgComposite)}
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <div className="text-xs uppercase tracking-wide text-slate-500">
+                          Avg Seed
+                        </div>
+                        <div className="mt-1 font-semibold text-slate-900">
+                          {manager.avgSeed === null ? "—" : manager.avgSeed.toFixed(2)}
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <div className="text-xs uppercase tracking-wide text-slate-500">
+                          Best Team Drafted
+                        </div>
+                        <div className="mt-1 font-semibold text-slate-900">
+                          {manager.bestPick ? manager.bestPick.teamName : "—"}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              ))
-            )}
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
+            <h3 className="text-xl font-semibold">Recently Completed Picks</h3>
+
+            <div className="mt-4 space-y-3">
+              {recentlyCompleted.length === 0 ? (
+                <div className="rounded-xl border p-4 text-sm text-gray-600">
+                  No picks made yet.
+                </div>
+              ) : (
+                recentlyCompleted.map((pick) => (
+                  <div key={pick.id} className="rounded-xl border p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex items-start gap-3">
+                        <TeamLogo teamName={pick.teamName} size={30} />
+                        <div>
+                          <div className="font-semibold">
+                            Pick #{pick.overall_pick} • {pick.teamName}
+                          </div>
+                          <div className="mt-1 text-sm text-gray-600">
+                            {pick.seed ? `${pick.seed} Seed • ` : ""}
+                            {pick.region}
+                          </div>
+                          <div className="mt-1 text-sm text-slate-500">
+                            Composite {formatComposite(pick.compositeRank)} • Value {formatComposite(pick.valueScore)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="self-start sm:self-auto">
+                        <ManagerBadge name={pick.owner} />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </section>
