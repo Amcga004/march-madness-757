@@ -4,39 +4,19 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
+  const next = requestUrl.searchParams.get("next") ?? "/draft";
   const origin = requestUrl.origin;
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/draft`);
+    return NextResponse.redirect(`${origin}${next}`);
   }
 
   const supabase = await createClient();
+  const { error } = await supabase.auth.exchangeCodeForSession(code);
 
-  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-
-  if (exchangeError) {
-    return NextResponse.redirect(`${origin}/draft?auth=error`);
+  if (error) {
+    return NextResponse.redirect(`${origin}/draft?authError=callback`);
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.redirect(`${origin}/draft?auth=missing-user`);
-  }
-
-  const { data: member } = await supabase
-    .from("league_members")
-    .select("role")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  const role = member?.role?.toLowerCase();
-
-  if (role === "admin" || role === "commissioner") {
-    return NextResponse.redirect(`${origin}/admin`);
-  }
-
-  return NextResponse.redirect(`${origin}/draft`);
+  return NextResponse.redirect(`${origin}${next}`);
 }
