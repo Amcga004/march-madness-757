@@ -67,42 +67,32 @@ export default async function LeaderboardBar() {
 
   return (
     <div className="border-b border-slate-800 bg-slate-950 text-white">
-      <div className="mx-auto max-w-7xl px-4 py-2 sm:px-6 sm:py-3">
+      <div className="mx-auto max-w-7xl px-4 py-2 sm:px-6">
         <div className="flex items-center gap-3">
-          <span className="hidden shrink-0 text-sm font-semibold text-slate-300 sm:inline">
-            Live Leaderboard:
-          </span>
-
-          <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 sm:hidden">
-            Leaderboard
+          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Live Leaderboard
           </span>
 
           <div className="-mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1 pb-1">
             {leaderboard.map((entry, index) => (
               <div
                 key={entry.name}
-                className="shrink-0 rounded-full border border-slate-800 bg-slate-900 px-3 py-2 text-xs sm:text-sm"
+                className="shrink-0 rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs sm:text-sm"
               >
                 <div className="flex items-center gap-2 whitespace-nowrap">
                   <span className="font-semibold text-white">
                     #{index + 1} {entry.name}
                   </span>
 
-                  <span className="text-slate-400">
-                    {entry.points} pts
-                  </span>
+                  <span className="text-slate-400">{entry.points} pts</span>
 
-                  <span className="hidden text-slate-500 sm:inline">
-                    •
-                  </span>
+                  <span className="hidden text-slate-500 sm:inline">•</span>
 
                   <span className="hidden text-slate-400 sm:inline">
                     {entry.liveTeams} alive
                   </span>
 
-                  <span className="hidden text-slate-500 sm:inline">
-                    •
-                  </span>
+                  <span className="hidden text-slate-500 sm:inline">•</span>
 
                   <span className="hidden text-slate-400 sm:inline">
                     {entry.draftedTeams} drafted
