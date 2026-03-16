@@ -16,12 +16,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="text-slate-900">
-
         <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/95 text-white shadow-lg backdrop-blur">
           <div className="mx-auto max-w-7xl px-6 py-4">
-
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-
               <div>
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">🏀</span>
@@ -31,12 +28,11 @@ export default function RootLayout({
                 </div>
 
                 <p className="mt-1 text-sm text-slate-300">
-                  Live standings, draft board, rosters, results, and bracket
+                  Live standings, draft board, rosters, results, bracket, and analytics
                 </p>
               </div>
 
               <nav className="flex flex-wrap gap-2 text-sm">
-
                 <Link
                   href="/"
                   className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 transition hover:border-slate-500 hover:bg-slate-800"
@@ -59,6 +55,13 @@ export default function RootLayout({
                 </Link>
 
                 <Link
+                  href="/data"
+                  className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 transition hover:border-slate-500 hover:bg-slate-800"
+                >
+                  Data
+                </Link>
+
+                <Link
                   href="/history"
                   className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 transition hover:border-slate-500 hover:bg-slate-800"
                 >
@@ -78,7 +81,6 @@ export default function RootLayout({
                 >
                   Admin
                 </Link>
-
               </nav>
             </div>
           </div>
@@ -95,7 +97,6 @@ export default function RootLayout({
             757 MM Draft • Built for annual March Madness competition
           </div>
         </footer>
-
       </body>
     </html>
   );
