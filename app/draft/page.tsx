@@ -51,6 +51,8 @@ type DraftBoardPick = {
   team_name: string;
 };
 
+type LotteryRevealSlot = 1 | 2 | 3 | 4;
+
 const MANAGER_BANNER_COLOR_MAP: Record<string, string> = {
   Andrew: "bg-blue-600 text-white",
   Wesley: "bg-green-600 text-white",
@@ -61,6 +63,10 @@ const MANAGER_BANNER_COLOR_MAP: Record<string, string> = {
 function formatMetric(value: number | null) {
   if (value === null || value === undefined) return "—";
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export default function DraftPage() {
@@ -78,43 +84,49 @@ export default function DraftPage() {
   const [pendingPickTeamName, setPendingPickTeamName] = useState("");
   const [isSubmittingPick, setIsSubmittingPick] = useState(false);
 
+  const [isRunningLottery, setIsRunningLottery] = useState(false);
+  const [lotteryResults, setLotteryResults] = useState<Partial<Record<LotteryRevealSlot, Member>>>(
+    {}
+  );
+  const [lotteryStatus, setLotteryStatus] = useState("");
+
+  async function loadData() {
+    const [
+      { data: leagueData },
+      { data: memberData },
+      { data: teamData },
+      { data: pickData },
+    ] = await Promise.all([
+      supabase
+        .from("leagues")
+        .select("id,name")
+        .eq("public_slug", "2026-757-march-madness-draft")
+        .single(),
+      supabase
+        .from("league_members")
+        .select("id,display_name,draft_slot")
+        .order("draft_slot", { ascending: true }),
+      supabase
+        .from("teams")
+        .select(
+          "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency"
+        )
+        .order("region", { ascending: true })
+        .order("seed", { ascending: true })
+        .order("school_name", { ascending: true }),
+      supabase
+        .from("picks")
+        .select("id,overall_pick,snake_round,member_id,team_id")
+        .order("overall_pick", { ascending: true }),
+    ]);
+
+    if (leagueData) setLeague(leagueData);
+    if (memberData) setMembers(memberData);
+    if (teamData) setTeams(teamData);
+    if (pickData) setPicks(pickData);
+  }
+
   useEffect(() => {
-    async function loadData() {
-      const [
-        { data: leagueData },
-        { data: memberData },
-        { data: teamData },
-        { data: pickData },
-      ] = await Promise.all([
-        supabase
-          .from("leagues")
-          .select("id,name")
-          .eq("public_slug", "2026-757-march-madness-draft")
-          .single(),
-        supabase
-          .from("league_members")
-          .select("id,display_name,draft_slot")
-          .order("draft_slot", { ascending: true }),
-        supabase
-          .from("teams")
-          .select(
-            "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency"
-          )
-          .order("region", { ascending: true })
-          .order("seed", { ascending: true })
-          .order("school_name", { ascending: true }),
-        supabase
-          .from("picks")
-          .select("id,overall_pick,snake_round,member_id,team_id")
-          .order("overall_pick", { ascending: true }),
-      ]);
-
-      if (leagueData) setLeague(leagueData);
-      if (memberData) setMembers(memberData);
-      if (teamData) setTeams(teamData);
-      if (pickData) setPicks(pickData);
-    }
-
     loadData();
   }, [supabase]);
 
@@ -196,6 +208,9 @@ export default function DraftPage() {
     return normalizedTeams.find((team) => team.id === selectedTeamId) ?? null;
   }, [normalizedTeams, selectedTeamId]);
 
+  const lotteryDisplayOrder: LotteryRevealSlot[] = [4, 3, 2, 1];
+  const lotteryLocked = picks.length > 0;
+
   async function refreshPicks() {
     const { data: pickData } = await supabase
       .from("picks")
@@ -203,6 +218,77 @@ export default function DraftPage() {
       .order("overall_pick", { ascending: true });
 
     if (pickData) setPicks(pickData);
+  }
+
+  async function runDraftLottery() {
+    if (isRunningLottery) return;
+
+    if (members.length !== 4) {
+      setLotteryStatus("Lottery requires exactly 4 managers.");
+      return;
+    }
+
+    if (picks.length > 0) {
+      setLotteryStatus("Draft order cannot be randomized after picks have been made.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Run the draft lottery and overwrite the current draft order?"
+    );
+    if (!confirmed) return;
+
+    setIsRunningLottery(true);
+    setLotteryResults({});
+    setLotteryStatus("Starting lottery...");
+
+    try {
+      const shuffled = [...members]
+        .map((member) => ({ member, sort: Math.random() }))
+        .sort((a, b) => a.sort - b.sort)
+        .map((entry) => entry.member);
+
+      const finalOrder = [...shuffled].reverse();
+
+      const revealMap: Partial<Record<LotteryRevealSlot, Member>> = {};
+
+      for (let i = 0; i < shuffled.length; i += 1) {
+        const revealSlot = lotteryDisplayOrder[i];
+        const revealedMember = shuffled[i];
+
+        setLotteryStatus(`Revealing pick #${revealSlot}...`);
+        revealMap[revealSlot] = revealedMember;
+        setLotteryResults({ ...revealMap });
+
+        if (i < shuffled.length - 1) {
+          await wait(2000);
+        }
+      }
+
+      setLotteryStatus("Saving draft order...");
+
+      for (let i = 0; i < finalOrder.length; i += 1) {
+        const member = finalOrder[i];
+
+        const { error } = await supabase
+          .from("league_members")
+          .update({ draft_slot: i + 1 })
+          .eq("id", member.id);
+
+        if (error) {
+          throw new Error(error.message || "Failed to update draft order.");
+        }
+      }
+
+      await loadData();
+      setLotteryStatus("Draft lottery complete.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Draft lottery failed.";
+      setLotteryStatus(message);
+    } finally {
+      setIsRunningLottery(false);
+    }
   }
 
   async function submitDraftPick(teamId: string) {
@@ -306,6 +392,87 @@ export default function DraftPage() {
         <p className="mt-2 text-gray-600">
           Live commissioner-controlled snake draft.
         </p>
+      </section>
+
+      <section className="mb-6 rounded-2xl border bg-white p-5 shadow-sm sm:mb-8 sm:p-6">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+                Draft Lottery
+              </div>
+              <div className="mt-1 text-2xl font-bold text-slate-900">
+                Randomize Draft Order
+              </div>
+              <div className="mt-2 text-sm text-slate-600">
+                Equal odds for all four managers. The reveal runs 4th, 3rd, 2nd,
+                then 1st with a two-second delay between each result.
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={runDraftLottery}
+              disabled={isRunningLottery || lotteryLocked || members.length !== 4}
+              className="rounded-xl bg-slate-950 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isRunningLottery ? "Running Lottery..." : "Run Draft Lottery"}
+            </button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-4">
+            {orderedMembers.map((member) => (
+              <div key={member.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Current Slot
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <ManagerBadge name={member.display_name} />
+                  <div className="text-lg font-bold text-slate-900">#{member.draft_slot}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-4">
+            {lotteryDisplayOrder.map((slot) => {
+              const revealedMember = lotteryResults[slot];
+
+              return (
+                <div
+                  key={slot}
+                  className="rounded-xl border border-amber-200 bg-amber-50 p-4"
+                >
+                  <div className="text-xs font-medium uppercase tracking-wide text-amber-700">
+                    Lottery Reveal
+                  </div>
+                  <div className="mt-2 text-lg font-bold text-slate-900">
+                    Pick #{slot}
+                  </div>
+                  <div className="mt-3">
+                    {revealedMember ? (
+                      <ManagerBadge name={revealedMember.display_name} />
+                    ) : (
+                      <span className="text-sm text-slate-500">Waiting...</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {lotteryStatus ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+              {lotteryStatus}
+            </div>
+          ) : null}
+
+          {lotteryLocked ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              Draft lottery is locked once picks have been made.
+            </div>
+          ) : null}
+        </div>
       </section>
 
       {currentPick && currentMember ? (
