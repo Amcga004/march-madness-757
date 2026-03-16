@@ -187,6 +187,12 @@ export default function DraftPage() {
   const [isSubmittingPick, setIsSubmittingPick] = useState(false);
   const [authLoaded, setAuthLoaded] = useState(false);
 
+  const [magicLinkEmail, setMagicLinkEmail] = useState("");
+  const [passwordEmail, setPasswordEmail] = useState("");
+  const [passwordValue, setPasswordValue] = useState("");
+  const [isSendingMagicLink, setIsSendingMagicLink] = useState(false);
+  const [isSigningInWithPassword, setIsSigningInWithPassword] = useState(false);
+
   async function loadData() {
     const [
       { data: authData },
@@ -523,23 +529,61 @@ export default function DraftPage() {
     setMessage("Last pick removed.");
   }
 
-  async function signIn() {
-    const email = window.prompt("Enter your league email to receive a magic link:");
-    if (!email) return;
-
-    const redirectTo = `${window.location.origin}/auth/callback?next=/draft`;
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirectTo },
-    });
-
-    if (error) {
-      setMessage(error.message || "Failed to send sign-in link.");
+  async function sendMagicLink() {
+    if (!magicLinkEmail.trim()) {
+      setMessage("Please enter an email address for the magic link.");
       return;
     }
 
-    setMessage("Magic link sent. Check your email.");
+    setIsSendingMagicLink(true);
+    setMessage("");
+
+    try {
+      const redirectTo = `${window.location.origin}/auth/callback?next=/draft`;
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: magicLinkEmail.trim(),
+        options: {
+          emailRedirectTo: redirectTo,
+        },
+      });
+
+      if (error) {
+        setMessage(error.message || "Failed to send magic link.");
+        return;
+      }
+
+      setMessage("Magic link sent. Check your email.");
+    } finally {
+      setIsSendingMagicLink(false);
+    }
+  }
+
+  async function signInWithPassword() {
+    if (!passwordEmail.trim() || !passwordValue.trim()) {
+      setMessage("Please enter both email and password.");
+      return;
+    }
+
+    setIsSigningInWithPassword(true);
+    setMessage("");
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: passwordEmail.trim(),
+        password: passwordValue,
+      });
+
+      if (error) {
+        setMessage(error.message || "Failed to sign in with password.");
+        return;
+      }
+
+      setMessage("Signed in successfully.");
+      window.location.href = "/draft";
+    } finally {
+      setIsSigningInWithPassword(false);
+    }
   }
 
   async function signOut() {
@@ -607,17 +651,73 @@ export default function DraftPage() {
                 >
                   Sign Out
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={signIn}
-                  className="rounded-xl bg-slate-950 px-4 py-2 text-white"
-                >
-                  Login
-                </button>
-              )}
+              ) : null}
             </div>
           </div>
+
+          {!authUser ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-base font-semibold text-slate-900">
+                  Magic Link Login
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  For managers using email link sign-in
+                </div>
+
+                <input
+                  type="email"
+                  value={magicLinkEmail}
+                  onChange={(e) => setMagicLinkEmail(e.target.value)}
+                  placeholder="Enter your email"
+                  className="mt-4 w-full rounded-xl border px-3 py-2"
+                />
+
+                <button
+                  type="button"
+                  onClick={sendMagicLink}
+                  disabled={isSendingMagicLink}
+                  className="mt-3 rounded-xl bg-slate-950 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSendingMagicLink ? "Sending..." : "Send Magic Link"}
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-base font-semibold text-slate-900">
+                  Email + Password Login
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  For managers using password sign-in
+                </div>
+
+                <input
+                  type="email"
+                  value={passwordEmail}
+                  onChange={(e) => setPasswordEmail(e.target.value)}
+                  placeholder="Enter your email"
+                  className="mt-4 w-full rounded-xl border px-3 py-2"
+                />
+
+                <input
+                  type="password"
+                  value={passwordValue}
+                  onChange={(e) => setPasswordValue(e.target.value)}
+                  placeholder="Enter your password"
+                  className="mt-3 w-full rounded-xl border px-3 py-2"
+                />
+
+                <button
+                  type="button"
+                  onClick={signInWithPassword}
+                  disabled={isSigningInWithPassword}
+                  className="mt-3 rounded-xl bg-slate-950 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSigningInWithPassword ? "Signing In..." : "Sign In with Password"}
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           {authUser && !signedInMember ? (
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
@@ -628,7 +728,7 @@ export default function DraftPage() {
 
           {!authUser ? (
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-              Managers must sign in with their league email to make picks.
+              Sign in with either a magic link or email and password to make picks when it is your turn.
             </div>
           ) : null}
         </div>
