@@ -1,7 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+
+type AuthUser = {
+  id: string;
+  email?: string;
+} | null;
+
+type Member = {
+  id: string;
+  display_name: string;
+  role: string | null;
+  user_id: string | null;
+};
 
 const navLinks = [
   { href: "/", label: "Dashboard" },
@@ -14,8 +27,49 @@ const navLinks = [
 ];
 
 export default function HeaderMenu() {
+  const supabase = useMemo(() => createClient(), []);
   const [open, setOpen] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUser>(null);
+  const [member, setMember] = useState<Member | null>(null);
+  const [authLoaded, setAuthLoaded] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    async function loadAuthState() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      setAuthUser(user ? { id: user.id, email: user.email } : null);
+
+      if (!user) {
+        setMember(null);
+        setAuthLoaded(true);
+        return;
+      }
+
+      const { data: memberData } = await supabase
+        .from("league_members")
+        .select("id,display_name,role,user_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      setMember((memberData as Member | null) ?? null);
+      setAuthLoaded(true);
+    }
+
+    loadAuthState();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      loadAuthState();
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -42,6 +96,16 @@ export default function HeaderMenu() {
     };
   }, []);
 
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    setOpen(false);
+    window.location.href = "/";
+  }
+
+  const signedInLabel = member
+    ? `${member.display_name} • ${member.role ?? "manager"}`
+    : authUser?.email ?? null;
+
   return (
     <div className="relative" ref={containerRef}>
       <button
@@ -59,7 +123,7 @@ export default function HeaderMenu() {
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-14 z-50 w-56 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/98 p-2 shadow-2xl backdrop-blur">
+        <div className="absolute right-0 top-14 z-50 w-64 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/98 p-2 shadow-2xl backdrop-blur">
           <div className="mb-2 px-3 pt-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
             Navigate
           </div>
@@ -79,6 +143,36 @@ export default function HeaderMenu() {
                 {link.label}
               </Link>
             ))}
+          </div>
+
+          <div className="my-3 border-t border-slate-800" />
+
+          <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Account
+          </div>
+
+          {authLoaded && signedInLabel ? (
+            <div className="px-3 pb-2 text-sm text-slate-300">{signedInLabel}</div>
+          ) : null}
+
+          <div className="flex flex-col gap-1">
+            {!authUser ? (
+              <Link
+                href="/login"
+                onClick={() => setOpen(false)}
+                className="rounded-xl px-3 py-2.5 text-sm font-medium text-slate-100 transition hover:bg-slate-900"
+              >
+                Login
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-100 transition hover:bg-slate-900"
+              >
+                Sign Out
+              </button>
+            )}
           </div>
         </div>
       ) : null}
