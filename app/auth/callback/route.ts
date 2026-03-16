@@ -29,7 +29,7 @@ export async function GET(request: Request) {
   const { data: member } = await supabase
     .from("league_members")
     .select("role")
-    .eq("auth_user_id", user.id)
+    .eq("user_id", user.id)
     .maybeSingle();
 
   const role = member?.role?.toLowerCase();

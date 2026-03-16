@@ -10,15 +10,13 @@ import DraftPickBanner from "../components/draft/DraftPickBanner";
 import DraftConfirmationModal from "../components/draft/DraftConfirmationModal";
 import DraftBoardGrid from "../components/draft/DraftBoardGrid";
 
-type MemberRole = "admin" | "manager" | "commissioner" | null;
-
 type Member = {
   id: string;
   display_name: string;
   draft_slot: number;
   email: string | null;
-  auth_user_id: string | null;
-  role: MemberRole;
+  role: string | null;
+  user_id: string | null;
 };
 
 type Team = {
@@ -69,8 +67,8 @@ type PickWithMetrics = Pick & {
 
 type AuthUser = {
   id: string;
-  email: string | null;
-};
+  email?: string;
+} | null;
 
 const MANAGER_BANNER_COLOR_MAP: Record<string, string> = {
   Andrew: "bg-blue-600 text-white",
@@ -179,8 +177,7 @@ export default function DraftPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [picks, setPicks] = useState<Pick[]>([]);
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-
+  const [authUser, setAuthUser] = useState<AuthUser>(null);
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [message, setMessage] = useState("");
   const [teamSearch, setTeamSearch] = useState("");
@@ -188,82 +185,51 @@ export default function DraftPage() {
   const [pendingPickTeamId, setPendingPickTeamId] = useState<string | null>(null);
   const [pendingPickTeamName, setPendingPickTeamName] = useState("");
   const [isSubmittingPick, setIsSubmittingPick] = useState(false);
+  const [authLoaded, setAuthLoaded] = useState(false);
 
-  const [authEmail, setAuthEmail] = useState("");
-  const [authMessage, setAuthMessage] = useState("");
-  const [isSendingMagicLink, setIsSendingMagicLink] = useState(false);
-  const [isSigningOut, setIsSigningOut] = useState(false);
+  async function loadData() {
+    const [
+      { data: authData },
+      { data: leagueData },
+      { data: memberData },
+      { data: teamData },
+      { data: pickData },
+    ] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase
+        .from("leagues")
+        .select("id,name")
+        .eq("public_slug", "2026-757-march-madness-draft")
+        .single(),
+      supabase
+        .from("league_members")
+        .select("id,display_name,draft_slot,email,role,user_id")
+        .order("draft_slot", { ascending: true }),
+      supabase
+        .from("teams")
+        .select(
+          "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency"
+        )
+        .order("region", { ascending: true })
+        .order("seed", { ascending: true })
+        .order("school_name", { ascending: true }),
+      supabase
+        .from("picks")
+        .select("id,overall_pick,snake_round,member_id,team_id")
+        .order("overall_pick", { ascending: true }),
+    ]);
+
+    setAuthUser(authData.user ? { id: authData.user.id, email: authData.user.email } : null);
+    setAuthLoaded(true);
+
+    if (leagueData) setLeague(leagueData);
+    if (memberData) setMembers(memberData as Member[]);
+    if (teamData) setTeams(teamData as Team[]);
+    if (pickData) setPicks(pickData as Pick[]);
+  }
 
   useEffect(() => {
-    async function loadAll() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      setAuthUser(
-        user
-          ? {
-              id: user.id,
-              email: user.email ?? null,
-            }
-          : null
-      );
-
-      const [
-        { data: leagueData },
-        { data: memberData },
-        { data: teamData },
-        { data: pickData },
-      ] = await Promise.all([
-        supabase
-          .from("leagues")
-          .select("id,name")
-          .eq("public_slug", "2026-757-march-madness-draft")
-          .single(),
-        supabase
-          .from("league_members")
-          .select("id,display_name,draft_slot,email,auth_user_id,role")
-          .order("draft_slot", { ascending: true }),
-        supabase
-          .from("teams")
-          .select(
-            "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency"
-          )
-          .order("region", { ascending: true })
-          .order("seed", { ascending: true })
-          .order("school_name", { ascending: true }),
-        supabase
-          .from("picks")
-          .select("id,overall_pick,snake_round,member_id,team_id")
-          .order("overall_pick", { ascending: true }),
-      ]);
-
-      if (leagueData) setLeague(leagueData);
-      if (memberData) setMembers(memberData as Member[]);
-      if (teamData) setTeams(teamData as Team[]);
-      if (pickData) setPicks(pickData as Pick[]);
-    }
-
-    loadAll();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const user = session?.user ?? null;
-
-      setAuthUser(
-        user
-          ? {
-              id: user.id,
-              email: user.email ?? null,
-            }
-          : null
-      );
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    loadData();
   }, [supabase]);
 
   const orderedMembers = useMemo(() => {
@@ -272,20 +238,10 @@ export default function DraftPage() {
 
   const signedInMember = useMemo(() => {
     if (!authUser) return null;
+    return orderedMembers.find((member) => member.user_id === authUser.id) ?? null;
+  }, [orderedMembers, authUser]);
 
-    return (
-      members.find((member) => member.auth_user_id === authUser.id) ??
-      members.find(
-        (member) =>
-          member.email &&
-          authUser.email &&
-          member.email.toLowerCase() === authUser.email.toLowerCase()
-      ) ??
-      null
-    );
-  }, [members, authUser]);
-
-  const isAdmin = signedInMember?.role === "admin" || signedInMember?.role === "commissioner";
+  const canAccessAdmin = signedInMember?.role === "commissioner";
 
   const draftOrder = useMemo(() => {
     return orderedMembers.map((m) => m.display_name);
@@ -303,52 +259,34 @@ export default function DraftPage() {
     (m) => m.display_name === currentPick?.player
   );
 
-  const currentManagerName = currentMember?.display_name ?? "Current Manager";
-  const totalPicks = snake.length || teams.length || 64;
-  const currentRoundLabel = currentPick ? `Round ${currentPick.round}` : undefined;
+  const normalizedTeams = teams.map((team) => ({
+    ...team,
+    school_name: getCanonicalTeamName(team.school_name),
+  }));
 
-  const normalizedTeams = useMemo(() => {
-    return teams.map((team) => ({
-      ...team,
-      school_name: getCanonicalTeamName(team.school_name),
-    }));
-  }, [teams]);
+  const draftedTeamIds = new Set(picks.map((pick) => pick.team_id));
+  const availableTeams = normalizedTeams.filter((team) => !draftedTeamIds.has(team.id));
 
-  const draftedTeamIds = useMemo(() => {
-    return new Set(picks.map((pick) => pick.team_id));
-  }, [picks]);
+  const filteredAvailableTeams = availableTeams.filter((team) => {
+    const query = teamSearch.trim().toLowerCase();
+    if (!query) return true;
 
-  const availableTeams = useMemo(() => {
-    return normalizedTeams.filter((team) => !draftedTeamIds.has(team.id));
-  }, [normalizedTeams, draftedTeamIds]);
+    const searchable = [
+      ...getTeamSearchTerms(team.school_name),
+      team.region,
+      String(team.seed),
+      team.record ?? "",
+      team.conference_record ?? "",
+      team.kenpom_rank ? `kenpom ${team.kenpom_rank}` : "",
+      team.bpi_rank ? `bpi ${team.bpi_rank}` : "",
+      team.net_rank ? `net ${team.net_rank}` : "",
+    ].map((value) => value.toLowerCase());
 
-  const filteredAvailableTeams = useMemo(() => {
-    return availableTeams.filter((team) => {
-      const query = teamSearch.trim().toLowerCase();
-      if (!query) return true;
+    return searchable.some((value) => value.includes(query));
+  });
 
-      const searchable = [
-        ...getTeamSearchTerms(team.school_name),
-        team.region,
-        String(team.seed),
-        team.record ?? "",
-        team.conference_record ?? "",
-        team.kenpom_rank ? `kenpom ${team.kenpom_rank}` : "",
-        team.bpi_rank ? `bpi ${team.bpi_rank}` : "",
-        team.net_rank ? `net ${team.net_rank}` : "",
-      ].map((value) => value.toLowerCase());
-
-      return searchable.some((value) => value.includes(query));
-    });
-  }, [availableTeams, teamSearch]);
-
-  const memberMap = useMemo(() => {
-    return new Map(members.map((m) => [m.id, m.display_name]));
-  }, [members]);
-
-  const teamMap = useMemo(() => {
-    return new Map(normalizedTeams.map((t) => [t.id, t]));
-  }, [normalizedTeams]);
+  const memberMap = new Map(members.map((m) => [m.id, m.display_name]));
+  const teamMap = new Map(normalizedTeams.map((t) => [t.id, t]));
 
   const completedPicks = useMemo<PickWithMetrics[]>(() => {
     return picks.map((pick) => {
@@ -368,6 +306,10 @@ export default function DraftPage() {
     });
   }, [picks, teamMap, memberMap]);
 
+  const currentManagerName = currentMember?.display_name ?? "Current Manager";
+  const totalPicks = snake.length || normalizedTeams.length || 64;
+  const currentRoundLabel = currentPick ? `Round ${currentPick.round}` : undefined;
+
   const draftBoardPicks = useMemo<DraftBoardPick[]>(() => {
     return completedPicks.map((pick) => ({
       id: pick.id,
@@ -381,12 +323,6 @@ export default function DraftPage() {
   const selectedTeam = useMemo(() => {
     return normalizedTeams.find((team) => team.id === selectedTeamId) ?? null;
   }, [normalizedTeams, selectedTeamId]);
-
-  const canMakeCurrentPick = useMemo(() => {
-    if (!authUser || !signedInMember || !currentMember || !currentPick) return false;
-    if (isAdmin) return true;
-    return signedInMember.id === currentMember.id;
-  }, [authUser, signedInMember, currentMember, currentPick, isAdmin]);
 
   const bestAvailableOverall = useMemo(() => {
     return [...availableTeams]
@@ -465,6 +401,11 @@ export default function DraftPage() {
     });
   }, [orderedMembers, completedPicks]);
 
+  const canMakeCurrentPick =
+    !!signedInMember &&
+    !!currentMember &&
+    signedInMember.id === currentMember.id;
+
   async function refreshPicks() {
     const { data: pickData } = await supabase
       .from("picks")
@@ -474,56 +415,14 @@ export default function DraftPage() {
     if (pickData) setPicks(pickData as Pick[]);
   }
 
-  async function sendMagicLink() {
-    if (!authEmail.trim()) {
-      setAuthMessage("Enter your email address.");
-      return;
-    }
-
-    setIsSendingMagicLink(true);
-    setAuthMessage("");
-
-    try {
-      const redirectTo = `${window.location.origin}/auth/callback`;
-
-      const { error } = await supabase.auth.signInWithOtp({
-        email: authEmail.trim(),
-        options: {
-          emailRedirectTo: redirectTo,
-        },
-      });
-
-      if (error) {
-        setAuthMessage(error.message || "Failed to send magic link.");
-        return;
-      }
-
-      setAuthMessage("Magic link sent. Check your email.");
-    } finally {
-      setIsSendingMagicLink(false);
-    }
-  }
-
-  async function signOut() {
-    setIsSigningOut(true);
-
-    try {
-      await supabase.auth.signOut();
-      setAuthUser(null);
-      setAuthMessage("Signed out.");
-    } finally {
-      setIsSigningOut(false);
-    }
-  }
-
   async function submitDraftPick(teamId: string) {
-    if (!league || !currentMember || !currentPick || !teamId) {
+    if (!league || !currentMember || !currentPick || !teamId || !signedInMember) {
       setMessage("Missing required draft information.");
       return false;
     }
 
-    if (!canMakeCurrentPick) {
-      setMessage("You do not have permission to make this pick.");
+    if (signedInMember.id !== currentMember.id) {
+      setMessage("You can only make a pick when it is your turn.");
       return false;
     }
 
@@ -560,8 +459,13 @@ export default function DraftPage() {
   async function handleDraftPick(e: React.FormEvent) {
     e.preventDefault();
 
+    if (!signedInMember) {
+      setMessage("You must sign in before making a pick.");
+      return;
+    }
+
     if (!canMakeCurrentPick) {
-      setMessage("You are not authorized to make this pick.");
+      setMessage("You can only make a pick when it is your turn.");
       return;
     }
 
@@ -570,10 +474,10 @@ export default function DraftPage() {
       return;
     }
 
-    const pickedTeam = normalizedTeams.find((team) => team.id === selectedTeamId);
+    const selected = normalizedTeams.find((team) => team.id === selectedTeamId);
 
     setPendingPickTeamId(selectedTeamId);
-    setPendingPickTeamName(pickedTeam?.school_name ?? "Selected Team");
+    setPendingPickTeamName(selected?.school_name ?? "Selected Team");
   }
 
   async function confirmDraftPick() {
@@ -594,8 +498,8 @@ export default function DraftPage() {
   }
 
   async function undoLastPick() {
-    if (!isAdmin) {
-      setMessage("Only the commissioner/admin can undo picks.");
+    if (!canAccessAdmin) {
+      setMessage("Only the commissioner can undo picks.");
       return;
     }
 
@@ -619,6 +523,30 @@ export default function DraftPage() {
     setMessage("Last pick removed.");
   }
 
+  async function signIn() {
+    const email = window.prompt("Enter your league email to receive a magic link:");
+    if (!email) return;
+
+    const redirectTo = `${window.location.origin}/auth/callback?next=/draft`;
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: redirectTo },
+    });
+
+    if (error) {
+      setMessage(error.message || "Failed to send sign-in link.");
+      return;
+    }
+
+    setMessage("Magic link sent. Check your email.");
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    window.location.reload();
+  }
+
   const upcomingPicks = snake
     .filter((pick) => pick.overallPick >= nextOverallPick)
     .slice(0, 10);
@@ -635,96 +563,75 @@ export default function DraftPage() {
       </section>
 
       <section className="mb-6 rounded-2xl border bg-white p-5 shadow-sm sm:mb-8 sm:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Draft Access
-            </div>
-            <div className="mt-1 text-2xl font-bold text-slate-900">
-              {authUser ? "Signed In" : "Manager Sign In"}
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                Draft Access
+              </div>
+              <div className="mt-2 text-2xl font-bold text-slate-900">
+                {authUser ? "Signed In" : "Sign In Required"}
+              </div>
+              <div className="mt-2 text-sm text-slate-600">
+                {authLoaded
+                  ? authUser?.email
+                    ? `Email: ${authUser.email}`
+                    : "You are not currently signed in."
+                  : "Checking session..."}
+              </div>
+              <div className="mt-2 text-sm font-medium text-slate-700">
+                Access:{" "}
+                {signedInMember
+                  ? `${signedInMember.display_name} • ${signedInMember.role ?? "manager"}`
+                  : authUser
+                  ? "Signed in, but not mapped to a league member"
+                  : "View only until signed in"}
+              </div>
             </div>
 
-            {authUser ? (
-              <div className="mt-2 space-y-1 text-sm text-slate-600">
-                <div>
-                  Email: <span className="font-semibold">{authUser.email ?? "—"}</span>
-                </div>
-                <div>
-                  Access:{" "}
-                  <span className="font-semibold">
-                    {signedInMember
-                      ? `${signedInMember.display_name} • ${signedInMember.role ?? "manager"}`
-                      : "Signed in, but not mapped to a league member"}
-                  </span>
-                </div>
-                {currentPick && currentMember ? (
-                  <div>
-                    Current picker: <span className="font-semibold">{currentMember.display_name}</span>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="mt-2 text-sm text-slate-600">
-                Sign in with your league email to make picks when you are on the clock.
-              </div>
-            )}
+            <div className="flex gap-3">
+              {canAccessAdmin ? (
+                <a
+                  href="/admin"
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
+                >
+                  Go to Admin
+                </a>
+              ) : null}
+
+              {authUser ? (
+                <button
+                  type="button"
+                  onClick={signOut}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
+                >
+                  Sign Out
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={signIn}
+                  className="rounded-xl bg-slate-950 px-4 py-2 text-white"
+                >
+                  Login
+                </button>
+              )}
+            </div>
           </div>
 
-          {authUser ? (
-            <button
-              type="button"
-              onClick={signOut}
-              disabled={isSigningOut}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isSigningOut ? "Signing Out..." : "Sign Out"}
-            </button>
+          {authUser && !signedInMember ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              Your signed-in email is not mapped to a league member yet, so you can view
+              the board but cannot make picks.
+            </div>
+          ) : null}
+
+          {!authUser ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+              Managers must sign in with their league email to make picks.
+            </div>
           ) : null}
         </div>
-
-        {!authUser ? (
-          <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]">
-            <input
-              type="email"
-              value={authEmail}
-              onChange={(e) => setAuthEmail(e.target.value)}
-              placeholder="Enter your league email"
-              className="w-full rounded-xl border border-slate-300 px-3 py-2"
-            />
-            <button
-              type="button"
-              onClick={sendMagicLink}
-              disabled={isSendingMagicLink}
-              className="rounded-xl bg-slate-950 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isSendingMagicLink ? "Sending..." : "Send Magic Link"}
-            </button>
-          </div>
-        ) : null}
-
-        {authMessage ? (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-            {authMessage}
-          </div>
-        ) : null}
-
-        {authUser && !signedInMember ? (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            Your signed-in email is not mapped to a league member yet, so you can view the board but cannot make picks.
-          </div>
-        ) : null}
-
-        {authUser && signedInMember && !canMakeCurrentPick && currentPick && currentMember ? (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-            You are signed in as {signedInMember.display_name}, but it is currently {currentMember.display_name}'s turn to pick.
-          </div>
-        ) : null}
-
-        {authUser && canMakeCurrentPick && currentPick && currentMember ? (
-          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
-            You are authorized to make the current pick.
-          </div>
-        ) : null}
       </section>
 
       {currentPick && currentMember ? (
@@ -752,6 +659,13 @@ export default function DraftPage() {
               </div>
               <div className="mt-2 text-sm text-gray-600">
                 Pick #{currentPick.overallPick} • Round {currentPick.round}
+              </div>
+              <div className="mt-2 text-sm font-medium text-slate-700">
+                {canMakeCurrentPick
+                  ? "It is your turn. You can make this pick."
+                  : signedInMember
+                  ? "You are signed in, but it is not your turn."
+                  : "Sign in to make picks when it is your turn."}
               </div>
             </div>
 
@@ -800,148 +714,132 @@ export default function DraftPage() {
                   </div>
                 </div>
 
-                {!authUser ? (
-                  <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-                    Sign in with your league email to make picks.
+                <form onSubmit={handleDraftPick} className="mt-6 space-y-4">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">Search Teams</label>
+                    <input
+                      type="text"
+                      value={teamSearch}
+                      onChange={(e) => setTeamSearch(e.target.value)}
+                      placeholder="Search by school, alias, region, seed, or ranking"
+                      className="w-full rounded-xl border px-3 py-2"
+                      disabled={!canMakeCurrentPick}
+                    />
                   </div>
-                ) : !signedInMember ? (
-                  <div className="mt-6 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-                    Your account is not linked to a league member, so draft actions are disabled.
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">Select Team</label>
+                    <select
+                      className="w-full rounded-xl border px-3 py-2"
+                      value={selectedTeamId}
+                      onChange={(e) => setSelectedTeamId(e.target.value)}
+                      required
+                      disabled={!canMakeCurrentPick}
+                    >
+                      <option value="">Choose a team</option>
+                      {filteredAvailableTeams.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.school_name} • {team.seed} Seed • {team.region} • KP {team.kenpom_rank ?? "—"} • BPI {team.bpi_rank ?? "—"} • NET {team.net_rank ?? "—"} • {team.record ?? "No Record"}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                ) : (
-                  <form onSubmit={handleDraftPick} className="mt-6 space-y-4">
-                    <div>
-                      <label className="mb-2 block text-sm font-medium">Search Teams</label>
-                      <input
-                        type="text"
-                        value={teamSearch}
-                        onChange={(e) => setTeamSearch(e.target.value)}
-                        placeholder="Search by school, alias, region, seed, or ranking"
-                        className="w-full rounded-xl border px-3 py-2"
-                        disabled={!canMakeCurrentPick}
-                      />
-                    </div>
 
-                    <div>
-                      <label className="mb-2 block text-sm font-medium">Select Team</label>
-                      <select
-                        className="w-full rounded-xl border px-3 py-2"
-                        value={selectedTeamId}
-                        onChange={(e) => setSelectedTeamId(e.target.value)}
-                        required
-                        disabled={!canMakeCurrentPick}
-                      >
-                        <option value="">Choose a team</option>
-                        {filteredAvailableTeams.map((team) => (
-                          <option key={team.id} value={team.id}>
-                            {team.school_name} • {team.seed} Seed • {team.region} • KP {team.kenpom_rank ?? "—"} • BPI {team.bpi_rank ?? "—"} • NET {team.net_rank ?? "—"} • {team.record ?? "No Record"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {selectedTeam ? (
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <div className="flex items-start gap-3">
-                          <TeamLogo teamName={selectedTeam.school_name} size={34} />
-                          <div>
-                            <div className="text-lg font-semibold">{selectedTeam.school_name}</div>
-                            <div className="mt-1 text-sm text-slate-600">
-                              {selectedTeam.seed} Seed • {selectedTeam.region}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 grid gap-3 sm:grid-cols-4">
-                          <div className="rounded-xl border bg-white p-3">
-                            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                              Rankings
-                            </div>
-                            <div className="mt-2 text-sm text-slate-700">
-                              KenPom: <span className="font-semibold">{selectedTeam.kenpom_rank ?? "—"}</span>
-                            </div>
-                            <div className="mt-1 text-sm text-slate-700">
-                              BPI: <span className="font-semibold">{selectedTeam.bpi_rank ?? "—"}</span>
-                            </div>
-                            <div className="mt-1 text-sm text-slate-700">
-                              NET: <span className="font-semibold">{selectedTeam.net_rank ?? "—"}</span>
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border bg-white p-3">
-                            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                              Record
-                            </div>
-                            <div className="mt-2 text-sm text-slate-700">
-                              Overall: <span className="font-semibold">{selectedTeam.record ?? "—"}</span>
-                            </div>
-                            <div className="mt-1 text-sm text-slate-700">
-                              Conference: <span className="font-semibold">{selectedTeam.conference_record ?? "—"}</span>
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border bg-white p-3">
-                            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                              Efficiency
-                            </div>
-                            <div className="mt-2 text-sm text-slate-700">
-                              Off: <span className="font-semibold">{formatMetric(selectedTeam.off_efficiency)}</span>
-                            </div>
-                            <div className="mt-1 text-sm text-slate-700">
-                              Def: <span className="font-semibold">{formatMetric(selectedTeam.def_efficiency)}</span>
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border bg-white p-3">
-                            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                              Draft Signal
-                            </div>
-                            <div className="mt-2 text-sm text-slate-700">
-                              Composite: <span className="font-semibold">{formatComposite(getCompositeRank(selectedTeam))}</span>
-                            </div>
-                            <div className="mt-1 text-sm text-slate-700">
-                              Value Score: <span className="font-semibold">{formatComposite(getValueScore(selectedTeam))}</span>
-                            </div>
+                  {selectedTeam ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-start gap-3">
+                        <TeamLogo teamName={selectedTeam.school_name} size={34} />
+                        <div>
+                          <div className="text-lg font-semibold">{selectedTeam.school_name}</div>
+                          <div className="mt-1 text-sm text-slate-600">
+                            {selectedTeam.seed} Seed • {selectedTeam.region}
                           </div>
                         </div>
                       </div>
-                    ) : null}
 
-                    {teamSearch && filteredAvailableTeams.length === 0 ? (
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                        No teams match your search.
+                      <div className="mt-4 grid gap-3 sm:grid-cols-4">
+                        <div className="rounded-xl border bg-white p-3">
+                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Rankings
+                          </div>
+                          <div className="mt-2 text-sm text-slate-700">
+                            KenPom: <span className="font-semibold">{selectedTeam.kenpom_rank ?? "—"}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-slate-700">
+                            BPI: <span className="font-semibold">{selectedTeam.bpi_rank ?? "—"}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-slate-700">
+                            NET: <span className="font-semibold">{selectedTeam.net_rank ?? "—"}</span>
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border bg-white p-3">
+                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Record
+                          </div>
+                          <div className="mt-2 text-sm text-slate-700">
+                            Overall: <span className="font-semibold">{selectedTeam.record ?? "—"}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-slate-700">
+                            Conference: <span className="font-semibold">{selectedTeam.conference_record ?? "—"}</span>
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border bg-white p-3">
+                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Efficiency
+                          </div>
+                          <div className="mt-2 text-sm text-slate-700">
+                            Off: <span className="font-semibold">{formatMetric(selectedTeam.off_efficiency)}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-slate-700">
+                            Def: <span className="font-semibold">{formatMetric(selectedTeam.def_efficiency)}</span>
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border bg-white p-3">
+                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Draft Signal
+                          </div>
+                          <div className="mt-2 text-sm text-slate-700">
+                            Composite: <span className="font-semibold">{formatComposite(getCompositeRank(selectedTeam))}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-slate-700">
+                            Value Score: <span className="font-semibold">{formatComposite(getValueScore(selectedTeam))}</span>
+                          </div>
+                        </div>
                       </div>
-                    ) : null}
+                    </div>
+                  ) : null}
 
-                    {!canMakeCurrentPick ? (
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                        Draft controls are locked until it is your turn. Commissioner/admin can override from this screen when signed in.
-                      </div>
-                    ) : null}
+                  {teamSearch && filteredAvailableTeams.length === 0 ? (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                      No teams match your search.
+                    </div>
+                  ) : null}
 
-                    <div className="flex flex-col gap-3 sm:flex-row">
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="submit"
+                      disabled={!canMakeCurrentPick}
+                      className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    >
+                      Draft Team
+                    </button>
+
+                    {canAccessAdmin ? (
                       <button
-                        type="submit"
-                        disabled={!canMakeCurrentPick}
-                        className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                        type="button"
+                        onClick={undoLastPick}
+                        className="w-full rounded-xl border border-red-300 px-4 py-2 text-red-600 hover:bg-red-50 sm:w-auto"
                       >
-                        Draft Team
+                        Undo Last Pick
                       </button>
+                    ) : null}
+                  </div>
 
-                      {isAdmin ? (
-                        <button
-                          type="button"
-                          onClick={undoLastPick}
-                          className="w-full rounded-xl border border-red-300 px-4 py-2 text-red-600 hover:bg-red-50 sm:w-auto"
-                        >
-                          Undo Last Pick
-                        </button>
-                      ) : null}
-                    </div>
-
-                    {message ? <p className="text-sm text-gray-600">{message}</p> : null}
-                  </form>
-                )}
+                  {message ? <p className="text-sm text-gray-600">{message}</p> : null}
+                </form>
               </>
             ) : (
               <div className="mt-4 rounded-xl border p-4 text-sm text-gray-600">
@@ -1163,10 +1061,6 @@ export default function DraftPage() {
                 </div>
               ))}
             </div>
-
-            <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-              Draft recap email delivery is not wired up in this file yet. Once the draft is complete, that should be handled from a server-side route or automation so each manager gets an individualized summary.
-            </div>
           </div>
         </div>
 
@@ -1207,42 +1101,6 @@ export default function DraftPage() {
               )}
             </div>
           </div>
-
-          {signedInMember ? (
-            <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-              <h3 className="text-xl font-semibold">Your Access</h3>
-              <div className="mt-4 space-y-3">
-                <div className="rounded-xl border bg-slate-50 p-4">
-                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Signed In As
-                  </div>
-                  <div className="mt-1 text-lg font-semibold text-slate-900">
-                    {signedInMember.display_name}
-                  </div>
-                  <div className="mt-1 text-sm text-slate-600">
-                    Role: {signedInMember.role ?? "manager"}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border bg-slate-50 p-4">
-                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Draft Permission
-                  </div>
-                  <div className="mt-1 text-sm text-slate-700">
-                    {canMakeCurrentPick
-                      ? "You can make the current pick."
-                      : "You can view the room, but cannot make the current pick right now."}
-                  </div>
-                </div>
-
-                {isAdmin ? (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-                    Commissioner/admin controls such as draft lottery should now live in the admin panel, not this draft room.
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
         </div>
       </section>
 
