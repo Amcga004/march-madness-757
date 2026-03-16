@@ -72,23 +72,17 @@ export default function AdminPage() {
   const lotteryDisplayOrder: LotteryRevealSlot[] = [4, 3, 2, 1];
   const lotteryLocked = picksCount > 0;
 
-  async function signIn() {
-    const email = window.prompt("Enter your commissioner email to receive a magic link:");
-    if (!email) return;
-
+  async function signInWithGoogle() {
     const redirectTo = `${window.location.origin}/auth/callback?next=/admin`;
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirectTo },
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo },
     });
 
     if (error) {
-      setLotteryStatus(error.message || "Failed to send sign-in link.");
-      return;
+      setLotteryStatus(error.message || "Failed to start Google sign-in.");
     }
-
-    setLotteryStatus("Magic link sent. Check your email.");
   }
 
   async function signOut() {
@@ -219,10 +213,10 @@ export default function AdminPage() {
               ) : (
                 <button
                   type="button"
-                  onClick={signIn}
+                  onClick={signInWithGoogle}
                   className="rounded-xl bg-slate-950 px-4 py-2 text-white"
                 >
-                  Login
+                  Continue with Google
                 </button>
               )}
             </div>
