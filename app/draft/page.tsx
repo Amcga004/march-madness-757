@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getSnakeDraftOrder } from "@/lib/draft";
 import { getCanonicalTeamName, getTeamSearchTerms } from "@/lib/teamIdentity";
+import {
+  getCompositeRank,
+  getValueScore,
+  getPickGrade,
+  type TeamIntelligenceInput,
+} from "@/lib/teamIntelligence";
 import ManagerBadge from "../components/ManagerBadge";
 import TeamLogo from "../components/TeamLogo";
 import DraftPickBanner from "../components/draft/DraftPickBanner";
@@ -28,6 +34,10 @@ type Team = {
   conference_record: string | null;
   off_efficiency: number | null;
   def_efficiency: number | null;
+  adj_tempo: number | null;
+  sos_net_rating: number | null;
+  quad1_record: string | null;
+  quad2_record: string | null;
 };
 
 type Pick = {
@@ -62,6 +72,9 @@ type PickWithMetrics = Pick & {
   valueScore: number | null;
   offEfficiency: number | null;
   defEfficiency: number | null;
+  gradeNumeric: number | null;
+  gradeLetter: string;
+  gradeRationale: string;
 };
 
 const MANAGER_BANNER_COLOR_MAP: Record<string, string> = {
@@ -81,37 +94,62 @@ function formatComposite(value: number | null) {
   return value.toFixed(2);
 }
 
+function formatGradeScore(value: number | null) {
+  if (value === null || value === undefined) return "—";
+  return value.toFixed(1);
+}
+
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function getCompositeRank(team: Team) {
-  const ranks = [team.kenpom_rank, team.bpi_rank, team.net_rank].filter(
-    (value): value is number => value !== null && value !== undefined
-  );
-
-  if (ranks.length === 0) return null;
-
-  return ranks.reduce((sum, value) => sum + value, 0) / ranks.length;
-}
-
-function getExpectedRankFromSeed(seed: number | null) {
-  if (seed === null || seed === undefined) return null;
-  return (seed - 1) * 4 + 2.5;
-}
-
-function getValueScore(team: Team) {
-  const composite = getCompositeRank(team);
-  const expected = getExpectedRankFromSeed(team.seed);
-
-  if (composite === null || expected === null) return null;
-
-  return expected - composite;
 }
 
 function average(values: number[]) {
   if (values.length === 0) return null;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function toTeamIntelligenceInput(team: Team): TeamIntelligenceInput {
+  return {
+    school_name: team.school_name,
+    seed: team.seed,
+    kenpom_rank: team.kenpom_rank,
+    bpi_rank: team.bpi_rank,
+    net_rank: team.net_rank,
+    off_efficiency: team.off_efficiency,
+    def_efficiency: team.def_efficiency,
+    adj_tempo: team.adj_tempo,
+    sos_net_rating: team.sos_net_rating,
+    quad1_record: team.quad1_record,
+    quad2_record: team.quad2_record,
+  };
+}
+
+function GradeBadge({
+  grade,
+  score,
+}: {
+  grade: string;
+  score: number | null;
+}) {
+  let className =
+    "border-slate-200 bg-slate-50 text-slate-700";
+
+  if (grade.startsWith("A")) {
+    className = "border-emerald-200 bg-emerald-50 text-emerald-700";
+  } else if (grade.startsWith("B")) {
+    className = "border-blue-200 bg-blue-50 text-blue-700";
+  } else if (grade.startsWith("C")) {
+    className = "border-amber-200 bg-amber-50 text-amber-700";
+  } else if (grade.startsWith("D") || grade === "F") {
+    className = "border-red-200 bg-red-50 text-red-700";
+  }
+
+  return (
+    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${className}`}>
+      <span>{grade}</span>
+      <span className="opacity-80">{formatGradeScore(score)}</span>
+    </div>
+  );
 }
 
 function BestAvailableList({
@@ -208,7 +246,7 @@ export default function DraftPage() {
       supabase
         .from("teams")
         .select(
-          "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency"
+          "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency,adj_tempo,sos_net_rating,quad1_record,quad2_record"
         )
         .order("region", { ascending: true })
         .order("seed", { ascending: true })
@@ -282,16 +320,26 @@ export default function DraftPage() {
     return picks.map((pick) => {
       const team = teamMap.get(pick.team_id);
 
+      const intelligenceInput = team ? toTeamIntelligenceInput(team) : null;
+      const compositeRank = intelligenceInput ? getCompositeRank(intelligenceInput) : null;
+      const valueScore = intelligenceInput ? getValueScore(intelligenceInput) : null;
+      const pickGrade = intelligenceInput
+        ? getPickGrade(intelligenceInput)
+        : { numeric_score: null, grade: "—", rationale: "Insufficient data" };
+
       return {
         ...pick,
         owner: memberMap.get(pick.member_id) ?? "Unknown",
         teamName: team?.school_name ?? "Unknown Team",
         seed: team?.seed ?? null,
         region: team?.region ?? "",
-        compositeRank: team ? getCompositeRank(team) : null,
-        valueScore: team ? getValueScore(team) : null,
+        compositeRank,
+        valueScore,
         offEfficiency: team?.off_efficiency ?? null,
         defEfficiency: team?.def_efficiency ?? null,
+        gradeNumeric: pickGrade.numeric_score,
+        gradeLetter: pickGrade.grade,
+        gradeRationale: pickGrade.rationale,
       };
     });
   }, [picks, teamMap, memberMap]);
@@ -314,20 +362,33 @@ export default function DraftPage() {
     return normalizedTeams.find((team) => team.id === selectedTeamId) ?? null;
   }, [normalizedTeams, selectedTeamId]);
 
+  const selectedTeamGrade = useMemo(() => {
+    if (!selectedTeam) return null;
+    return getPickGrade(toTeamIntelligenceInput(selectedTeam));
+  }, [selectedTeam]);
+
   const lotteryDisplayOrder: LotteryRevealSlot[] = [4, 3, 2, 1];
   const lotteryLocked = picks.length > 0;
 
   const bestAvailableOverall = useMemo(() => {
     return [...availableTeams]
-      .filter((team) => getCompositeRank(team) !== null)
-      .sort((a, b) => (getCompositeRank(a) ?? 9999) - (getCompositeRank(b) ?? 9999))
+      .filter((team) => getCompositeRank(toTeamIntelligenceInput(team)) !== null)
+      .sort(
+        (a, b) =>
+          (getCompositeRank(toTeamIntelligenceInput(a)) ?? 9999) -
+          (getCompositeRank(toTeamIntelligenceInput(b)) ?? 9999)
+      )
       .slice(0, 5);
   }, [availableTeams]);
 
   const bestValueRemaining = useMemo(() => {
     return [...availableTeams]
-      .filter((team) => getValueScore(team) !== null)
-      .sort((a, b) => (getValueScore(b) ?? -9999) - (getValueScore(a) ?? -9999))
+      .filter((team) => getValueScore(toTeamIntelligenceInput(team)) !== null)
+      .sort(
+        (a, b) =>
+          (getValueScore(toTeamIntelligenceInput(b)) ?? -9999) -
+          (getValueScore(toTeamIntelligenceInput(a)) ?? -9999)
+      )
       .slice(0, 5);
   }, [availableTeams]);
 
@@ -346,21 +407,43 @@ export default function DraftPage() {
   }, [availableTeams]);
 
   const bestDraftedPick = useMemo(() => {
-    return [...completedPicks]
-      .filter((pick) => pick.compositeRank !== null)
-      .sort((a, b) => (a.compositeRank ?? 9999) - (b.compositeRank ?? 9999))[0] ?? null;
+    return (
+      [...completedPicks]
+        .filter((pick) => pick.compositeRank !== null)
+        .sort((a, b) => (a.compositeRank ?? 9999) - (b.compositeRank ?? 9999))[0] ?? null
+    );
   }, [completedPicks]);
 
   const bestValueDraftedPick = useMemo(() => {
-    return [...completedPicks]
-      .filter((pick) => pick.valueScore !== null)
-      .sort((a, b) => (b.valueScore ?? -9999) - (a.valueScore ?? -9999))[0] ?? null;
+    return (
+      [...completedPicks]
+        .filter((pick) => pick.valueScore !== null)
+        .sort((a, b) => (b.valueScore ?? -9999) - (a.valueScore ?? -9999))[0] ?? null
+    );
   }, [completedPicks]);
 
   const biggestReachPick = useMemo(() => {
-    return [...completedPicks]
-      .filter((pick) => pick.valueScore !== null)
-      .sort((a, b) => (a.valueScore ?? 9999) - (b.valueScore ?? 9999))[0] ?? null;
+    return (
+      [...completedPicks]
+        .filter((pick) => pick.valueScore !== null)
+        .sort((a, b) => (a.valueScore ?? 9999) - (b.valueScore ?? 9999))[0] ?? null
+    );
+  }, [completedPicks]);
+
+  const highestGradedPick = useMemo(() => {
+    return (
+      [...completedPicks]
+        .filter((pick) => pick.gradeNumeric !== null)
+        .sort((a, b) => (b.gradeNumeric ?? -9999) - (a.gradeNumeric ?? -9999))[0] ?? null
+    );
+  }, [completedPicks]);
+
+  const lowestGradedPick = useMemo(() => {
+    return (
+      [...completedPicks]
+        .filter((pick) => pick.gradeNumeric !== null)
+        .sort((a, b) => (a.gradeNumeric ?? 9999) - (b.gradeNumeric ?? 9999))[0] ?? null
+    );
   }, [completedPicks]);
 
   const bestRemainingTeam = bestAvailableOverall[0] ?? null;
@@ -377,8 +460,18 @@ export default function DraftPage() {
         .map((pick) => pick.seed)
         .filter((value): value is number => value !== null && value !== undefined);
 
+      const gradeValues = memberPicks
+        .map((pick) => pick.gradeNumeric)
+        .filter((value): value is number => value !== null && value !== undefined);
+
       const avgComposite = average(compositeValues);
       const avgSeed = average(seedValues);
+      const avgGrade = average(gradeValues);
+
+      const bestPick =
+        [...memberPicks]
+          .filter((pick) => pick.gradeNumeric !== null)
+          .sort((a, b) => (b.gradeNumeric ?? -9999) - (a.gradeNumeric ?? -9999))[0] ?? null;
 
       return {
         id: member.id,
@@ -386,10 +479,8 @@ export default function DraftPage() {
         totalPicks: memberPicks.length,
         avgComposite,
         avgSeed,
-        bestPick:
-          [...memberPicks]
-            .filter((pick) => pick.compositeRank !== null)
-            .sort((a, b) => (a.compositeRank ?? 9999) - (b.compositeRank ?? 9999))[0] ?? null,
+        avgGrade,
+        bestPick,
       };
     });
   }, [orderedMembers, completedPicks]);
@@ -817,10 +908,16 @@ export default function DraftPage() {
                             Draft Signal
                           </div>
                           <div className="mt-2 text-sm text-slate-700">
-                            Composite: <span className="font-semibold">{formatComposite(getCompositeRank(selectedTeam))}</span>
+                            Composite: <span className="font-semibold">{formatComposite(getCompositeRank(toTeamIntelligenceInput(selectedTeam)))}</span>
                           </div>
                           <div className="mt-1 text-sm text-slate-700">
-                            Value Score: <span className="font-semibold">{formatComposite(getValueScore(selectedTeam))}</span>
+                            Value Score: <span className="font-semibold">{formatComposite(getValueScore(toTeamIntelligenceInput(selectedTeam)))}</span>
+                          </div>
+                          <div className="mt-2">
+                            <GradeBadge
+                              grade={selectedTeamGrade?.grade ?? "—"}
+                              score={selectedTeamGrade?.numeric_score ?? null}
+                            />
                           </div>
                         </div>
                       </div>
@@ -865,14 +962,18 @@ export default function DraftPage() {
               title="Best Available Overall"
               subtitle="Top remaining teams by composite rank"
               teams={bestAvailableOverall}
-              valueFormatter={(team) => `Composite ${formatComposite(getCompositeRank(team))}`}
+              valueFormatter={(team) =>
+                `Composite ${formatComposite(getCompositeRank(toTeamIntelligenceInput(team)))}`
+              }
             />
 
             <BestAvailableList
               title="Best Value Remaining"
               subtitle="Biggest positive gap between seed expectation and composite rank"
               teams={bestValueRemaining}
-              valueFormatter={(team) => `Value ${formatComposite(getValueScore(team))}`}
+              valueFormatter={(team) =>
+                `Value ${formatComposite(getValueScore(toTeamIntelligenceInput(team)))}`
+              }
             />
 
             <BestAvailableList
@@ -973,7 +1074,7 @@ export default function DraftPage() {
                 </div>
                 <div className="mt-1 text-sm text-slate-600">
                   {bestRemainingTeam
-                    ? `Composite ${formatComposite(getCompositeRank(bestRemainingTeam))}`
+                    ? `Composite ${formatComposite(getCompositeRank(toTeamIntelligenceInput(bestRemainingTeam)))}`
                     : "Draft complete"}
                 </div>
               </div>
@@ -982,10 +1083,70 @@ export default function DraftPage() {
             <div className="mt-6 grid gap-4 xl:grid-cols-2">
               <div className="rounded-xl border p-4">
                 <div className="text-sm font-semibold text-slate-900">
+                  Highest Graded Pick
+                </div>
+                {highestGradedPick ? (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <TeamLogo teamName={highestGradedPick.teamName} size={30} />
+                      <div>
+                        <div className="font-semibold">
+                          Pick #{highestGradedPick.overall_pick} • {highestGradedPick.teamName}
+                        </div>
+                        <div className="text-sm text-slate-600">
+                          {highestGradedPick.owner}
+                        </div>
+                      </div>
+                    </div>
+                    <GradeBadge
+                      grade={highestGradedPick.gradeLetter}
+                      score={highestGradedPick.gradeNumeric}
+                    />
+                    <div className="text-sm text-slate-500">
+                      {highestGradedPick.gradeRationale}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 text-sm text-slate-600">No picks yet.</div>
+                )}
+              </div>
+
+              <div className="rounded-xl border p-4">
+                <div className="text-sm font-semibold text-slate-900">
+                  Lowest Graded Pick
+                </div>
+                {lowestGradedPick ? (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <TeamLogo teamName={lowestGradedPick.teamName} size={30} />
+                      <div>
+                        <div className="font-semibold">
+                          Pick #{lowestGradedPick.overall_pick} • {lowestGradedPick.teamName}
+                        </div>
+                        <div className="text-sm text-slate-600">
+                          {lowestGradedPick.owner}
+                        </div>
+                      </div>
+                    </div>
+                    <GradeBadge
+                      grade={lowestGradedPick.gradeLetter}
+                      score={lowestGradedPick.gradeNumeric}
+                    />
+                    <div className="text-sm text-slate-500">
+                      {lowestGradedPick.gradeRationale}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 text-sm text-slate-600">No picks yet.</div>
+                )}
+              </div>
+
+              <div className="rounded-xl border p-4">
+                <div className="text-sm font-semibold text-slate-900">
                   Biggest Reach So Far
                 </div>
                 {biggestReachPick ? (
-                  <div className="mt-3">
+                  <div className="mt-3 space-y-2">
                     <div className="flex items-center gap-3">
                       <TeamLogo teamName={biggestReachPick.teamName} size={30} />
                       <div>
@@ -997,6 +1158,10 @@ export default function DraftPage() {
                         </div>
                       </div>
                     </div>
+                    <GradeBadge
+                      grade={biggestReachPick.gradeLetter}
+                      score={biggestReachPick.gradeNumeric}
+                    />
                   </div>
                 ) : (
                   <div className="mt-3 text-sm text-slate-600">No picks yet.</div>
@@ -1008,7 +1173,7 @@ export default function DraftPage() {
                   Strongest Analytic Pick So Far
                 </div>
                 {bestDraftedPick ? (
-                  <div className="mt-3">
+                  <div className="mt-3 space-y-2">
                     <div className="flex items-center gap-3">
                       <TeamLogo teamName={bestDraftedPick.teamName} size={30} />
                       <div>
@@ -1020,6 +1185,10 @@ export default function DraftPage() {
                         </div>
                       </div>
                     </div>
+                    <GradeBadge
+                      grade={bestDraftedPick.gradeLetter}
+                      score={bestDraftedPick.gradeNumeric}
+                    />
                   </div>
                 ) : (
                   <div className="mt-3 text-sm text-slate-600">No picks yet.</div>
@@ -1041,7 +1210,7 @@ export default function DraftPage() {
                       </div>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[520px]">
+                    <div className="grid gap-3 sm:grid-cols-4 lg:min-w-[680px]">
                       <div className="rounded-lg bg-slate-50 p-3">
                         <div className="text-xs uppercase tracking-wide text-slate-500">
                           Avg Composite
@@ -1062,11 +1231,28 @@ export default function DraftPage() {
 
                       <div className="rounded-lg bg-slate-50 p-3">
                         <div className="text-xs uppercase tracking-wide text-slate-500">
-                          Best Team Drafted
+                          Avg Grade
+                        </div>
+                        <div className="mt-1 font-semibold text-slate-900">
+                          {formatGradeScore(manager.avgGrade)}
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <div className="text-xs uppercase tracking-wide text-slate-500">
+                          Best Graded Pick
                         </div>
                         <div className="mt-1 font-semibold text-slate-900">
                           {manager.bestPick ? manager.bestPick.teamName : "—"}
                         </div>
+                        {manager.bestPick ? (
+                          <div className="mt-2">
+                            <GradeBadge
+                              grade={manager.bestPick.gradeLetter}
+                              score={manager.bestPick.gradeNumeric}
+                            />
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -1101,6 +1287,15 @@ export default function DraftPage() {
                           </div>
                           <div className="mt-1 text-sm text-slate-500">
                             Composite {formatComposite(pick.compositeRank)} • Value {formatComposite(pick.valueScore)}
+                          </div>
+                          <div className="mt-2">
+                            <GradeBadge
+                              grade={pick.gradeLetter}
+                              score={pick.gradeNumeric}
+                            />
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {pick.gradeRationale}
                           </div>
                         </div>
                       </div>
