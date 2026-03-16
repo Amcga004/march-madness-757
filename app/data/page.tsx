@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import TeamLogo from "../components/TeamLogo";
+import {
+  getCompositeRank,
+  getTeamIntelligence,
+} from "@/lib/teamIntelligence";
 
 type Team = {
   id: string;
@@ -22,6 +26,11 @@ type Team = {
   sos_net_rating: number | null;
   off_efg_pct: number | null;
   def_efg_pct: number | null;
+  value_score: number | null;
+  risk_score: number | null;
+  upset_score: number | null;
+  contender_score: number | null;
+  archetype_tags: string[];
 };
 
 type SortKey =
@@ -31,10 +40,6 @@ type SortKey =
   | "bpi_rank"
   | "net_rank"
   | "composite_rank"
-  | "value_score"
-  | "risk_score"
-  | "contender_score"
-  | "upset_score"
   | "off_efficiency"
   | "def_efficiency"
   | "off_efg_pct"
@@ -42,31 +47,21 @@ type SortKey =
   | "adj_tempo"
   | "sos_net_rating"
   | "quad1_record"
-  | "quad2_record";
+  | "quad2_record"
+  | "value_score"
+  | "risk_score"
+  | "upset_score"
+  | "contender_score";
 
 type SortDirection = "asc" | "desc";
 
-type TeamIntelligence = {
-  compositeRank: number | null;
-  valueScore: number | null;
-  riskScore: number | null;
-  contenderScore: number | null;
-  upsetScore: number | null;
-  archetypeTags: string[];
+type CompareMetricRowProps = {
+  label: string;
+  aValue: number | null;
+  bValue: number | null;
+  formatter: (value: number | null) => string;
+  betterDirection: "higher" | "lower";
 };
-
-function clamp(value: number, min = 0, max = 100) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function average(values: Array<number | null | undefined>) {
-  const valid = values.filter(
-    (value): value is number => typeof value === "number" && !Number.isNaN(value)
-  );
-
-  if (valid.length === 0) return null;
-  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
-}
 
 function formatMetric(value: number | null, digits = 1) {
   if (value === null || value === undefined) return "—";
@@ -106,188 +101,8 @@ function parseQuadLosses(record: string | null) {
   return Number.isNaN(parsed) ? 999 : parsed;
 }
 
-function parseWinPct(record: string | null) {
-  if (!record) return null;
-
-  const [winsString, lossesString] = record.split("-");
-  const wins = Number(winsString);
-  const losses = Number(lossesString);
-
-  if (Number.isNaN(wins) || Number.isNaN(losses) || wins + losses === 0) {
-    return null;
-  }
-
-  return wins / (wins + losses);
-}
-
-function getCompositeRank(team: Team) {
-  return average([team.kenpom_rank, team.bpi_rank, team.net_rank]);
-}
-
-function getTeamIntelligence(team: Team): TeamIntelligence {
-  const compositeRank = getCompositeRank(team);
-  const quad1Wins = parseQuadWins(team.quad1_record);
-  const quad1Losses = parseQuadLosses(team.quad1_record);
-  const quad2Wins = parseQuadWins(team.quad2_record);
-  const quad2Losses = parseQuadLosses(team.quad2_record);
-  const quad1Pct =
-    quad1Wins >= 0 && quad1Losses < 999 && quad1Wins + quad1Losses > 0
-      ? quad1Wins / (quad1Wins + quad1Losses)
-      : null;
-  const quad2Pct =
-    quad2Wins >= 0 && quad2Losses < 999 && quad2Wins + quad2Losses > 0
-      ? quad2Wins / (quad2Wins + quad2Losses)
-      : null;
-
-  const seedValue = typeof team.seed === "number" ? team.seed * 8 : null;
-  const valueScore =
-    compositeRank !== null && seedValue !== null
-      ? Number((seedValue - compositeRank).toFixed(2))
-      : null;
-
-  let riskBase = 0;
-
-  if (compositeRank !== null && seedValue !== null && compositeRank > seedValue + 8) {
-    riskBase += Math.min(35, (compositeRank - seedValue - 8) * 2.5);
-  }
-
-  if (team.def_efficiency !== null) {
-    if (team.def_efficiency >= 103) riskBase += 18;
-    else if (team.def_efficiency >= 100) riskBase += 10;
-  }
-
-  if (quad1Pct !== null) {
-    if (quad1Pct < 0.35) riskBase += 20;
-    else if (quad1Pct < 0.45) riskBase += 10;
-  } else {
-    riskBase += 6;
-  }
-
-  if (team.sos_net_rating !== null) {
-    if (team.sos_net_rating < 0) riskBase += 12;
-    else if (team.sos_net_rating < 3) riskBase += 6;
-  }
-
-  const riskScore = Number(clamp(riskBase).toFixed(1));
-
-  let contenderBase = 0;
-
-  if (compositeRank !== null) {
-    contenderBase += clamp(42 - compositeRank, 0, 40);
-  }
-
-  if (team.off_efficiency !== null) {
-    contenderBase += clamp((team.off_efficiency - 110) * 1.4, 0, 22);
-  }
-
-  if (team.def_efficiency !== null) {
-    contenderBase += clamp((102 - team.def_efficiency) * 2.2, 0, 24);
-  }
-
-  if (quad1Pct !== null) {
-    contenderBase += clamp((quad1Pct - 0.4) * 35, 0, 14);
-  }
-
-  const contenderScore = Number(clamp(contenderBase).toFixed(1));
-
-  let upsetBase = 0;
-
-  if (team.seed >= 8) upsetBase += 20;
-  else if (team.seed >= 6) upsetBase += 12;
-
-  if (valueScore !== null && valueScore > 0) {
-    upsetBase += clamp(valueScore * 2.5, 0, 25);
-  }
-
-  if (team.off_efficiency !== null) {
-    upsetBase += clamp((team.off_efficiency - 112) * 1.1, 0, 15);
-  }
-
-  if (team.def_efficiency !== null) {
-    upsetBase += clamp((101.5 - team.def_efficiency) * 1.4, 0, 15);
-  }
-
-  if (quad1Pct !== null) {
-    upsetBase += clamp((quad1Pct - 0.35) * 24, 0, 10);
-  }
-
-  const upsetScore = Number(clamp(upsetBase).toFixed(1));
-
-  const archetypeTags: string[] = [];
-
-  if (team.off_efficiency !== null && team.off_efficiency >= 123) {
-    archetypeTags.push("Elite Offense");
-  }
-
-  if (team.def_efficiency !== null && team.def_efficiency <= 96) {
-    archetypeTags.push("Elite Defense");
-  }
-
-  if (
-    team.off_efficiency !== null &&
-    team.off_efficiency >= 118 &&
-    team.def_efficiency !== null &&
-    team.def_efficiency <= 99
-  ) {
-    archetypeTags.push("Balanced Contender");
-  }
-
-  if (team.adj_tempo !== null && team.adj_tempo >= 70) {
-    archetypeTags.push("Tempo Pressure");
-  }
-
-  if (valueScore !== null && valueScore >= 10) {
-    archetypeTags.push("Undervalued Seed");
-  }
-
-  if (riskScore >= 45) {
-    archetypeTags.push("Fragile Resume");
-  }
-
-  if (upsetScore >= 45 && team.seed >= 8) {
-    archetypeTags.push("Bracket Buster");
-  }
-
-  if (compositeRank !== null && compositeRank <= 20 && team.seed >= 5) {
-    archetypeTags.push("Analytics Darling");
-  }
-
-  return {
-    compositeRank: compositeRank === null ? null : Number(compositeRank.toFixed(2)),
-    valueScore,
-    riskScore,
-    contenderScore,
-    upsetScore,
-    archetypeTags,
-  };
-}
-
-function getComparisonCellClass(
-  winner: "a" | "b" | "tie",
-  side: "a" | "b"
-) {
-  if (winner === "tie") return "text-slate-700";
-  if (winner === side) return "bg-emerald-50 text-emerald-700 font-semibold";
-  return "text-slate-500";
-}
-
-function compareMetricValues(
-  aValue: number | null,
-  bValue: number | null,
-  betterDirection: "higher" | "lower"
-): "a" | "b" | "tie" {
-  if (aValue === null && bValue === null) return "tie";
-  if (aValue !== null && bValue === null) return "a";
-  if (aValue === null && bValue !== null) return "b";
-  if (aValue === null || bValue === null) return "tie";
-
-  if (aValue === bValue) return "tie";
-
-  if (betterDirection === "higher") {
-    return aValue > bValue ? "a" : "b";
-  }
-
-  return aValue < bValue ? "a" : "b";
+function getCompositeRankDisplay(team: Team) {
+  return getCompositeRank(team);
 }
 
 function SortButton({
@@ -333,22 +148,37 @@ function CompareMetricRow({
   bValue,
   formatter,
   betterDirection,
-}: {
-  label: string;
-  aValue: number | null;
-  bValue: number | null;
-  formatter: (value: number | null) => string;
-  betterDirection: "higher" | "lower";
-}) {
-  const winner = compareMetricValues(aValue, bValue, betterDirection);
+}: CompareMetricRowProps) {
+  const hasA = aValue !== null && aValue !== undefined;
+  const hasB = bValue !== null && bValue !== undefined;
+
+  let aHighlight = "";
+  let bHighlight = "";
+
+  if (hasA && hasB && aValue !== bValue) {
+    const aBetter =
+      betterDirection === "higher"
+        ? (aValue as number) > (bValue as number)
+        : (aValue as number) < (bValue as number);
+
+    if (aBetter) {
+      aHighlight = "font-semibold text-emerald-700";
+      bHighlight = "text-slate-600";
+    } else {
+      aHighlight = "text-slate-600";
+      bHighlight = "font-semibold text-emerald-700";
+    }
+  }
 
   return (
     <tr className="border-t border-slate-200">
-      <td className={`px-4 py-3 ${getComparisonCellClass(winner, "a")}`}>
+      <td className={`px-4 py-3 text-left ${aHighlight}`}>
         {formatter(aValue)}
       </td>
-      <td className="px-4 py-3 text-center font-medium text-slate-900">{label}</td>
-      <td className={`px-4 py-3 ${getComparisonCellClass(winner, "b")} text-right`}>
+      <td className="px-4 py-3 text-center font-medium text-slate-700">
+        {label}
+      </td>
+      <td className={`px-4 py-3 text-right ${bHighlight}`}>
         {formatter(bValue)}
       </td>
     </tr>
@@ -366,10 +196,8 @@ export default function DataPage() {
   const [compareTeamBId, setCompareTeamBId] = useState("none");
 
   const compareOptions = useMemo(() => {
-  return [...teams].sort((a, b) =>
-    a.school_name.localeCompare(b.school_name)
-  );
-}, [teams]);
+    return [...teams].sort((a, b) => a.school_name.localeCompare(b.school_name));
+  }, [teams]);
 
   useEffect(() => {
     async function loadData() {
@@ -381,7 +209,23 @@ export default function DataPage() {
         .not("school_name", "like", "PLAY-IN:%");
 
       if (data) {
-        setTeams(data as Team[]);
+        const enrichedTeams = (data as Omit<
+          Team,
+          "value_score" | "risk_score" | "upset_score" | "contender_score" | "archetype_tags"
+        >[]).map((team) => {
+          const intelligence = getTeamIntelligence(team);
+
+          return {
+            ...team,
+            value_score: intelligence.value_score,
+            risk_score: intelligence.risk_score,
+            upset_score: intelligence.upset_score,
+            contender_score: intelligence.contender_score,
+            archetype_tags: intelligence.archetype_tags,
+          };
+        });
+
+        setTeams(enrichedTeams);
       }
     }
 
@@ -398,13 +242,34 @@ export default function DataPage() {
     setSortDirection("asc");
   }
 
+  const compareTeamA = useMemo(() => {
+    if (compareTeamAId === "none") return null;
+    return teams.find((team) => team.id === compareTeamAId) ?? null;
+  }, [teams, compareTeamAId]);
+
+  const compareTeamB = useMemo(() => {
+    if (compareTeamBId === "none") return null;
+    return teams.find((team) => team.id === compareTeamBId) ?? null;
+  }, [teams, compareTeamBId]);
+
+  const comparisonState = useMemo(() => {
+    if (!compareTeamA || !compareTeamB) return null;
+
+    return {
+      teamA: compareTeamA,
+      teamB: compareTeamB,
+      intelA: getTeamIntelligence(compareTeamA),
+      intelB: getTeamIntelligence(compareTeamB),
+    };
+  }, [compareTeamA, compareTeamB]);
+
   const filteredAndSortedTeams = useMemo(() => {
     const query = search.trim().toLowerCase();
 
     const filtered = teams.filter((team) => {
-      const intelligence = getTeamIntelligence(team);
-
       if (!query) return true;
+
+      const compositeRank = getCompositeRankDisplay(team);
 
       const searchable = [
         team.school_name,
@@ -416,8 +281,20 @@ export default function DataPage() {
         team.kenpom_rank ? `kenpom ${team.kenpom_rank}` : "",
         team.bpi_rank ? `bpi ${team.bpi_rank}` : "",
         team.net_rank ? `net ${team.net_rank}` : "",
-        intelligence.compositeRank ? `composite ${intelligence.compositeRank.toFixed(2)}` : "",
-        ...intelligence.archetypeTags,
+        compositeRank ? `composite ${compositeRank.toFixed(2)}` : "",
+        team.value_score !== null && team.value_score !== undefined
+          ? `value ${team.value_score.toFixed(1)}`
+          : "",
+        team.risk_score !== null && team.risk_score !== undefined
+          ? `risk ${team.risk_score.toFixed(1)}`
+          : "",
+        team.upset_score !== null && team.upset_score !== undefined
+          ? `upset ${team.upset_score.toFixed(1)}`
+          : "",
+        team.contender_score !== null && team.contender_score !== undefined
+          ? `contender ${team.contender_score.toFixed(1)}`
+          : "",
+        ...(team.archetype_tags ?? []),
       ]
         .join(" ")
         .toLowerCase();
@@ -426,8 +303,8 @@ export default function DataPage() {
     });
 
     const sorted = [...filtered].sort((a, b) => {
-      const aIntel = getTeamIntelligence(a);
-      const bIntel = getTeamIntelligence(b);
+      const compositeA = getCompositeRankDisplay(a);
+      const compositeB = getCompositeRankDisplay(b);
 
       let comparison = 0;
 
@@ -452,19 +329,7 @@ export default function DataPage() {
           comparison = (a.net_rank ?? 9999) - (b.net_rank ?? 9999);
           break;
         case "composite_rank":
-          comparison = (aIntel.compositeRank ?? 9999) - (bIntel.compositeRank ?? 9999);
-          break;
-        case "value_score":
-          comparison = (aIntel.valueScore ?? -9999) - (bIntel.valueScore ?? -9999);
-          break;
-        case "risk_score":
-          comparison = (aIntel.riskScore ?? -9999) - (bIntel.riskScore ?? -9999);
-          break;
-        case "contender_score":
-          comparison = (aIntel.contenderScore ?? -9999) - (bIntel.contenderScore ?? -9999);
-          break;
-        case "upset_score":
-          comparison = (aIntel.upsetScore ?? -9999) - (bIntel.upsetScore ?? -9999);
+          comparison = (compositeA ?? 9999) - (compositeB ?? 9999);
           break;
         case "off_efficiency":
           comparison = (a.off_efficiency ?? -9999) - (b.off_efficiency ?? -9999);
@@ -498,6 +363,18 @@ export default function DataPage() {
           }
           comparison *= -1;
           break;
+        case "value_score":
+          comparison = (a.value_score ?? -9999) - (b.value_score ?? -9999);
+          break;
+        case "risk_score":
+          comparison = (a.risk_score ?? -9999) - (b.risk_score ?? -9999);
+          break;
+        case "upset_score":
+          comparison = (a.upset_score ?? -9999) - (b.upset_score ?? -9999);
+          break;
+        case "contender_score":
+          comparison = (a.contender_score ?? -9999) - (b.contender_score ?? -9999);
+          break;
         default:
           comparison = 0;
       }
@@ -512,27 +389,6 @@ export default function DataPage() {
     return sorted;
   }, [teams, search, sortKey, sortDirection]);
 
-  const compareTeamA = useMemo(() => {
-    if (compareTeamAId === "none") return null;
-    return teams.find((team) => team.id === compareTeamAId) ?? null;
-  }, [teams, compareTeamAId]);
-
-  const compareTeamB = useMemo(() => {
-    if (compareTeamBId === "none") return null;
-    return teams.find((team) => team.id === compareTeamBId) ?? null;
-  }, [teams, compareTeamBId]);
-
-  const comparisonState = useMemo(() => {
-    if (!compareTeamA || !compareTeamB) return null;
-
-    return {
-      teamA: compareTeamA,
-      teamB: compareTeamB,
-      intelA: getTeamIntelligence(compareTeamA),
-      intelB: getTeamIntelligence(compareTeamB),
-    };
-  }, [compareTeamA, compareTeamB]);
-
   return (
     <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
       <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:mb-8 sm:p-8">
@@ -544,9 +400,9 @@ export default function DataPage() {
             <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
               2026 Field Data Board
             </h2>
-            <p className="mt-3 max-w-5xl text-sm text-slate-600 sm:text-base">
-              Tournament field reference board with rankings, efficiency, résumé,
-              value, risk, contender profile, upset potential, and comparison tools.
+            <p className="mt-3 max-w-4xl text-sm text-slate-600 sm:text-base">
+              Tournament field reference board with ranking, efficiency, tempo,
+              résumé, and derived intelligence across KenPom, BPI, and NET.
             </p>
           </div>
 
@@ -572,12 +428,12 @@ export default function DataPage() {
               id="team-search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by team, region, seed, record, ranking, or archetype"
+              placeholder="Search by team, region, seed, record, tag, or ranking"
               className="w-full rounded-xl border border-slate-300 px-3 py-2"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 lg:min-w-[300px]">
+          <div className="grid grid-cols-2 gap-3 lg:min-w-[260px]">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
               <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 Default Sort
@@ -591,7 +447,7 @@ export default function DataPage() {
               <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 Current Sort
               </div>
-              <div className="mt-1 text-sm font-semibold text-slate-900">
+              <div className="mt-1 text-sm font-semibold capitalize text-slate-900">
                 {sortKey.replaceAll("_", " ")}
               </div>
             </div>
@@ -602,9 +458,13 @@ export default function DataPage() {
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:mb-8 sm:p-6">
         <div className="flex flex-col gap-4">
           <div>
-            <h3 className="text-xl font-bold text-slate-950">Team Comparison</h3>
+            <h3 className="text-xl font-semibold text-slate-950">
+              Team Comparison
+            </h3>
             <p className="mt-1 text-sm text-slate-600">
-              Choose any two tournament teams to compare their profile side by side.
+              Select any two teams to compare their profile, intelligence scores,
+              and stylistic tags. Leave either selection on NONE to hide the
+              comparison panel.
             </p>
           </div>
 
@@ -618,7 +478,7 @@ export default function DataPage() {
                 onChange={(e) => setCompareTeamAId(e.target.value)}
                 className="w-full rounded-xl border border-slate-300 px-3 py-2"
               >
-                <option value="none">None</option>
+                <option value="none">NONE</option>
                 {compareOptions.map((team) => (
                   <option key={team.id} value={team.id}>
                     {team.school_name}
@@ -636,7 +496,7 @@ export default function DataPage() {
                 onChange={(e) => setCompareTeamBId(e.target.value)}
                 className="w-full rounded-xl border border-slate-300 px-3 py-2"
               >
-                <option value="none">None</option>
+                <option value="none">NONE</option>
                 {compareOptions.map((team) => (
                   <option key={team.id} value={team.id}>
                     {team.school_name}
@@ -661,13 +521,14 @@ export default function DataPage() {
                         {comparisonState.teamA.school_name}
                       </div>
                       <div className="mt-1 text-sm text-slate-600">
-                        {comparisonState.teamA.seed} Seed • {comparisonState.teamA.region} • {comparisonState.teamA.record ?? "—"}
+                        {comparisonState.teamA.seed} Seed • {comparisonState.teamA.region} •{" "}
+                        {comparisonState.teamA.record ?? "—"}
                       </div>
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {comparisonState.intelA.archetypeTags.length > 0 ? (
-                      comparisonState.intelA.archetypeTags.map((tag) => (
+                    {comparisonState.intelA.archetype_tags.length > 0 ? (
+                      comparisonState.intelA.archetype_tags.map((tag) => (
                         <span
                           key={tag}
                           className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
@@ -689,13 +550,14 @@ export default function DataPage() {
                         {comparisonState.teamB.school_name}
                       </div>
                       <div className="mt-1 text-sm text-slate-600">
-                        {comparisonState.teamB.seed} Seed • {comparisonState.teamB.region} • {comparisonState.teamB.record ?? "—"}
+                        {comparisonState.teamB.seed} Seed • {comparisonState.teamB.region} •{" "}
+                        {comparisonState.teamB.record ?? "—"}
                       </div>
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {comparisonState.intelB.archetypeTags.length > 0 ? (
-                      comparisonState.intelB.archetypeTags.map((tag) => (
+                    {comparisonState.intelB.archetype_tags.length > 0 ? (
+                      comparisonState.intelB.archetype_tags.map((tag) => (
                         <span
                           key={tag}
                           className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
@@ -715,107 +577,97 @@ export default function DataPage() {
                   <table className="min-w-[900px] w-full text-sm">
                     <thead className="bg-slate-950 text-white">
                       <tr>
-                        <th className="px-4 py-3 text-left">{comparisonState.teamA.school_name}</th>
+                        <th className="px-4 py-3 text-left">
+                          {comparisonState.teamA.school_name}
+                        </th>
                         <th className="px-4 py-3 text-center">Metric</th>
-                        <th className="px-4 py-3 text-right">{comparisonState.teamB.school_name}</th>
+                        <th className="px-4 py-3 text-right">
+                          {comparisonState.teamB.school_name}
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white">
                       <CompareMetricRow
                         label="Composite Rank"
-                        aValue={comparisonState.intelA.compositeRank}
-                        bValue={comparisonState.intelB.compositeRank}
+                        aValue={comparisonState.intelA.composite_rank}
+                        bValue={comparisonState.intelB.composite_rank}
                         formatter={(value) => (value === null ? "—" : value.toFixed(2))}
                         betterDirection="lower"
                       />
                       <CompareMetricRow
                         label="Value Score"
-                        aValue={comparisonState.intelA.valueScore}
-                        bValue={comparisonState.intelB.valueScore}
+                        aValue={comparisonState.intelA.value_score}
+                        bValue={comparisonState.intelB.value_score}
                         formatter={(value) => (value === null ? "—" : value.toFixed(1))}
                         betterDirection="higher"
                       />
                       <CompareMetricRow
                         label="Risk Score"
-                        aValue={comparisonState.intelA.riskScore}
-                        bValue={comparisonState.intelB.riskScore}
+                        aValue={comparisonState.intelA.risk_score}
+                        bValue={comparisonState.intelB.risk_score}
                         formatter={(value) => (value === null ? "—" : value.toFixed(1))}
                         betterDirection="lower"
                       />
                       <CompareMetricRow
-                        label="Contender Score"
-                        aValue={comparisonState.intelA.contenderScore}
-                        bValue={comparisonState.intelB.contenderScore}
+                        label="Upset Score"
+                        aValue={comparisonState.intelA.upset_score}
+                        bValue={comparisonState.intelB.upset_score}
                         formatter={(value) => (value === null ? "—" : value.toFixed(1))}
                         betterDirection="higher"
                       />
                       <CompareMetricRow
-                        label="Upset Score"
-                        aValue={comparisonState.intelA.upsetScore}
-                        bValue={comparisonState.intelB.upsetScore}
+                        label="Contender Score"
+                        aValue={comparisonState.intelA.contender_score}
+                        bValue={comparisonState.intelB.contender_score}
                         formatter={(value) => (value === null ? "—" : value.toFixed(1))}
                         betterDirection="higher"
                       />
                       <CompareMetricRow
                         label="KenPom Rank"
-                        aValue={comparisonState.teamA.kenpom_rank ?? null}
-                        bValue={comparisonState.teamB.kenpom_rank ?? null}
+                        aValue={comparisonState.teamA.kenpom_rank}
+                        bValue={comparisonState.teamB.kenpom_rank}
                         formatter={(value) => (value === null ? "—" : String(value))}
                         betterDirection="lower"
                       />
                       <CompareMetricRow
                         label="BPI Rank"
-                        aValue={comparisonState.teamA.bpi_rank ?? null}
-                        bValue={comparisonState.teamB.bpi_rank ?? null}
+                        aValue={comparisonState.teamA.bpi_rank}
+                        bValue={comparisonState.teamB.bpi_rank}
                         formatter={(value) => (value === null ? "—" : String(value))}
                         betterDirection="lower"
                       />
                       <CompareMetricRow
                         label="NET Rank"
-                        aValue={comparisonState.teamA.net_rank ?? null}
-                        bValue={comparisonState.teamB.net_rank ?? null}
+                        aValue={comparisonState.teamA.net_rank}
+                        bValue={comparisonState.teamB.net_rank}
                         formatter={(value) => (value === null ? "—" : String(value))}
                         betterDirection="lower"
                       />
                       <CompareMetricRow
                         label="Off Efficiency"
-                        aValue={comparisonState.teamA.off_efficiency ?? null}
-                        bValue={comparisonState.teamB.off_efficiency ?? null}
+                        aValue={comparisonState.teamA.off_efficiency}
+                        bValue={comparisonState.teamB.off_efficiency}
                         formatter={(value) => (value === null ? "—" : value.toFixed(1))}
                         betterDirection="higher"
                       />
                       <CompareMetricRow
                         label="Def Efficiency"
-                        aValue={comparisonState.teamA.def_efficiency ?? null}
-                        bValue={comparisonState.teamB.def_efficiency ?? null}
-                        formatter={(value) => (value === null ? "—" : value.toFixed(1))}
-                        betterDirection="lower"
-                      />
-                      <CompareMetricRow
-                        label="Off eFG%"
-                        aValue={comparisonState.teamA.off_efg_pct ?? null}
-                        bValue={comparisonState.teamB.off_efg_pct ?? null}
-                        formatter={(value) => (value === null ? "—" : value.toFixed(1))}
-                        betterDirection="higher"
-                      />
-                      <CompareMetricRow
-                        label="Def eFG%"
-                        aValue={comparisonState.teamA.def_efg_pct ?? null}
-                        bValue={comparisonState.teamB.def_efg_pct ?? null}
+                        aValue={comparisonState.teamA.def_efficiency}
+                        bValue={comparisonState.teamB.def_efficiency}
                         formatter={(value) => (value === null ? "—" : value.toFixed(1))}
                         betterDirection="lower"
                       />
                       <CompareMetricRow
                         label="Adj Tempo"
-                        aValue={comparisonState.teamA.adj_tempo ?? null}
-                        bValue={comparisonState.teamB.adj_tempo ?? null}
+                        aValue={comparisonState.teamA.adj_tempo}
+                        bValue={comparisonState.teamB.adj_tempo}
                         formatter={(value) => (value === null ? "—" : value.toFixed(1))}
                         betterDirection="higher"
                       />
                       <CompareMetricRow
                         label="SOS Net Rating"
-                        aValue={comparisonState.teamA.sos_net_rating ?? null}
-                        bValue={comparisonState.teamB.sos_net_rating ?? null}
+                        aValue={comparisonState.teamA.sos_net_rating}
+                        bValue={comparisonState.teamB.sos_net_rating}
                         formatter={(value) => (value === null ? "—" : value.toFixed(2))}
                         betterDirection="higher"
                       />
@@ -830,7 +682,7 @@ export default function DataPage() {
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-[2100px] w-full text-sm">
+          <table className="min-w-[2050px] w-full text-sm">
             <thead className="bg-slate-950 text-white">
               <tr>
                 <th className="px-4 py-3 text-left">
@@ -885,46 +737,6 @@ export default function DataPage() {
                   <SortButton
                     label="Composite"
                     sortKey="composite_rank"
-                    activeSortKey={sortKey}
-                    direction={sortDirection}
-                    onClick={handleSort}
-                    align="right"
-                  />
-                </th>
-                <th className="px-4 py-3 text-right">
-                  <SortButton
-                    label="Value"
-                    sortKey="value_score"
-                    activeSortKey={sortKey}
-                    direction={sortDirection}
-                    onClick={handleSort}
-                    align="right"
-                  />
-                </th>
-                <th className="px-4 py-3 text-right">
-                  <SortButton
-                    label="Risk"
-                    sortKey="risk_score"
-                    activeSortKey={sortKey}
-                    direction={sortDirection}
-                    onClick={handleSort}
-                    align="right"
-                  />
-                </th>
-                <th className="px-4 py-3 text-right">
-                  <SortButton
-                    label="Contender"
-                    sortKey="contender_score"
-                    activeSortKey={sortKey}
-                    direction={sortDirection}
-                    onClick={handleSort}
-                    align="right"
-                  />
-                </th>
-                <th className="px-4 py-3 text-right">
-                  <SortButton
-                    label="Upset"
-                    sortKey="upset_score"
                     activeSortKey={sortKey}
                     direction={sortDirection}
                     onClick={handleSort}
@@ -1009,7 +821,49 @@ export default function DataPage() {
                     onClick={handleSort}
                   />
                 </th>
-                <th className="px-4 py-3 text-left">Archetypes</th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Value"
+                    sortKey="value_score"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Risk"
+                    sortKey="risk_score"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Upset"
+                    sortKey="upset_score"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton
+                    label="Contender"
+                    sortKey="contender_score"
+                    activeSortKey={sortKey}
+                    direction={sortDirection}
+                    onClick={handleSort}
+                    align="right"
+                  />
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white">
+                  Archetypes
+                </th>
               </tr>
             </thead>
 
@@ -1022,7 +876,7 @@ export default function DataPage() {
                 </tr>
               ) : (
                 filteredAndSortedTeams.map((team) => {
-                  const intel = getTeamIntelligence(team);
+                  const compositeRank = getCompositeRankDisplay(team);
 
                   return (
                     <tr
@@ -1060,23 +914,7 @@ export default function DataPage() {
                       </td>
 
                       <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                        {intel.compositeRank === null ? "—" : intel.compositeRank.toFixed(2)}
-                      </td>
-
-                      <td className="px-4 py-3 text-right text-slate-700">
-                        {intel.valueScore === null ? "—" : intel.valueScore.toFixed(1)}
-                      </td>
-
-                      <td className="px-4 py-3 text-right text-slate-700">
-                        {intel.riskScore === null ? "—" : intel.riskScore.toFixed(1)}
-                      </td>
-
-                      <td className="px-4 py-3 text-right text-slate-700">
-                        {intel.contenderScore === null ? "—" : intel.contenderScore.toFixed(1)}
-                      </td>
-
-                      <td className="px-4 py-3 text-right text-slate-700">
-                        {intel.upsetScore === null ? "—" : intel.upsetScore.toFixed(1)}
+                        {compositeRank === null ? "—" : compositeRank.toFixed(2)}
                       </td>
 
                       <td className="px-4 py-3 text-right text-slate-700">
@@ -1100,7 +938,9 @@ export default function DataPage() {
                       </td>
 
                       <td className="px-4 py-3 text-right text-slate-700">
-                        {team.sos_net_rating == null ? "—" : team.sos_net_rating.toFixed(2)}
+                        {team.sos_net_rating === null || team.sos_net_rating === undefined
+                          ? "—"
+                          : team.sos_net_rating.toFixed(2)}
                       </td>
 
                       <td className="px-4 py-3 text-slate-700">
@@ -1111,13 +951,37 @@ export default function DataPage() {
                         {team.quad2_record ?? "—"}
                       </td>
 
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {team.value_score === null || team.value_score === undefined
+                          ? "—"
+                          : team.value_score.toFixed(1)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {team.risk_score === null || team.risk_score === undefined
+                          ? "—"
+                          : team.risk_score.toFixed(1)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {team.upset_score === null || team.upset_score === undefined
+                          ? "—"
+                          : team.upset_score.toFixed(1)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {team.contender_score === null || team.contender_score === undefined
+                          ? "—"
+                          : team.contender_score.toFixed(1)}
+                      </td>
+
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2">
-                          {intel.archetypeTags.length > 0 ? (
-                            intel.archetypeTags.map((tag) => (
+                          {team.archetype_tags && team.archetype_tags.length > 0 ? (
+                            team.archetype_tags.map((tag) => (
                               <span
                                 key={tag}
-                                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700"
+                                className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700"
                               >
                                 {tag}
                               </span>

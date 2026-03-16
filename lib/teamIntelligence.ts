@@ -1,34 +1,42 @@
 export type TeamIntelligenceInput = {
   school_name: string;
   seed: number | null;
-  region?: string | null;
   kenpom_rank: number | null;
   bpi_rank: number | null;
   net_rank: number | null;
-  record: string | null;
-  conference_record?: string | null;
   off_efficiency: number | null;
   def_efficiency: number | null;
+  adj_tempo: number | null;
+  sos_net_rating: number | null;
   quad1_record: string | null;
   quad2_record: string | null;
-  adj_tempo?: number | null;
-  sos_net_rating?: number | null;
-  off_efg_pct?: number | null;
-  def_efg_pct?: number | null;
 };
 
-function clamp(value: number, min: number, max: number) {
+export type TeamIntelligence = {
+  composite_rank: number | null;
+  value_score: number | null;
+  risk_score: number | null;
+  upset_score: number | null;
+  contender_score: number | null;
+  archetype_tags: string[];
+};
+
+function clamp(value: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, value));
 }
 
-function roundTo(value: number, digits = 2) {
-  const factor = 10 ** digits;
-  return Math.round(value * factor) / factor;
+function round1(value: number) {
+  return Math.round(value * 10) / 10;
 }
 
-export function parseRecord(record: string | null) {
+function parseRecord(record: string | null) {
   if (!record) {
-    return { wins: 0, losses: 0, total: 0, winPct: 0 };
+    return {
+      wins: 0,
+      losses: 0,
+      total: 0,
+      winPct: 0,
+    };
   }
 
   const [winsRaw, lossesRaw] = record.split("-");
@@ -36,210 +44,270 @@ export function parseRecord(record: string | null) {
   const losses = Number(lossesRaw);
 
   if (Number.isNaN(wins) || Number.isNaN(losses)) {
-    return { wins: 0, losses: 0, total: 0, winPct: 0 };
+    return {
+      wins: 0,
+      losses: 0,
+      total: 0,
+      winPct: 0,
+    };
   }
 
   const total = wins + losses;
   const winPct = total > 0 ? wins / total : 0;
 
-  return { wins, losses, total, winPct };
+  return {
+    wins,
+    losses,
+    total,
+    winPct,
+  };
 }
 
-export function getCompositeRank(team: TeamIntelligenceInput) {
+export function getCompositeRank(team: TeamIntelligenceInput): number | null {
   const ranks = [team.kenpom_rank, team.bpi_rank, team.net_rank].filter(
     (value): value is number => value !== null && value !== undefined
   );
 
   if (ranks.length === 0) return null;
 
-  return roundTo(ranks.reduce((sum, value) => sum + value, 0) / ranks.length, 2);
+  return round1(ranks.reduce((sum, value) => sum + value, 0) / ranks.length);
 }
 
-export function getExpectedRankFromSeed(seed: number | null) {
+function getSeedStrengthBaseline(seed: number | null): number | null {
   if (seed === null || seed === undefined) return null;
-  return roundTo((seed - 1) * 4 + 2.5, 2);
+
+  const seedToExpectedRank: Record<number, number> = {
+    1: 4,
+    2: 8,
+    3: 12,
+    4: 16,
+    5: 20,
+    6: 24,
+    7: 28,
+    8: 32,
+    9: 36,
+    10: 40,
+    11: 44,
+    12: 48,
+    13: 52,
+    14: 56,
+    15: 60,
+    16: 64,
+  };
+
+  return seedToExpectedRank[seed] ?? null;
 }
 
-export function getValueScore(team: TeamIntelligenceInput) {
-  const expectedRank = getExpectedRankFromSeed(team.seed);
+export function getValueScore(team: TeamIntelligenceInput): number | null {
   const compositeRank = getCompositeRank(team);
+  const expectedRank = getSeedStrengthBaseline(team.seed);
 
-  if (expectedRank === null || compositeRank === null) return null;
+  if (compositeRank === null || expectedRank === null) return null;
 
-  return roundTo(expectedRank - compositeRank, 2);
-}
-
-function getQuadResumeScore(team: TeamIntelligenceInput) {
   const q1 = parseRecord(team.quad1_record);
   const q2 = parseRecord(team.quad2_record);
 
-  const q1Weighted = q1.wins * 2.5 - q1.losses * 1.25;
-  const q2Weighted = q2.wins * 1.25 - q2.losses * 0.5;
+  const rankAdvantage = expectedRank - compositeRank;
+  const q1Boost = q1.wins * 2.25;
+  const q2Boost = q2.wins * 0.9;
+  const sosBoost = (team.sos_net_rating ?? 0) * 1.15;
 
-  return q1Weighted + q2Weighted;
+  return round1(rankAdvantage + q1Boost + q2Boost + sosBoost);
 }
 
-function getOffenseRankEquivalent(team: TeamIntelligenceInput) {
-  if (team.off_efficiency === null || team.off_efficiency === undefined) return null;
-
-  const value = team.off_efficiency;
-  const mapped = ((131.6 - value) / (131.6 - 87.1)) * 364 + 1;
-  return clamp(roundTo(mapped, 2), 1, 365);
-}
-
-function getDefenseRankEquivalent(team: TeamIntelligenceInput) {
-  if (team.def_efficiency === null || team.def_efficiency === undefined) return null;
-
-  const value = team.def_efficiency;
-  const mapped = ((value - 89.0) / (126.1 - 89.0)) * 364 + 1;
-  return clamp(roundTo(mapped, 2), 1, 365);
-}
-
-export function getRiskScore(team: TeamIntelligenceInput) {
+export function getRiskScore(team: TeamIntelligenceInput): number | null {
   const compositeRank = getCompositeRank(team);
-  const defenseRank = getDefenseRankEquivalent(team);
-  const seed = team.seed;
+  const expectedRank = getSeedStrengthBaseline(team.seed);
+
+  if (
+    compositeRank === null &&
+    team.def_efficiency === null &&
+    team.sos_net_rating === null &&
+    !team.quad1_record
+  ) {
+    return null;
+  }
+
   const q1 = parseRecord(team.quad1_record);
-  const sos = team.sos_net_rating;
+  const seedInflation = expectedRank !== null && compositeRank !== null
+    ? Math.max(0, compositeRank - expectedRank)
+    : 0;
 
-  if (compositeRank === null || defenseRank === null || seed === null) return null;
+  const weakDefensePenalty =
+    team.def_efficiency !== null ? Math.max(0, team.def_efficiency - 98) * 2.2 : 0;
 
-  const seedExpectationGap = Math.max(0, compositeRank - (getExpectedRankFromSeed(seed) ?? compositeRank));
-  const weakDefensePenalty = clamp((defenseRank - 20) * 1.3, 0, 45);
-  const weakResumePenalty = clamp((q1.losses - q1.wins) * 4, 0, 25);
-  const softSchedulePenalty =
-    sos === null || sos === undefined ? 0 : clamp((0 - sos) * 1.8, 0, 18);
-  const overseededPenalty = clamp(seedExpectationGap * 1.75, 0, 30);
+  const poorQ1Penalty =
+    q1.total > 0 ? Math.max(0, 0.45 - q1.winPct) * 55 : 10;
+
+  const weakSosPenalty =
+    team.sos_net_rating !== null ? Math.max(0, 2 - team.sos_net_rating) * 3.5 : 0;
 
   const raw =
+    seedInflation * 2.6 +
     weakDefensePenalty +
-    weakResumePenalty +
-    softSchedulePenalty +
-    overseededPenalty;
+    poorQ1Penalty +
+    weakSosPenalty;
 
-  return clamp(roundTo(raw, 1), 0, 100);
+  return round1(clamp(raw, 0, 100));
 }
 
-export function getUpsetScore(team: TeamIntelligenceInput) {
-  const seed = team.seed;
-  const compositeRank = getCompositeRank(team);
-  const valueScore = getValueScore(team);
-  const defenseRank = getDefenseRankEquivalent(team);
-  const offenseRank = getOffenseRankEquivalent(team);
-  const q1 = parseRecord(team.quad1_record);
-  const q2 = parseRecord(team.quad2_record);
-
+export function getUpsetScore(team: TeamIntelligenceInput): number | null {
   if (
-    seed === null ||
-    compositeRank === null ||
-    valueScore === null ||
-    defenseRank === null ||
-    offenseRank === null
+    team.off_efficiency === null &&
+    team.def_efficiency === null &&
+    team.adj_tempo === null &&
+    !team.quad1_record &&
+    !team.quad2_record
   ) {
     return null;
   }
 
-  const lowerSeedBonus = seed >= 8 ? clamp((seed - 7) * 5, 0, 35) : 0;
-  const valueBonus = clamp(valueScore * 4.5, 0, 35);
-  const profileBonus = clamp((40 - compositeRank) * 1.1, 0, 25);
-  const balanceBonus =
-    offenseRank <= 35 && defenseRank <= 40 ? 12 : offenseRank <= 25 || defenseRank <= 25 ? 6 : 0;
-  const resumeBonus = clamp((q1.wins + q2.wins) * 1.25, 0, 18);
-
-  const raw = lowerSeedBonus + valueBonus + profileBonus + balanceBonus + resumeBonus;
-
-  return clamp(roundTo(raw, 1), 0, 100);
-}
-
-export function getContenderScore(team: TeamIntelligenceInput) {
-  const compositeRank = getCompositeRank(team);
-  const offenseRank = getOffenseRankEquivalent(team);
-  const defenseRank = getDefenseRankEquivalent(team);
   const q1 = parseRecord(team.quad1_record);
   const q2 = parseRecord(team.quad2_record);
-  const overall = parseRecord(team.record);
 
-  if (
-    compositeRank === null ||
-    offenseRank === null ||
-    defenseRank === null
-  ) {
-    return null;
-  }
+  const offenseBoost =
+    team.off_efficiency !== null ? Math.max(0, team.off_efficiency - 112) * 2.2 : 0;
 
-  const offenseScore = clamp(((50 - offenseRank) / 49) * 100, 0, 100);
-  const defenseScore = clamp(((50 - defenseRank) / 49) * 100, 0, 100);
-  const compositeScore = clamp(((40 - compositeRank) / 39) * 100, 0, 100);
-  const quadScore = clamp(((q1.wins * 2 + q2.wins) / 20) * 100, 0, 100);
-  const winScore = clamp(overall.winPct * 100, 0, 100);
+  const defenseBoost =
+    team.def_efficiency !== null ? Math.max(0, 101 - team.def_efficiency) * 1.8 : 0;
+
+  const tempoBoost =
+    team.adj_tempo !== null ? Math.max(0, team.adj_tempo - 68) * 2.1 : 0;
+
+  const resumeBoost = q1.wins * 2.8 + q2.wins * 1.2;
+
+  const seedBoost =
+    team.seed !== null ? Math.max(0, team.seed - 6) * 1.8 : 0;
 
   const raw =
-    offenseScore * 0.3 +
-    defenseScore * 0.3 +
-    compositeScore * 0.25 +
-    quadScore * 0.1 +
-    winScore * 0.05;
+    offenseBoost +
+    defenseBoost +
+    tempoBoost +
+    resumeBoost +
+    seedBoost;
 
-  return clamp(roundTo(raw, 1), 0, 100);
+  return round1(clamp(raw, 0, 100));
 }
 
-export function getArchetypeTags(team: TeamIntelligenceInput) {
-  const tags: string[] = [];
+export function getContenderScore(team: TeamIntelligenceInput): number | null {
+  const compositeRank = getCompositeRank(team);
+
+  if (
+    compositeRank === null &&
+    team.off_efficiency === null &&
+    team.def_efficiency === null &&
+    team.sos_net_rating === null
+  ) {
+    return null;
+  }
+
+  const q1 = parseRecord(team.quad1_record);
+
+  const compositeBoost =
+    compositeRank !== null ? Math.max(0, 40 - compositeRank) * 1.6 : 0;
+
+  const offenseBoost =
+    team.off_efficiency !== null ? Math.max(0, team.off_efficiency - 115) * 3.0 : 0;
+
+  const defenseBoost =
+    team.def_efficiency !== null ? Math.max(0, 100 - team.def_efficiency) * 3.4 : 0;
+
+  const sosBoost =
+    team.sos_net_rating !== null ? Math.max(0, team.sos_net_rating) * 1.8 : 0;
+
+  const q1Boost = q1.wins * 1.75;
+
+  const raw =
+    compositeBoost +
+    offenseBoost +
+    defenseBoost +
+    sosBoost +
+    q1Boost;
+
+  return round1(clamp(raw, 0, 100));
+}
+
+export function getArchetypeTags(team: TeamIntelligenceInput): string[] {
+  const tags = new Set<string>();
 
   const compositeRank = getCompositeRank(team);
   const valueScore = getValueScore(team);
   const riskScore = getRiskScore(team);
-  const contenderScore = getContenderScore(team);
   const upsetScore = getUpsetScore(team);
-  const offenseRank = getOffenseRankEquivalent(team);
-  const defenseRank = getDefenseRankEquivalent(team);
+  const contenderScore = getContenderScore(team);
   const q1 = parseRecord(team.quad1_record);
   const q2 = parseRecord(team.quad2_record);
-  const tempo = team.adj_tempo ?? null;
 
-  if (offenseRank !== null && offenseRank <= 15) tags.push("Elite Offense");
-  if (defenseRank !== null && defenseRank <= 15) tags.push("Elite Defense");
+  if (team.off_efficiency !== null && team.off_efficiency >= 121.5) {
+    tags.add("Elite Offense");
+  }
+
+  if (team.def_efficiency !== null && team.def_efficiency <= 97.5) {
+    tags.add("Elite Defense");
+  }
 
   if (
-    offenseRank !== null &&
-    defenseRank !== null &&
-    compositeRank !== null &&
-    offenseRank <= 25 &&
-    defenseRank <= 25 &&
-    compositeRank <= 20
+    team.off_efficiency !== null &&
+    team.off_efficiency >= 116 &&
+    team.def_efficiency !== null &&
+    team.def_efficiency <= 99
   ) {
-    tags.push("Balanced Contender");
+    tags.add("Balanced Contender");
   }
 
-  if (tempo !== null && tempo >= 70) tags.push("High Tempo Pressure");
-
-  if (valueScore !== null && valueScore >= 6) tags.push("Undervalued Seed");
-  if (valueScore !== null && valueScore >= 10) tags.push("Analytics Darling");
-
-  if (riskScore !== null && riskScore >= 55) tags.push("Fragile Resume");
-  if (upsetScore !== null && upsetScore >= 60) tags.push("Bracket Buster Candidate");
-  if (contenderScore !== null && contenderScore >= 80) tags.push("Title Threat");
-  if (q1.wins + q2.wins >= 14) tags.push("Battle Tested");
-
-  if (offenseRank !== null && defenseRank !== null) {
-    const spread = Math.abs(offenseRank - defenseRank);
-    if (spread >= 35) tags.push("High Variance Team");
+  if (team.adj_tempo !== null && team.adj_tempo >= 70) {
+    tags.add("Tempo Pressure");
   }
 
-  return tags.slice(0, 4);
+  if (valueScore !== null && valueScore >= 8) {
+    tags.add("Undervalued Seed");
+  }
+
+  if (riskScore !== null && riskScore >= 60) {
+    tags.add("Fragile Resume");
+  }
+
+  if (
+    team.off_efficiency !== null &&
+    team.off_efficiency >= 118 &&
+    team.def_efficiency !== null &&
+    team.def_efficiency >= 102
+  ) {
+    tags.add("High Variance Team");
+  }
+
+  if (upsetScore !== null && upsetScore >= 55 && (team.seed ?? 0) >= 8) {
+    tags.add("Bracket Buster");
+  }
+
+  if (
+    compositeRank !== null &&
+    compositeRank <= 20 &&
+    q1.wins >= 5 &&
+    q2.wins >= 5
+  ) {
+    tags.add("Analytics Darling");
+  }
+
+  if (
+    contenderScore !== null &&
+    contenderScore >= 70 &&
+    team.seed !== null &&
+    team.seed <= 4
+  ) {
+    tags.add("Title Threat");
+  }
+
+  return Array.from(tags);
 }
 
-export function getTeamIntelligence(team: TeamIntelligenceInput) {
+export function getTeamIntelligence(team: TeamIntelligenceInput): TeamIntelligence {
   return {
-    compositeRank: getCompositeRank(team),
-    expectedRankFromSeed: getExpectedRankFromSeed(team.seed),
-    valueScore: getValueScore(team),
-    riskScore: getRiskScore(team),
-    upsetScore: getUpsetScore(team),
-    contenderScore: getContenderScore(team),
-    archetypeTags: getArchetypeTags(team),
-    offenseRankEquivalent: getOffenseRankEquivalent(team),
-    defenseRankEquivalent: getDefenseRankEquivalent(team),
-    quadResumeScore: roundTo(getQuadResumeScore(team), 2),
+    composite_rank: getCompositeRank(team),
+    value_score: getValueScore(team),
+    risk_score: getRiskScore(team),
+    upset_score: getUpsetScore(team),
+    contender_score: getContenderScore(team),
+    archetype_tags: getArchetypeTags(team),
   };
 }
