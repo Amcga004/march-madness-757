@@ -21,6 +21,13 @@ type Team = {
   school_name: string;
   seed: number;
   region: string;
+  kenpom_rank: number | null;
+  bpi_rank: number | null;
+  net_rank: number | null;
+  record: string | null;
+  conference_record: string | null;
+  off_efficiency: number | null;
+  def_efficiency: number | null;
 };
 
 type Pick = {
@@ -50,6 +57,11 @@ const MANAGER_BANNER_COLOR_MAP: Record<string, string> = {
   Eric: "bg-purple-600 text-white",
   Greg: "bg-orange-500 text-white",
 };
+
+function formatMetric(value: number | null) {
+  if (value === null || value === undefined) return "—";
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
 
 export default function DraftPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -85,9 +97,12 @@ export default function DraftPage() {
           .order("draft_slot", { ascending: true }),
         supabase
           .from("teams")
-          .select("id,school_name,seed,region")
+          .select(
+            "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency"
+          )
           .order("region", { ascending: true })
-          .order("seed", { ascending: true }),
+          .order("seed", { ascending: true })
+          .order("school_name", { ascending: true }),
         supabase
           .from("picks")
           .select("id,overall_pick,snake_round,member_id,team_id")
@@ -139,6 +154,11 @@ export default function DraftPage() {
       ...getTeamSearchTerms(team.school_name),
       team.region,
       String(team.seed),
+      team.record ?? "",
+      team.conference_record ?? "",
+      team.kenpom_rank ? `kenpom ${team.kenpom_rank}` : "",
+      team.bpi_rank ? `bpi ${team.bpi_rank}` : "",
+      team.net_rank ? `net ${team.net_rank}` : "",
     ].map((value) => value.toLowerCase());
 
     return searchable.some((value) => value.includes(query));
@@ -171,6 +191,10 @@ export default function DraftPage() {
       team_name: pick.teamName,
     }));
   }, [completedPicks]);
+
+  const selectedTeam = useMemo(() => {
+    return normalizedTeams.find((team) => team.id === selectedTeamId) ?? null;
+  }, [normalizedTeams, selectedTeamId]);
 
   async function refreshPicks() {
     const { data: pickData } = await supabase
@@ -364,7 +388,7 @@ export default function DraftPage() {
                       type="text"
                       value={teamSearch}
                       onChange={(e) => setTeamSearch(e.target.value)}
-                      placeholder="Search by school, alias, region, or seed"
+                      placeholder="Search by school, alias, region, seed, or ranking"
                       className="w-full rounded-xl border px-3 py-2"
                     />
                   </div>
@@ -380,11 +404,66 @@ export default function DraftPage() {
                       <option value="">Choose a team</option>
                       {filteredAvailableTeams.map((team) => (
                         <option key={team.id} value={team.id}>
-                          {team.school_name} • {team.seed} Seed • {team.region}
+                          {team.school_name} • {team.seed} Seed • {team.region} • KP {team.kenpom_rank ?? "—"} • BPI {team.bpi_rank ?? "—"} • NET {team.net_rank ?? "—"} • {team.record ?? "No Record"}
                         </option>
                       ))}
                     </select>
                   </div>
+
+                  {selectedTeam ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-start gap-3">
+                        <TeamLogo teamName={selectedTeam.school_name} size={34} />
+                        <div>
+                          <div className="text-lg font-semibold">{selectedTeam.school_name}</div>
+                          <div className="mt-1 text-sm text-slate-600">
+                            {selectedTeam.seed} Seed • {selectedTeam.region}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-xl border bg-white p-3">
+                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Rankings
+                          </div>
+                          <div className="mt-2 text-sm text-slate-700">
+                            KenPom: <span className="font-semibold">{selectedTeam.kenpom_rank ?? "—"}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-slate-700">
+                            BPI: <span className="font-semibold">{selectedTeam.bpi_rank ?? "—"}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-slate-700">
+                            NET: <span className="font-semibold">{selectedTeam.net_rank ?? "—"}</span>
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border bg-white p-3">
+                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Record
+                          </div>
+                          <div className="mt-2 text-sm text-slate-700">
+                            Overall: <span className="font-semibold">{selectedTeam.record ?? "—"}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-slate-700">
+                            Conference: <span className="font-semibold">{selectedTeam.conference_record ?? "—"}</span>
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border bg-white p-3">
+                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Efficiency
+                          </div>
+                          <div className="mt-2 text-sm text-slate-700">
+                            Off: <span className="font-semibold">{formatMetric(selectedTeam.off_efficiency)}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-slate-700">
+                            Def: <span className="font-semibold">{formatMetric(selectedTeam.def_efficiency)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
 
                   {teamSearch && filteredAvailableTeams.length === 0 ? (
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
