@@ -71,7 +71,7 @@ export default function AdminPage() {
     setIsSendingMagicLink(true);
     setStatus("");
 
-    const redirectTo = `${window.location.origin}/auth/callback?next=/admin`;
+const redirectTo = `https://www.757mmdraft.com/auth/callback?next=/admin`;
 
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
