@@ -1,19 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
   const [message, setMessage] = useState("Completing sign-in...");
 
   useEffect(() => {
     async function handleAuthCallback() {
-      const code = searchParams.get("code");
-      const next = searchParams.get("next") ?? "/draft";
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      const next = params.get("next") ?? "/draft";
 
       if (!code) {
         router.replace(next);
@@ -28,12 +28,13 @@ export default function AuthCallbackPage() {
         return;
       }
 
+      setMessage("Sign-in successful. Redirecting...");
       router.replace(next);
       router.refresh();
     }
 
     handleAuthCallback();
-  }, [router, searchParams, supabase]);
+  }, [router, supabase]);
 
   return (
     <div className="mx-auto flex min-h-[60vh] max-w-2xl items-center justify-center p-6">
