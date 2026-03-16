@@ -41,6 +41,14 @@ type SortKey =
   | "quad2_record";
 
 type SortDirection = "asc" | "desc";
+type ComparisonWinner = "a" | "b" | "tie";
+
+type ComparisonRow = {
+  label: string;
+  displayA: string;
+  displayB: string;
+  winner: ComparisonWinner;
+};
 
 function formatMetric(value: number | null, digits = 1) {
   if (value === null || value === undefined) return "—";
@@ -94,7 +102,7 @@ function getComparisonWinner(
   valueA: number | string | null,
   valueB: number | string | null,
   mode: "higher" | "lower" | "record"
-) {
+): ComparisonWinner {
   if (valueA === null || valueA === undefined || valueB === null || valueB === undefined) {
     return "tie";
   }
@@ -128,7 +136,7 @@ function getComparisonWinner(
   return "tie";
 }
 
-function getComparisonCellClass(winner: "a" | "b" | "tie", side: "a" | "b") {
+function getComparisonCellClass(winner: ComparisonWinner, side: "a" | "b") {
   if (winner === "tie") return "text-slate-700";
   return winner === side ? "font-semibold text-emerald-700" : "text-slate-500";
 }
@@ -335,7 +343,7 @@ export default function DataPage() {
     [teams, compareTeamBId]
   );
 
-  const comparisonRows = useMemo(() => {
+  const comparisonRows = useMemo<ComparisonRow[]>(() => {
     if (!compareTeamA || !compareTeamB) return [];
 
     const compositeA = getCompositeRank(compareTeamA);
@@ -344,104 +352,78 @@ export default function DataPage() {
     return [
       {
         label: "Seed",
-        valueA: compareTeamA.seed,
-        valueB: compareTeamB.seed,
         displayA: String(compareTeamA.seed),
         displayB: String(compareTeamB.seed),
         winner: getComparisonWinner(compareTeamA.seed, compareTeamB.seed, "lower"),
       },
       {
         label: "Region",
-        valueA: compareTeamA.region,
-        valueB: compareTeamB.region,
         displayA: compareTeamA.region,
         displayB: compareTeamB.region,
-        winner: "tie" as const,
+        winner: "tie",
       },
       {
         label: "Overall Record",
-        valueA: compareTeamA.record,
-        valueB: compareTeamB.record,
         displayA: compareTeamA.record ?? "—",
         displayB: compareTeamB.record ?? "—",
         winner: getComparisonWinner(compareTeamA.record, compareTeamB.record, "record"),
       },
       {
         label: "KenPom Rank",
-        valueA: compareTeamA.kenpom_rank,
-        valueB: compareTeamB.kenpom_rank,
         displayA: formatRank(compareTeamA.kenpom_rank),
         displayB: formatRank(compareTeamB.kenpom_rank),
         winner: getComparisonWinner(compareTeamA.kenpom_rank, compareTeamB.kenpom_rank, "lower"),
       },
       {
         label: "BPI Rank",
-        valueA: compareTeamA.bpi_rank,
-        valueB: compareTeamB.bpi_rank,
         displayA: formatRank(compareTeamA.bpi_rank),
         displayB: formatRank(compareTeamB.bpi_rank),
         winner: getComparisonWinner(compareTeamA.bpi_rank, compareTeamB.bpi_rank, "lower"),
       },
       {
         label: "NET Rank",
-        valueA: compareTeamA.net_rank,
-        valueB: compareTeamB.net_rank,
         displayA: formatRank(compareTeamA.net_rank),
         displayB: formatRank(compareTeamB.net_rank),
         winner: getComparisonWinner(compareTeamA.net_rank, compareTeamB.net_rank, "lower"),
       },
       {
         label: "Composite Rank",
-        valueA: compositeA,
-        valueB: compositeB,
         displayA: compositeA === null ? "—" : compositeA.toFixed(2),
         displayB: compositeB === null ? "—" : compositeB.toFixed(2),
         winner: getComparisonWinner(compositeA, compositeB, "lower"),
       },
       {
         label: "KenPom Off Eff",
-        valueA: compareTeamA.off_efficiency,
-        valueB: compareTeamB.off_efficiency,
         displayA: formatMetric(compareTeamA.off_efficiency),
         displayB: formatMetric(compareTeamB.off_efficiency),
         winner: getComparisonWinner(compareTeamA.off_efficiency, compareTeamB.off_efficiency, "higher"),
       },
       {
         label: "KenPom Def Eff",
-        valueA: compareTeamA.def_efficiency,
-        valueB: compareTeamB.def_efficiency,
         displayA: formatMetric(compareTeamA.def_efficiency),
         displayB: formatMetric(compareTeamB.def_efficiency),
         winner: getComparisonWinner(compareTeamA.def_efficiency, compareTeamB.def_efficiency, "lower"),
       },
       {
         label: "Off eFG%",
-        valueA: compareTeamA.off_efg_pct,
-        valueB: compareTeamB.off_efg_pct,
         displayA: formatMetric(compareTeamA.off_efg_pct),
         displayB: formatMetric(compareTeamB.off_efg_pct),
         winner: getComparisonWinner(compareTeamA.off_efg_pct, compareTeamB.off_efg_pct, "higher"),
       },
       {
         label: "Def eFG%",
-        valueA: compareTeamA.def_efg_pct,
-        valueB: compareTeamB.def_efg_pct,
         displayA: formatMetric(compareTeamA.def_efg_pct),
         displayB: formatMetric(compareTeamB.def_efg_pct),
         winner: getComparisonWinner(compareTeamA.def_efg_pct, compareTeamB.def_efg_pct, "lower"),
       },
       {
         label: "Adj Tempo",
-        valueA: compareTeamA.adj_tempo,
-        valueB: compareTeamB.adj_tempo,
         displayA: formatMetric(compareTeamA.adj_tempo),
         displayB: formatMetric(compareTeamB.adj_tempo),
         winner: getComparisonWinner(compareTeamA.adj_tempo, compareTeamB.adj_tempo, "higher"),
       },
       {
         label: "SOS Net",
-        valueA: compareTeamA.sos_net_rating,
-        valueB: compareTeamB.sos_net_rating,
         displayA:
           compareTeamA.sos_net_rating === null || compareTeamA.sos_net_rating === undefined
             ? "—"
@@ -454,16 +436,12 @@ export default function DataPage() {
       },
       {
         label: "Quad 1",
-        valueA: compareTeamA.quad1_record,
-        valueB: compareTeamB.quad1_record,
         displayA: compareTeamA.quad1_record ?? "—",
         displayB: compareTeamB.quad1_record ?? "—",
         winner: getComparisonWinner(compareTeamA.quad1_record, compareTeamB.quad1_record, "record"),
       },
       {
         label: "Quad 2",
-        valueA: compareTeamA.quad2_record,
-        valueB: compareTeamB.quad2_record,
         displayA: compareTeamA.quad2_record ?? "—",
         displayB: compareTeamB.quad2_record ?? "—",
         winner: getComparisonWinner(compareTeamA.quad2_record, compareTeamB.quad2_record, "record"),
