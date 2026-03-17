@@ -9,6 +9,7 @@ type Team = {
 
 type Game = {
   id: string;
+  external_game_id: string | null;
   round_name: string;
   winning_team_id: string | null;
   losing_team_id: string | null;
@@ -24,6 +25,23 @@ type Pick = {
 type Member = {
   id: string;
   display_name: string;
+};
+
+type ExternalGameSync = {
+  id: string;
+  external_game_id: string;
+  espn_event_name: string | null;
+  espn_status: string | null;
+  espn_period: number | null;
+  espn_clock: string | null;
+  start_time: string | null;
+  round_name: string | null;
+  home_team_name: string | null;
+  away_team_name: string | null;
+  home_score: number | null;
+  away_score: number | null;
+  mapped_home_team_id: string | null;
+  mapped_away_team_id: string | null;
 };
 
 type MatchupTeam = {
@@ -51,7 +69,7 @@ const ROUND_OF_64_PAIRS = [
   [3, 14],
   [7, 10],
   [2, 15],
-];
+] as const;
 
 const MANAGER_STYLES: Record<string, string> = {
   Andrew: "bg-blue-100 text-blue-700 border-blue-200",
@@ -217,6 +235,76 @@ function buildFinalRoundMatchup(
   };
 }
 
+function findExternalGameForTeams(
+  externalGames: ExternalGameSync[],
+  teamAId: string | null,
+  teamBId: string | null
+) {
+  if (!teamAId || !teamBId) return null;
+
+  return (
+    externalGames.find((game) => {
+      const homeId = game.mapped_home_team_id;
+      const awayId = game.mapped_away_team_id;
+
+      if (!homeId || !awayId) return false;
+
+      return (
+        (homeId === teamAId && awayId === teamBId) ||
+        (homeId === teamBId && awayId === teamAId)
+      );
+    }) ?? null
+  );
+}
+
+function getDisplayStatus(game: ExternalGameSync | null) {
+  if (!game) return null;
+
+  const status = game.espn_status ?? "";
+
+  if (status === "STATUS_SCHEDULED") {
+    if (!game.start_time) return "Scheduled";
+
+    return new Date(game.start_time).toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  if (status === "STATUS_FINAL") {
+    return "Final";
+  }
+
+  if (status.includes("HALFTIME")) {
+    return "Halftime";
+  }
+
+  if (
+    status === "STATUS_IN_PROGRESS" ||
+    status === "STATUS_END_PERIOD" ||
+    status === "STATUS_HALFTIME"
+  ) {
+    const clock = game.espn_clock && game.espn_clock !== "0:00" ? game.espn_clock : "";
+    const period =
+      game.espn_period && game.espn_period > 0 ? `${game.espn_period}H` : "";
+
+    const pieces = [clock, period].filter(Boolean);
+
+    return pieces.length > 0 ? `Live • ${pieces.join(" ")}` : "Live";
+  }
+
+  return status.replace("STATUS_", "").replaceAll("_", " ").trim() || null;
+}
+
+function getTeamScore(game: ExternalGameSync | null, teamId: string | null) {
+  if (!game || !teamId) return null;
+  if (game.mapped_home_team_id === teamId) return game.home_score;
+  if (game.mapped_away_team_id === teamId) return game.away_score;
+  return null;
+}
+
 function ManagerTag({ manager }: { manager: string | null }) {
   if (!manager) return null;
 
@@ -233,10 +321,12 @@ function ManagerTag({ manager }: { manager: string | null }) {
 
 function TeamLine({
   team,
+  score,
   isWinner,
   isLoser,
 }: {
   team: MatchupTeam;
+  score: number | null;
   isWinner: boolean;
   isLoser: boolean;
 }) {
@@ -254,29 +344,52 @@ function TeamLine({
       className={`rounded-lg border px-3 py-2 transition ${winnerClasses} ${loserClasses} ${baseClasses}`}
     >
       <div className="flex items-start justify-between gap-3">
-        <span className="truncate text-sm font-medium">
-          {team.seed ? `${team.seed}. ` : ""}
-          {team.name}
-        </span>
+        <div className="min-w-0">
+          <span className="block truncate text-sm font-medium">
+            {team.seed ? `${team.seed}. ` : ""}
+            {team.name}
+          </span>
+          <ManagerTag manager={team.manager} />
+        </div>
+
+        <div className="min-w-[24px] text-right text-sm font-bold">
+          {score !== null ? score : ""}
+        </div>
       </div>
-      <ManagerTag manager={team.manager} />
     </div>
   );
 }
 
-function MatchupCard({ matchup }: { matchup: Matchup }) {
+function MatchupCard({
+  matchup,
+  externalGame,
+}: {
+  matchup: Matchup;
+  externalGame: ExternalGameSync | null;
+}) {
+  const topScore = getTeamScore(externalGame, matchup.top.id);
+  const bottomScore = getTeamScore(externalGame, matchup.bottom.id);
+  const statusLabel = getDisplayStatus(externalGame);
+
   return (
     <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
       <TeamLine
         team={matchup.top}
+        score={topScore}
         isWinner={matchup.winnerId !== null && matchup.winnerId === matchup.top.id}
         isLoser={matchup.loserId !== null && matchup.loserId === matchup.top.id}
       />
+
       <TeamLine
         team={matchup.bottom}
+        score={bottomScore}
         isWinner={matchup.winnerId !== null && matchup.winnerId === matchup.bottom.id}
         isLoser={matchup.loserId !== null && matchup.loserId === matchup.bottom.id}
       />
+
+      <div className="px-1 pt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+        {statusLabel ?? "Awaiting matchup"}
+      </div>
     </div>
   );
 }
@@ -284,45 +397,33 @@ function MatchupCard({ matchup }: { matchup: Matchup }) {
 function ConnectorColumn({
   title,
   matchups,
+  externalGames,
 }: {
   title: string;
   matchups: Matchup[];
+  externalGames: ExternalGameSync[];
 }) {
   return (
-    <div className="min-w-[220px] sm:min-w-[240px]">
+    <div className="min-w-[240px] sm:min-w-[260px]">
       <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
         {title}
       </h4>
+
       <div className="space-y-4 sm:space-y-6">
-        {matchups.map((matchup, index) => (
-          <div key={`${title}-${index}`} className="relative">
-            <MatchupCard matchup={matchup} />
-            <div className="pointer-events-none absolute -right-3 top-1/2 hidden h-px w-6 -translate-y-1/2 bg-slate-300 xl:block" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+        {matchups.map((matchup, index) => {
+          const externalGame = findExternalGameForTeams(
+            externalGames,
+            matchup.top.id,
+            matchup.bottom.id
+          );
 
-function MobileRoundSection({
-  title,
-  matchups,
-}: {
-  title: string;
-  matchups: Matchup[];
-}) {
-  if (!matchups.length) return null;
-
-  return (
-    <div>
-      <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-        {title}
-      </h4>
-      <div className="space-y-3">
-        {matchups.map((matchup, index) => (
-          <MatchupCard key={`${title}-${index}`} matchup={matchup} />
-        ))}
+          return (
+            <div key={`${title}-${index}`} className="relative">
+              <MatchupCard matchup={matchup} externalGame={externalGame} />
+              <div className="pointer-events-none absolute -right-3 top-1/2 hidden h-px w-6 -translate-y-1/2 bg-slate-300 xl:block" />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -331,27 +432,45 @@ function MobileRoundSection({
 export default async function BracketPage() {
   const supabase = await createClient();
 
-  const [{ data: teams }, { data: games }, { data: picks }, { data: members }] =
-    await Promise.all([
-      supabase
-        .from("teams")
-        .select("id, school_name, seed, region")
-        .order("region", { ascending: true })
-        .order("seed", { ascending: true }),
-      supabase
-        .from("games")
-        .select("id, round_name, winning_team_id, losing_team_id, created_at")
-        .order("created_at", { ascending: false }),
-      supabase.from("picks").select("id, member_id, team_id"),
-      supabase.from("league_members").select("id, display_name"),
-    ]);
+  const [
+    { data: teams },
+    { data: games },
+    { data: picks },
+    { data: members },
+    { data: externalGames },
+  ] = await Promise.all([
+    supabase
+      .from("teams")
+      .select("id, school_name, seed, region")
+      .order("region", { ascending: true })
+      .order("seed", { ascending: true }),
+    supabase
+      .from("games")
+      .select("id, external_game_id, round_name, winning_team_id, losing_team_id, created_at")
+      .order("created_at", { ascending: false }),
+    supabase.from("picks").select("id, member_id, team_id"),
+    supabase.from("league_members").select("id, display_name"),
+    supabase
+      .from("external_game_sync")
+      .select(
+        "id, external_game_id, espn_event_name, espn_status, espn_period, espn_clock, start_time, round_name, home_team_name, away_team_name, home_score, away_score, mapped_home_team_id, mapped_away_team_id"
+      )
+      .order("start_time", { ascending: true }),
+  ]);
 
   const typedTeams = (teams ?? []) as Team[];
   const typedGames = (games ?? []) as Game[];
   const typedPicks = (picks ?? []) as Pick[];
   const typedMembers = (members ?? []) as Member[];
+  const typedExternalGames = (externalGames ?? []) as ExternalGameSync[];
 
-  const latestUpdated = typedGames[0]?.created_at ?? null;
+  const latestOfficialUpdate = typedGames[0]?.created_at ?? null;
+  const latestLiveUpdate =
+    typedExternalGames
+      .map((game) => game.start_time)
+      .filter((value): value is string => !!value)
+      .sort()
+      .reverse()[0] ?? null;
 
   const memberNameById = new Map(typedMembers.map((m) => [m.id, m.display_name]));
   const managerByTeamId = new Map(
@@ -360,6 +479,7 @@ export default async function BracketPage() {
 
   const regionBrackets = REGIONS.map((region) => {
     const teamsForRegion = typedTeams.filter((team) => team.region === region);
+
     return {
       region,
       ...buildRegionBracket(teamsForRegion, typedGames, managerByTeamId),
@@ -395,56 +515,77 @@ export default async function BracketPage() {
     winnerTeamFromMatchup(semifinal2)
   );
 
+  const finalFourExternalGames = typedExternalGames;
+
   return (
     <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
-      <section className="mb-5 sm:mb-6">
+      <section className="mb-6 sm:mb-8">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Bracket
-            </div>
-            <h2 className="mt-1 text-3xl font-bold">Tournament Bracket</h2>
+            <h2 className="text-3xl font-bold">Tournament Bracket</h2>
             <p className="mt-2 text-gray-600">
-              Bracket updates automatically as results are entered by the commissioner.
+              Live bracket view with scheduled tip times, in-game scores, and automatic advancement once results are promoted.
             </p>
           </div>
 
-          <div className="text-sm text-slate-500">
-            {latestUpdated
-              ? `Last updated: ${new Date(latestUpdated).toLocaleString()}`
-              : "No results entered yet"}
+          <div className="space-y-1 text-sm text-slate-500 sm:text-right">
+            <div>
+              {latestOfficialUpdate
+                ? `Last official result: ${new Date(latestOfficialUpdate).toLocaleString()}`
+                : "No official results entered yet"}
+            </div>
+            <div>
+              {latestLiveUpdate
+                ? `Live feed active for games starting: ${new Date(latestLiveUpdate).toLocaleString()}`
+                : "No live feed data available yet"}
+            </div>
           </div>
         </div>
       </section>
 
       <div className="space-y-8 sm:space-y-10">
         {regionBrackets.map((region) => (
-          <section
-            key={region.region}
-            className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6"
-          >
+          <section key={region.region} className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
             <h3 className="mb-5 text-2xl font-bold">{region.region} Region</h3>
 
-            <div className="space-y-6 md:hidden">
-              <MobileRoundSection title="Round of 64" matchups={region.round64} />
-              <MobileRoundSection title="Round of 32" matchups={region.round32} />
-              <MobileRoundSection title="Sweet 16" matchups={region.sweet16} />
-              <MobileRoundSection title="Elite Eight" matchups={region.elite8} />
-            </div>
-
-            <div className="hidden overflow-x-auto md:block">
+            <div className="overflow-x-auto">
               <div className="flex min-w-max gap-6 pb-4 sm:gap-10">
-                <ConnectorColumn title="Round of 64" matchups={region.round64} />
-                <ConnectorColumn title="Round of 32" matchups={region.round32} />
-                <ConnectorColumn title="Sweet 16" matchups={region.sweet16} />
-                <div className="min-w-[220px] sm:min-w-[240px]">
+                <ConnectorColumn
+                  title="Round of 64"
+                  matchups={region.round64}
+                  externalGames={typedExternalGames}
+                />
+                <ConnectorColumn
+                  title="Round of 32"
+                  matchups={region.round32}
+                  externalGames={typedExternalGames}
+                />
+                <ConnectorColumn
+                  title="Sweet 16"
+                  matchups={region.sweet16}
+                  externalGames={typedExternalGames}
+                />
+                <div className="min-w-[240px] sm:min-w-[260px]">
                   <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
                     Elite Eight
                   </h4>
+
                   <div className="space-y-4 sm:space-y-6">
-                    {region.elite8.map((matchup, index) => (
-                      <MatchupCard key={`elite-${region.region}-${index}`} matchup={matchup} />
-                    ))}
+                    {region.elite8.map((matchup, index) => {
+                      const externalGame = findExternalGameForTeams(
+                        typedExternalGames,
+                        matchup.top.id,
+                        matchup.bottom.id
+                      );
+
+                      return (
+                        <MatchupCard
+                          key={`elite-${region.region}-${index}`}
+                          matchup={matchup}
+                          externalGame={externalGame}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -455,32 +596,48 @@ export default async function BracketPage() {
         <section className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
           <h3 className="mb-5 text-2xl font-bold">Final Four & Championship</h3>
 
-          <div className="space-y-6 md:hidden">
-            <MobileRoundSection title="Final Four" matchups={[semifinal1, semifinal2]} />
-            <MobileRoundSection title="Championship" matchups={[championship]} />
-          </div>
-
-          <div className="hidden overflow-x-auto md:block">
+          <div className="overflow-x-auto">
             <div className="flex min-w-max gap-6 pb-4 sm:gap-10">
-              <div className="min-w-[220px] sm:min-w-[260px]">
+              <div className="min-w-[240px] sm:min-w-[260px]">
                 <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
                   Final Four 1
                 </h4>
-                <MatchupCard matchup={semifinal1} />
+                <MatchupCard
+                  matchup={semifinal1}
+                  externalGame={findExternalGameForTeams(
+                    finalFourExternalGames,
+                    semifinal1.top.id,
+                    semifinal1.bottom.id
+                  )}
+                />
               </div>
 
-              <div className="min-w-[220px] sm:min-w-[260px]">
+              <div className="min-w-[240px] sm:min-w-[260px]">
                 <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
                   Final Four 2
                 </h4>
-                <MatchupCard matchup={semifinal2} />
+                <MatchupCard
+                  matchup={semifinal2}
+                  externalGame={findExternalGameForTeams(
+                    finalFourExternalGames,
+                    semifinal2.top.id,
+                    semifinal2.bottom.id
+                  )}
+                />
               </div>
 
-              <div className="min-w-[220px] sm:min-w-[260px]">
+              <div className="min-w-[240px] sm:min-w-[260px]">
                 <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
                   Championship
                 </h4>
-                <MatchupCard matchup={championship} />
+                <MatchupCard
+                  matchup={championship}
+                  externalGame={findExternalGameForTeams(
+                    finalFourExternalGames,
+                    championship.top.id,
+                    championship.bottom.id
+                  )}
+                />
               </div>
             </div>
           </div>
