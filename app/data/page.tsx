@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import TeamLogo from "../components/TeamLogo";
 import {
+  compareTeams,
   getCompositeRank,
   getTeamIntelligence,
 } from "@/lib/teamIntelligence";
@@ -31,8 +32,6 @@ type Team = {
   upset_score: number | null;
   contender_score: number | null;
   archetype_tags: string[];
-  is_play_in_placeholder: boolean | null;
-  is_play_in_actual: boolean | null;
 };
 
 type SortKey =
@@ -105,6 +104,53 @@ function parseQuadLosses(record: string | null) {
 
 function getCompositeRankDisplay(team: Team) {
   return getCompositeRank(team);
+}
+
+function getArchetypeBadgeClasses(tag: string) {
+  const normalized = tag.toLowerCase();
+
+  if (normalized.includes("offense") || normalized.includes("offensive")) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  if (normalized.includes("defense") || normalized.includes("defensive")) {
+    return "border-red-200 bg-red-50 text-red-700";
+  }
+  if (normalized.includes("balanced")) {
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+  if (
+    normalized.includes("title") ||
+    normalized.includes("contender") ||
+    normalized.includes("threat")
+  ) {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+  if (normalized.includes("upset") || normalized.includes("sleeper")) {
+    return "border-purple-200 bg-purple-50 text-purple-700";
+  }
+  if (normalized.includes("risk") || normalized.includes("volatile")) {
+    return "border-rose-200 bg-rose-50 text-rose-700";
+  }
+  if (normalized.includes("tempo") || normalized.includes("fast")) {
+    return "border-orange-200 bg-orange-50 text-orange-700";
+  }
+  if (normalized.includes("slow")) {
+    return "border-stone-200 bg-stone-50 text-stone-700";
+  }
+
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function ArchetypeTag({ tag }: { tag: string }) {
+  return (
+    <span
+      className={`rounded-full border px-2.5 py-1 text-xs font-medium ${getArchetypeBadgeClasses(
+        tag
+      )}`}
+    >
+      {tag}
+    </span>
+  );
 }
 
 function SortButton({
@@ -187,6 +233,38 @@ function CompareMetricRow({
   );
 }
 
+function MobileMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </div>
+      <div className="mt-1 text-sm font-semibold text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function DictionaryItem({
+  term,
+  description,
+}: {
+  term: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="text-sm font-semibold text-slate-900">{term}</div>
+      <div className="mt-1 text-sm text-slate-600">{description}</div>
+    </div>
+  );
+}
+
 export default function DataPage() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -196,6 +274,7 @@ export default function DataPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [compareTeamAId, setCompareTeamAId] = useState("none");
   const [compareTeamBId, setCompareTeamBId] = useState("none");
+  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
 
   const compareOptions = useMemo(() => {
     return [...teams].sort((a, b) => a.school_name.localeCompare(b.school_name));
@@ -206,17 +285,15 @@ export default function DataPage() {
       const { data } = await supabase
         .from("teams")
         .select(
-          "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency,quad1_record,quad2_record,adj_tempo,sos_net_rating,off_efg_pct,def_efg_pct,is_play_in_placeholder,is_play_in_actual"
+          "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency,quad1_record,quad2_record,adj_tempo,sos_net_rating,off_efg_pct,def_efg_pct"
         )
-        .order("school_name", { ascending: true });
+        .not("school_name", "like", "PLAY-IN:%");
 
       if (data) {
-        const filteredData = (data as Omit<
+        const enrichedTeams = (data as Omit<
           Team,
           "value_score" | "risk_score" | "upset_score" | "contender_score" | "archetype_tags"
-        >[]).filter((team) => team.is_play_in_placeholder !== true);
-
-        const enrichedTeams = filteredData.map((team) => {
+        >[]).map((team) => {
           const intelligence = getTeamIntelligence(team);
 
           return {
@@ -264,6 +341,7 @@ export default function DataPage() {
       teamB: compareTeamB,
       intelA: getTeamIntelligence(compareTeamA),
       intelB: getTeamIntelligence(compareTeamB),
+      comparison: compareTeams(compareTeamA, compareTeamB),
     };
   }, [compareTeamA, compareTeamB]);
 
@@ -395,23 +473,23 @@ export default function DataPage() {
 
   return (
     <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
-      <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:mb-8 sm:p-8">
+      <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mb-6 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 sm:text-sm">
-              Team Analytics Reference
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Data
             </div>
-            <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
-              2026 Field Data Board
+            <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">
+              2026 Field Analytics
             </h2>
-            <p className="mt-3 max-w-4xl text-sm text-slate-600 sm:text-base">
-              Tournament field reference board with ranking, efficiency, tempo,
-              résumé, and derived intelligence across KenPom, BPI, and NET.
+            <p className="mt-2 max-w-4xl text-sm text-slate-600">
+              Search, compare, and sort tournament teams across rankings,
+              efficiency, résumé, and derived intelligence signals.
             </p>
           </div>
 
-          <div className="rounded-2xl bg-slate-950 px-5 py-4 text-white shadow-sm">
-            <div className="text-xs uppercase tracking-wide text-slate-400">
+          <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white shadow-sm">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
               Teams Shown
             </div>
             <div className="mt-1 text-lg font-semibold">
@@ -420,7 +498,7 @@ export default function DataPage() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_auto]">
+        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto]">
           <div>
             <label
               htmlFor="team-search"
@@ -439,7 +517,7 @@ export default function DataPage() {
 
           <div className="grid grid-cols-2 gap-3 lg:min-w-[260px]">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
                 Default Sort
               </div>
               <div className="mt-1 text-sm font-semibold text-slate-900">
@@ -448,7 +526,7 @@ export default function DataPage() {
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
                 Current Sort
               </div>
               <div className="mt-1 text-sm font-semibold capitalize text-slate-900">
@@ -459,16 +537,14 @@ export default function DataPage() {
         </div>
       </section>
 
-      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:mb-8 sm:p-6">
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mb-8 sm:p-6">
         <div className="flex flex-col gap-4">
           <div>
-            <h3 className="text-xl font-semibold text-slate-950">
+            <h3 className="text-lg font-semibold text-slate-950 sm:text-xl">
               Team Comparison
             </h3>
             <p className="mt-1 text-sm text-slate-600">
-              Select any two teams to compare their profile, intelligence scores,
-              and stylistic tags. Leave either selection on NONE to hide the
-              comparison panel.
+              Select two teams to compare profile, rankings, intelligence, and matchup projection.
             </p>
           </div>
 
@@ -533,12 +609,7 @@ export default function DataPage() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     {comparisonState.intelA.archetype_tags.length > 0 ? (
                       comparisonState.intelA.archetype_tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
-                        >
-                          {tag}
-                        </span>
+                        <ArchetypeTag key={tag} tag={tag} />
                       ))
                     ) : (
                       <span className="text-xs text-slate-500">No archetype tags</span>
@@ -562,12 +633,7 @@ export default function DataPage() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     {comparisonState.intelB.archetype_tags.length > 0 ? (
                       comparisonState.intelB.archetype_tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
-                        >
-                          {tag}
-                        </span>
+                        <ArchetypeTag key={tag} tag={tag} />
                       ))
                     ) : (
                       <span className="text-xs text-slate-500">No archetype tags</span>
@@ -576,7 +642,183 @@ export default function DataPage() {
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-slate-200">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Matchup Projection
+                    </div>
+                    <div className="mt-1 text-xl font-bold text-slate-950">
+                      {comparisonState.comparison.projected_winner} over{" "}
+                      {comparisonState.comparison.projected_loser}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      Internal model estimate • Confidence: {comparisonState.comparison.confidence}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                      Win Probability
+                    </div>
+                    <div className="mt-1 text-lg font-semibold">
+                      {comparisonState.comparison.projected_winner}{" "}
+                      {comparisonState.comparison.winner_probability.toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                      Analytic Edge
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                      {comparisonState.comparison.analytic_edge}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                      Résumé Edge
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                      {comparisonState.comparison.resume_edge}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                      Style Edge
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                      {comparisonState.comparison.style_edge}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                      Volatility
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                      {comparisonState.comparison.volatility_note}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                    Comparison Insights
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {comparisonState.comparison.summary_bullets.map((bullet) => (
+                      <div key={bullet} className="text-sm text-slate-700">
+                        • {bullet}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:hidden">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 text-sm font-semibold text-slate-900">
+                    {comparisonState.teamA.school_name}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <MobileMetric
+                      label="Composite"
+                      value={
+                        comparisonState.intelA.composite_rank === null
+                          ? "—"
+                          : comparisonState.intelA.composite_rank.toFixed(2)
+                      }
+                    />
+                    <MobileMetric
+                      label="Value"
+                      value={
+                        comparisonState.intelA.value_score === null
+                          ? "—"
+                          : comparisonState.intelA.value_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="Risk"
+                      value={
+                        comparisonState.intelA.risk_score === null
+                          ? "—"
+                          : comparisonState.intelA.risk_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="Contender"
+                      value={
+                        comparisonState.intelA.contender_score === null
+                          ? "—"
+                          : comparisonState.intelA.contender_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="KenPom"
+                      value={formatRank(comparisonState.teamA.kenpom_rank)}
+                    />
+                    <MobileMetric
+                      label="NET"
+                      value={formatRank(comparisonState.teamA.net_rank)}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 text-sm font-semibold text-slate-900">
+                    {comparisonState.teamB.school_name}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <MobileMetric
+                      label="Composite"
+                      value={
+                        comparisonState.intelB.composite_rank === null
+                          ? "—"
+                          : comparisonState.intelB.composite_rank.toFixed(2)
+                      }
+                    />
+                    <MobileMetric
+                      label="Value"
+                      value={
+                        comparisonState.intelB.value_score === null
+                          ? "—"
+                          : comparisonState.intelB.value_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="Risk"
+                      value={
+                        comparisonState.intelB.risk_score === null
+                          ? "—"
+                          : comparisonState.intelB.risk_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="Contender"
+                      value={
+                        comparisonState.intelB.contender_score === null
+                          ? "—"
+                          : comparisonState.intelB.contender_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="KenPom"
+                      value={formatRank(comparisonState.teamB.kenpom_rank)}
+                    />
+                    <MobileMetric
+                      label="NET"
+                      value={formatRank(comparisonState.teamB.net_rank)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="hidden overflow-hidden rounded-2xl border border-slate-200 lg:block">
                 <div className="overflow-x-auto">
                   <table className="min-w-[900px] w-full text-sm">
                     <thead className="bg-slate-950 text-white">
@@ -684,7 +926,92 @@ export default function DataPage() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section className="mb-4 md:hidden">
+        <div className="space-y-3">
+          {filteredAndSortedTeams.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 text-center text-slate-500 shadow-sm">
+              No teams matched your search.
+            </div>
+          ) : (
+            filteredAndSortedTeams.map((team) => {
+              const compositeRank = getCompositeRankDisplay(team);
+              const isExpanded = expandedTeamId === team.id;
+
+              return (
+                <div
+                  key={team.id}
+                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedTeamId((current) =>
+                        current === team.id ? null : team.id
+                      )
+                    }
+                    className="flex w-full items-center justify-between gap-3 p-4 text-left"
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <TeamLogo teamName={team.school_name} size={28} />
+                      <div className="min-w-0">
+                        <div className="truncate text-base font-semibold text-slate-900">
+                          {team.school_name}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-500">
+                          {team.seed} Seed • {team.region} • {team.record ?? "—"}
+                        </div>
+                        <div className="mt-1 text-sm font-medium text-slate-700">
+                          Composite {compositeRank === null ? "—" : compositeRank.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 text-lg text-slate-500">
+                      {isExpanded ? "▴" : "▾"}
+                    </div>
+                  </button>
+
+                  {isExpanded ? (
+                    <div className="border-t border-slate-200 px-4 pb-4 pt-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <MobileMetric label="KenPom" value={formatRank(team.kenpom_rank)} />
+                        <MobileMetric label="BPI" value={formatRank(team.bpi_rank)} />
+                        <MobileMetric label="NET" value={formatRank(team.net_rank)} />
+                        <MobileMetric label="Value" value={team.value_score == null ? "—" : team.value_score.toFixed(1)} />
+                        <MobileMetric label="Risk" value={team.risk_score == null ? "—" : team.risk_score.toFixed(1)} />
+                        <MobileMetric label="Upset" value={team.upset_score == null ? "—" : team.upset_score.toFixed(1)} />
+                        <MobileMetric label="Contender" value={team.contender_score == null ? "—" : team.contender_score.toFixed(1)} />
+                        <MobileMetric label="Off Eff" value={formatMetric(team.off_efficiency)} />
+                        <MobileMetric label="Def Eff" value={formatMetric(team.def_efficiency)} />
+                        <MobileMetric label="Adj Tempo" value={formatMetric(team.adj_tempo)} />
+                        <MobileMetric label="Quad 1" value={team.quad1_record ?? "—"} />
+                        <MobileMetric label="Quad 2" value={team.quad2_record ?? "—"} />
+                      </div>
+
+                      <div className="mt-4">
+                        <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                          Archetypes
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {team.archetype_tags && team.archetype_tags.length > 0 ? (
+                            team.archetype_tags.map((tag) => (
+                              <ArchetypeTag key={tag} tag={tag} />
+                            ))
+                          ) : (
+                            <span className="text-sm text-slate-400">—</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      <section className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
         <div className="overflow-x-auto">
           <table className="min-w-[2050px] w-full text-sm">
             <thead className="bg-slate-950 text-white">
@@ -983,12 +1310,7 @@ export default function DataPage() {
                         <div className="flex flex-wrap gap-2">
                           {team.archetype_tags && team.archetype_tags.length > 0 ? (
                             team.archetype_tags.map((tag) => (
-                              <span
-                                key={tag}
-                                className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700"
-                              >
-                                {tag}
-                              </span>
+                              <ArchetypeTag key={tag} tag={tag} />
                             ))
                           ) : (
                             <span className="text-slate-400">—</span>
@@ -1001,6 +1323,115 @@ export default function DataPage() {
               )}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mt-8 sm:p-6">
+        <div className="mb-4">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Reference
+          </div>
+          <h3 className="mt-1 text-xl font-bold text-slate-950 sm:text-2xl">
+            Data Dictionary
+          </h3>
+          <p className="mt-2 text-sm text-slate-600">
+            Quick-reference guide for the rankings, derived metrics, and archetypes used on this page.
+          </p>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <DictionaryItem
+            term="KenPom Rank"
+            description="Lower is better. Efficiency-based ranking built from adjusted offensive and defensive efficiency."
+          />
+          <DictionaryItem
+            term="BPI Rank"
+            description="Lower is better. ESPN-style power indicator intended to reflect team strength and future performance quality."
+          />
+          <DictionaryItem
+            term="NET Rank"
+            description="Lower is better. NCAA sorting tool that incorporates efficiency, results, and opponent quality."
+          />
+          <DictionaryItem
+            term="Composite Rank"
+            description="Lower is better. Internal blended average of KenPom, BPI, and NET to smooth out single-source bias."
+          />
+          <DictionaryItem
+            term="Off Efficiency"
+            description="Higher is better. Estimated offensive points generated per 100 possessions."
+          />
+          <DictionaryItem
+            term="Def Efficiency"
+            description="Lower is better. Estimated points allowed per 100 possessions."
+          />
+          <DictionaryItem
+            term="Adj Tempo"
+            description="Higher means faster pace. Reflects estimated possessions per game after adjustment."
+          />
+          <DictionaryItem
+            term="SOS Net Rating"
+            description="Higher is better. Indicates stronger schedule quality and résumé difficulty."
+          />
+          <DictionaryItem
+            term="Quad 1 / Quad 2"
+            description="Résumé buckets tied to opponent quality and game location. Stronger records indicate better win quality."
+          />
+          <DictionaryItem
+            term="Value Score"
+            description="Higher is better. Internal measure of how much stronger a team looks than its seed baseline suggests."
+          />
+          <DictionaryItem
+            term="Risk Score"
+            description="Lower is better. Internal volatility / fragility indicator driven by defense, résumé quality, and seed inflation risk."
+          />
+          <DictionaryItem
+            term="Upset Score"
+            description="Higher is better for underdogs. Internal signal for teams with the tools to outperform seed expectations."
+          />
+          <DictionaryItem
+            term="Contender Score"
+            description="Higher is better. Internal measure of true deep-run or title-path strength."
+          />
+          <DictionaryItem
+            term="Elite Offense"
+            description="Team projects as a top-end offensive unit."
+          />
+          <DictionaryItem
+            term="Elite Defense"
+            description="Team projects as a top-end defensive unit."
+          />
+          <DictionaryItem
+            term="Balanced Contender"
+            description="Team shows both strong offensive and defensive profile strength."
+          />
+          <DictionaryItem
+            term="Tempo Pressure"
+            description="Team tends to play with pace and can stress slower opponents."
+          />
+          <DictionaryItem
+            term="Undervalued Seed"
+            description="Seed may underrate the team’s underlying profile."
+          />
+          <DictionaryItem
+            term="Fragile Resume"
+            description="Profile shows vulnerability despite seed or surface résumé."
+          />
+          <DictionaryItem
+            term="High Variance Team"
+            description="Team may carry big ceiling but also greater outcome volatility."
+          />
+          <DictionaryItem
+            term="Bracket Buster"
+            description="Lower-seeded team with traits that support upset potential."
+          />
+          <DictionaryItem
+            term="Analytics Darling"
+            description="Team rates especially well across blended analytic measures and résumé quality."
+          />
+          <DictionaryItem
+            term="Title Threat"
+            description="Team has the profile of a legitimate championship-level contender."
+          />
         </div>
       </section>
     </div>
