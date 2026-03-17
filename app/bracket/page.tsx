@@ -305,6 +305,29 @@ function ConnectorColumn({
   );
 }
 
+function MobileRoundSection({
+  title,
+  matchups,
+}: {
+  title: string;
+  matchups: Matchup[];
+}) {
+  if (!matchups.length) return null;
+
+  return (
+    <div>
+      <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+        {title}
+      </h4>
+      <div className="space-y-3">
+        {matchups.map((matchup, index) => (
+          <MatchupCard key={`${title}-${index}`} matchup={matchup} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default async function BracketPage() {
   const supabase = await createClient();
 
@@ -317,7 +340,8 @@ export default async function BracketPage() {
         .order("seed", { ascending: true }),
       supabase
         .from("games")
-        .select("id, round_name, winning_team_id, losing_team_id, created_at"),
+        .select("id, round_name, winning_team_id, losing_team_id, created_at")
+        .order("created_at", { ascending: false }),
       supabase.from("picks").select("id, member_id, team_id"),
       supabase.from("league_members").select("id, display_name"),
     ]);
@@ -373,12 +397,15 @@ export default async function BracketPage() {
 
   return (
     <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
-      <section className="mb-6 sm:mb-8">
+      <section className="mb-5 sm:mb-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-3xl font-bold">Tournament Bracket</h2>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Bracket
+            </div>
+            <h2 className="mt-1 text-3xl font-bold">Tournament Bracket</h2>
             <p className="mt-2 text-gray-600">
-              Bracket view updates automatically as results are entered by the commissioner.
+              Bracket updates automatically as results are entered by the commissioner.
             </p>
           </div>
 
@@ -392,10 +419,20 @@ export default async function BracketPage() {
 
       <div className="space-y-8 sm:space-y-10">
         {regionBrackets.map((region) => (
-          <section key={region.region} className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
+          <section
+            key={region.region}
+            className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6"
+          >
             <h3 className="mb-5 text-2xl font-bold">{region.region} Region</h3>
 
-            <div className="overflow-x-auto">
+            <div className="space-y-6 md:hidden">
+              <MobileRoundSection title="Round of 64" matchups={region.round64} />
+              <MobileRoundSection title="Round of 32" matchups={region.round32} />
+              <MobileRoundSection title="Sweet 16" matchups={region.sweet16} />
+              <MobileRoundSection title="Elite Eight" matchups={region.elite8} />
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
               <div className="flex min-w-max gap-6 pb-4 sm:gap-10">
                 <ConnectorColumn title="Round of 64" matchups={region.round64} />
                 <ConnectorColumn title="Round of 32" matchups={region.round32} />
@@ -418,7 +455,12 @@ export default async function BracketPage() {
         <section className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
           <h3 className="mb-5 text-2xl font-bold">Final Four & Championship</h3>
 
-          <div className="overflow-x-auto">
+          <div className="space-y-6 md:hidden">
+            <MobileRoundSection title="Final Four" matchups={[semifinal1, semifinal2]} />
+            <MobileRoundSection title="Championship" matchups={[championship]} />
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <div className="flex min-w-max gap-6 pb-4 sm:gap-10">
               <div className="min-w-[220px] sm:min-w-[260px]">
                 <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
