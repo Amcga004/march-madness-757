@@ -2,6 +2,15 @@ import { createClient } from "@/lib/supabase/server";
 import ManagerBadge from "../components/ManagerBadge";
 import TeamLogo from "../components/TeamLogo";
 import TeamStatusBadge from "../components/TeamStatusBadge";
+import {
+  computeLeagueForecasts,
+  type ForecastGame,
+  type ForecastMember,
+  type ForecastPick,
+  type ForecastTeam,
+  type ForecastTeamResult,
+  type ManagerForecast,
+} from "@/lib/bracketForecast";
 
 type Member = {
   id: string;
@@ -32,6 +41,9 @@ type TeamResult = {
 
 type Game = {
   id: string;
+  round_name: string;
+  winning_team_id: string | null;
+  losing_team_id: string | null;
   created_at: string;
 };
 
@@ -52,9 +64,8 @@ export default async function RostersPage() {
       supabase.from("team_results").select("*"),
       supabase
         .from("games")
-        .select("id, created_at")
-        .order("created_at", { ascending: false })
-        .limit(1),
+        .select("id, round_name, winning_team_id, losing_team_id, created_at")
+        .order("created_at", { ascending: false }),
     ]);
 
   const typedMembers = (members ?? []) as Member[];
@@ -65,14 +76,29 @@ export default async function RostersPage() {
 
   const latestUpdated = typedGames[0]?.created_at ?? null;
 
+  const forecasts: ManagerForecast[] = computeLeagueForecasts({
+    members: typedMembers as ForecastMember[],
+    picks: typedPicks as ForecastPick[],
+    teams: typedTeams as ForecastTeam[],
+    teamResults: typedResults as ForecastTeamResult[],
+    games: typedGames as ForecastGame[],
+  });
+
+  const forecastMap = new Map<string, ManagerForecast>(
+    forecasts.map((forecast) => [forecast.memberId, forecast])
+  );
+
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
       <section className="mb-6 sm:mb-8">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-3xl font-bold">Team Rosters</h2>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Rosters
+            </div>
+            <h2 className="mt-1 text-3xl font-bold">Team Rosters</h2>
             <p className="mt-2 text-slate-600">
-              Every manager’s drafted teams, point totals, and survival status.
+              Every manager’s drafted teams, current output, and remaining bracket-constrained upside.
             </p>
           </div>
 
@@ -86,7 +112,8 @@ export default async function RostersPage() {
 
       <div className="grid gap-5 xl:grid-cols-2">
         {typedMembers.map((member) => {
-          const memberPicks = typedPicks.filter((p) => p.member_id === member.id);
+          const memberPicks = typedPicks.filter((pick) => pick.member_id === member.id);
+          const forecast = forecastMap.get(member.id);
 
           return (
             <div
@@ -104,6 +131,55 @@ export default async function RostersPage() {
                   <ManagerBadge name={member.display_name} />
                 </div>
               </div>
+
+              {forecast ? (
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                      Current
+                    </div>
+                    <div className="mt-1 text-lg font-bold text-slate-950">
+                      {forecast.currentPoints}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                      Live Teams
+                    </div>
+                    <div className="mt-1 text-lg font-bold text-slate-950">
+                      {forecast.liveTeams}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                      Eliminated
+                    </div>
+                    <div className="mt-1 text-lg font-bold text-slate-950">
+                      {forecast.eliminatedTeams}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                      Upside
+                    </div>
+                    <div className="mt-1 text-lg font-bold text-slate-950">
+                      {forecast.remainingUpside}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                      Max Final
+                    </div>
+                    <div className="mt-1 text-lg font-bold text-slate-950">
+                      {forecast.maxFinalPoints}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="mt-5 space-y-3">
                 {memberPicks.length === 0 ? (
