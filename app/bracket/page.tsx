@@ -466,12 +466,15 @@ export default async function BracketPage() {
   const typedExternalGames = (externalGames ?? []) as ExternalGameSync[];
 
   const latestOfficialUpdate = typedGames[0]?.created_at ?? null;
-  const latestLiveUpdate =
+
+  const now = Date.now();
+
+  const nextScheduledGame =
     typedExternalGames
       .map((game) => game.start_time)
       .filter((value): value is string => !!value)
-      .sort()
-      .reverse()[0] ?? null;
+      .filter((value) => new Date(value).getTime() >= now)
+      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0] ?? null;
 
   const memberNameById = new Map(typedMembers.map((m) => [m.id, m.display_name]));
   const managerByTeamId = new Map(
@@ -520,6 +523,8 @@ export default async function BracketPage() {
 
   return (
     <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
+      <AutoRefreshClient intervalMs={60000} />
+
       <section className="mb-6 sm:mb-8">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -536,11 +541,10 @@ export default async function BracketPage() {
                 : "No official results entered yet"}
             </div>
             <div>
-              {latestLiveUpdate
-                ? `Live feed active for games starting: ${new Date(latestLiveUpdate).toLocaleString()}`
-                : "No live feed data available yet"}
+              {nextScheduledGame
+                ? `Next scheduled game: ${new Date(nextScheduledGame).toLocaleString()}`
+                : "No upcoming scheduled games in feed window"}
             </div>
-            <AutoRefreshClient intervalMs={60000} />
           </div>
         </div>
       </section>
