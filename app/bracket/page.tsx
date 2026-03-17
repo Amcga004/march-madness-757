@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import AutoRefreshClient from "../components/AutoRefreshClient";
 
 type Team = {
   id: string;
@@ -519,6 +520,8 @@ export default async function BracketPage() {
 
   return (
     <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
+      <AutoRefreshClient intervalMs={60000} />
+
       <section className="mb-6 sm:mb-8">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -539,6 +542,7 @@ export default async function BracketPage() {
                 ? `Live feed active for games starting: ${new Date(latestLiveUpdate).toLocaleString()}`
                 : "No live feed data available yet"}
             </div>
+            <div>Auto-refreshing every 60 seconds</div>
           </div>
         </div>
       </section>
