@@ -31,6 +31,8 @@ type Team = {
   conference_record: string | null;
   off_efficiency: number | null;
   def_efficiency: number | null;
+  is_play_in_placeholder: boolean | null;
+  is_play_in_actual: boolean | null;
 };
 
 type Pick = {
@@ -187,6 +189,12 @@ export default function DraftPage() {
   const [isSubmittingPick, setIsSubmittingPick] = useState(false);
   const [authLoaded, setAuthLoaded] = useState(false);
 
+  const [magicLinkEmail, setMagicLinkEmail] = useState("");
+  const [passwordEmail, setPasswordEmail] = useState("");
+  const [passwordValue, setPasswordValue] = useState("");
+  const [isSendingMagicLink, setIsSendingMagicLink] = useState(false);
+  const [isSigningInWithPassword, setIsSigningInWithPassword] = useState(false);
+
   async function loadData() {
     const [
       { data: authData },
@@ -208,7 +216,7 @@ export default function DraftPage() {
       supabase
         .from("teams")
         .select(
-          "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency"
+          "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency,is_play_in_placeholder,is_play_in_actual"
         )
         .order("region", { ascending: true })
         .order("seed", { ascending: true })
@@ -224,7 +232,12 @@ export default function DraftPage() {
 
     if (leagueData) setLeague(leagueData);
     if (memberData) setMembers(memberData as Member[]);
-    if (teamData) setTeams(teamData as Team[]);
+    if (teamData) {
+      const filteredTeams = (teamData as Team[]).filter(
+        (team) => team.is_play_in_actual !== true
+      );
+      setTeams(filteredTeams);
+    }
     if (pickData) setPicks(pickData as Pick[]);
   }
 
@@ -460,7 +473,7 @@ export default function DraftPage() {
     e.preventDefault();
 
     if (!signedInMember) {
-      setMessage("Please sign in from the menu before making a pick.");
+      setMessage("You must sign in before making a pick.");
       return;
     }
 
@@ -523,6 +536,68 @@ export default function DraftPage() {
     setMessage("Last pick removed.");
   }
 
+  async function sendMagicLink() {
+    if (!magicLinkEmail.trim()) {
+      setMessage("Please enter an email address for the magic link.");
+      return;
+    }
+
+    setIsSendingMagicLink(true);
+    setMessage("");
+
+    try {
+      const redirectTo = `${window.location.origin}/auth/callback?next=/draft`;
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: magicLinkEmail.trim(),
+        options: {
+          emailRedirectTo: redirectTo,
+        },
+      });
+
+      if (error) {
+        setMessage(error.message || "Failed to send magic link.");
+        return;
+      }
+
+      setMessage("Magic link sent. Check your email.");
+    } finally {
+      setIsSendingMagicLink(false);
+    }
+  }
+
+  async function signInWithPassword() {
+    if (!passwordEmail.trim() || !passwordValue.trim()) {
+      setMessage("Please enter both email and password.");
+      return;
+    }
+
+    setIsSigningInWithPassword(true);
+    setMessage("");
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: passwordEmail.trim(),
+        password: passwordValue,
+      });
+
+      if (error) {
+        setMessage(error.message || "Failed to sign in with password.");
+        return;
+      }
+
+      setMessage("Signed in successfully.");
+      window.location.href = "/draft";
+    } finally {
+      setIsSigningInWithPassword(false);
+    }
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    window.location.reload();
+  }
+
   const upcomingPicks = snake
     .filter((pick) => pick.overallPick >= nextOverallPick)
     .slice(0, 10);
@@ -531,51 +606,139 @@ export default function DraftPage() {
 
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
-      <section className="mb-5 sm:mb-6">
-        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Draft
-        </div>
-        <h2 className="mt-1 text-3xl font-bold">Draft Room</h2>
+      <section className="mb-6 sm:mb-8">
+        <h2 className="text-3xl font-bold">Draft Room</h2>
         <p className="mt-2 text-gray-600">
-          Live draft room with role-based pick controls and real-time draft tracking.
+          Live draft room with manager sign-in and role-based pick controls.
         </p>
       </section>
 
-      <section className="mb-6 rounded-2xl border bg-white p-4 shadow-sm sm:mb-8 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Draft Status
-            </div>
-            <div className="mt-1 text-sm text-slate-700">
-              {authLoaded
-                ? signedInMember
-                  ? `Signed in as ${signedInMember.display_name} • ${signedInMember.role ?? "manager"}`
+      <section className="mb-6 rounded-2xl border bg-white p-5 shadow-sm sm:mb-8 sm:p-6">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                Draft Access
+              </div>
+              <div className="mt-2 text-2xl font-bold text-slate-900">
+                {authUser ? "Signed In" : "Sign In Required"}
+              </div>
+              <div className="mt-2 text-sm text-slate-600">
+                {authLoaded
+                  ? authUser?.email
+                    ? `Email: ${authUser.email}`
+                    : "You are not currently signed in."
+                  : "Checking session..."}
+              </div>
+              <div className="mt-2 text-sm font-medium text-slate-700">
+                Access:{" "}
+                {signedInMember
+                  ? `${signedInMember.display_name} • ${signedInMember.role ?? "manager"}`
                   : authUser
                   ? "Signed in, but not mapped to a league member"
-                  : "Not signed in"
-                : "Checking session..."}
+                  : "View only until signed in"}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              {canAccessAdmin ? (
+                <a
+                  href="/admin"
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
+                >
+                  Go to Admin
+                </a>
+              ) : null}
+
+              {authUser ? (
+                <button
+                  type="button"
+                  onClick={signOut}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
+                >
+                  Sign Out
+                </button>
+              ) : null}
             </div>
           </div>
 
-          <div className="text-sm text-slate-600">
-            {!authUser ? (
-              <span>Use the menu to sign in before making picks.</span>
-            ) : canAccessAdmin ? (
-              <a href="/admin" className="font-medium text-slate-900 underline underline-offset-4">
-                Commissioner access available
-              </a>
-            ) : (
-              <span>View board and make picks when it is your turn.</span>
-            )}
-          </div>
-        </div>
+          {!authUser ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-base font-semibold text-slate-900">
+                  Magic Link Login
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  For managers using email link sign-in
+                </div>
 
-        {authUser && !signedInMember ? (
-          <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-            Your signed-in account is not mapped to a league member yet, so you can view the board but cannot make picks.
-          </div>
-        ) : null}
+                <input
+                  type="email"
+                  value={magicLinkEmail}
+                  onChange={(e) => setMagicLinkEmail(e.target.value)}
+                  placeholder="Enter your email"
+                  className="mt-4 w-full rounded-xl border px-3 py-2"
+                />
+
+                <button
+                  type="button"
+                  onClick={sendMagicLink}
+                  disabled={isSendingMagicLink}
+                  className="mt-3 rounded-xl bg-slate-950 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSendingMagicLink ? "Sending..." : "Send Magic Link"}
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-base font-semibold text-slate-900">
+                  Email + Password Login
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  For managers using password sign-in
+                </div>
+
+                <input
+                  type="email"
+                  value={passwordEmail}
+                  onChange={(e) => setPasswordEmail(e.target.value)}
+                  placeholder="Enter your email"
+                  className="mt-4 w-full rounded-xl border px-3 py-2"
+                />
+
+                <input
+                  type="password"
+                  value={passwordValue}
+                  onChange={(e) => setPasswordValue(e.target.value)}
+                  placeholder="Enter your password"
+                  className="mt-3 w-full rounded-xl border px-3 py-2"
+                />
+
+                <button
+                  type="button"
+                  onClick={signInWithPassword}
+                  disabled={isSigningInWithPassword}
+                  className="mt-3 rounded-xl bg-slate-950 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSigningInWithPassword ? "Signing In..." : "Sign In with Password"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {authUser && !signedInMember ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              Your signed-in email is not mapped to a league member yet, so you can view
+              the board but cannot make picks.
+            </div>
+          ) : null}
+
+          {!authUser ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+              Sign in with either a magic link or email and password to make picks when it is your turn.
+            </div>
+          ) : null}
+        </div>
       </section>
 
       {currentPick && currentMember ? (
@@ -609,7 +772,7 @@ export default function DraftPage() {
                   ? "It is your turn. You can make this pick."
                   : signedInMember
                   ? "You are signed in, but it is not your turn."
-                  : "Sign in from the menu to make picks when it is your turn."}
+                  : "Sign in to make picks when it is your turn."}
               </div>
             </div>
 
