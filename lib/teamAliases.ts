@@ -101,6 +101,9 @@ const DIRECT_ALIASES: Record<string, string> = {
   "prairie view": "prairie view a and m",
   "prairie view a&m": "prairie view a and m",
   "prairie view a and m": "prairie view a and m",
+
+  "miami": "miami fl",
+  "miami fl": "miami fl",
 };
 
 function basicNormalize(value: string) {
@@ -213,6 +216,9 @@ export function getInternalAliasKeys(schoolName: string): string[] {
     case "prairie view a and m":
       keys.add("prairie view");
       keys.add("prairie view a&m");
+      break;
+    case "miami fl":
+      keys.add("miami");
       break;
     default:
       break;
