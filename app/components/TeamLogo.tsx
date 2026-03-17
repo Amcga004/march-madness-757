@@ -1,15 +1,19 @@
+"use client";
+
+import { useState } from "react";
+import { getCanonicalTeamName, getTeamLogoDomain } from "@/lib/teamIdentity";
+
 type TeamLogoProps = {
   teamName: string;
   size?: number;
 };
 
-import { getCanonicalTeamName, getTeamLogoDomain } from "@/lib/teamIdentity";
-
 export default function TeamLogo({ teamName, size = 24 }: TeamLogoProps) {
   const canonical = getCanonicalTeamName(teamName);
   const domain = getTeamLogoDomain(canonical);
+  const [hasError, setHasError] = useState(false);
 
-  if (!domain) {
+  if (!domain || hasError) {
     return (
       <div
         className="flex items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-600"
@@ -27,9 +31,8 @@ export default function TeamLogo({ teamName, size = 24 }: TeamLogoProps) {
       width={size}
       height={size}
       className="rounded-full border border-slate-200 bg-white object-cover"
-      onError={(e) => {
-        const target = e.currentTarget;
-        target.style.display = "none";
+      onError={() => {
+        setHasError(true);
       }}
     />
   );
