@@ -39,23 +39,6 @@ type League = {
 
 type StatusType = "idle" | "loading" | "success" | "error";
 
-type MatchupTeam = {
-  id: string | null;
-  name: string;
-  seed: number | null;
-  region: string | null;
-};
-
-type GuidedMatchup = {
-  key: string;
-  roundName: string;
-  regionLabel: string;
-  top: MatchupTeam;
-  bottom: MatchupTeam;
-  winnerId: string | null;
-  loserId: string | null;
-};
-
 const ROUNDS = [
   "Round of 64",
   "Round of 32",
@@ -63,335 +46,10 @@ const ROUNDS = [
   "Elite Eight",
   "Final Four",
   "Championship",
-] as const;
-
-const REGIONS = ["East", "West", "South", "Midwest"] as const;
-
-const ROUND_OF_64_PAIRS = [
-  [1, 16],
-  [8, 9],
-  [5, 12],
-  [4, 13],
-  [6, 11],
-  [3, 14],
-  [7, 10],
-  [2, 15],
-] as const;
+];
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function emptyTeam(): MatchupTeam {
-  return {
-    id: null,
-    name: "TBD",
-    seed: null,
-    region: null,
-  };
-}
-
-function buildTeam(team?: Team): MatchupTeam {
-  if (!team) return emptyTeam();
-
-  return {
-    id: team.id,
-    name: team.school_name,
-    seed: team.seed,
-    region: team.region,
-  };
-}
-
-function findGameForTeams(
-  games: Game[],
-  roundName: string,
-  teamAId: string | null,
-  teamBId: string | null
-) {
-  if (!teamAId || !teamBId) return null;
-
-  return (
-    games.find((game) => {
-      if (game.round_name !== roundName) return false;
-      const ids = [game.winning_team_id, game.losing_team_id];
-      return ids.includes(teamAId) && ids.includes(teamBId);
-    }) ?? null
-  );
-}
-
-function winnerFromGame(
-  game: Game | null,
-  teamAId: string | null,
-  teamBId: string | null
-) {
-  if (!game) return null;
-  if (game.winning_team_id === teamAId) return teamAId;
-  if (game.winning_team_id === teamBId) return teamBId;
-  return null;
-}
-
-function loserFromGame(
-  game: Game | null,
-  teamAId: string | null,
-  teamBId: string | null
-) {
-  if (!game) return null;
-  if (game.losing_team_id === teamAId) return teamAId;
-  if (game.losing_team_id === teamBId) return teamBId;
-  return null;
-}
-
-function winnerTeamFromMatchup(matchup: GuidedMatchup): MatchupTeam {
-  if (matchup.winnerId === matchup.top.id) return matchup.top;
-  if (matchup.winnerId === matchup.bottom.id) return matchup.bottom;
-  return emptyTeam();
-}
-
-function buildRegionRounds(regionTeams: Team[], games: Game[], region: string) {
-  const seedMap = new Map(regionTeams.map((team) => [team.seed, team]));
-
-  const round64: GuidedMatchup[] = ROUND_OF_64_PAIRS.map(([seedA, seedB]) => {
-    const teamA = buildTeam(seedMap.get(seedA));
-    const teamB = buildTeam(seedMap.get(seedB));
-    const game = findGameForTeams(games, "Round of 64", teamA.id, teamB.id);
-
-    return {
-      key: `Round of 64-${region}-${seedA}-${seedB}`,
-      roundName: "Round of 64",
-      regionLabel: region,
-      top: teamA,
-      bottom: teamB,
-      winnerId: winnerFromGame(game, teamA.id, teamB.id),
-      loserId: loserFromGame(game, teamA.id, teamB.id),
-    };
-  });
-
-  const round32: GuidedMatchup[] = [];
-  for (let i = 0; i < round64.length; i += 2) {
-    const leftWinner = winnerTeamFromMatchup(round64[i]);
-    const rightWinner = winnerTeamFromMatchup(round64[i + 1]);
-    const game = findGameForTeams(games, "Round of 32", leftWinner.id, rightWinner.id);
-
-    round32.push({
-      key: `Round of 32-${region}-${i}`,
-      roundName: "Round of 32",
-      regionLabel: region,
-      top: leftWinner,
-      bottom: rightWinner,
-      winnerId: winnerFromGame(game, leftWinner.id, rightWinner.id),
-      loserId: loserFromGame(game, leftWinner.id, rightWinner.id),
-    });
-  }
-
-  const sweet16: GuidedMatchup[] = [];
-  for (let i = 0; i < round32.length; i += 2) {
-    const leftWinner = winnerTeamFromMatchup(round32[i]);
-    const rightWinner = winnerTeamFromMatchup(round32[i + 1]);
-    const game = findGameForTeams(games, "Sweet 16", leftWinner.id, rightWinner.id);
-
-    sweet16.push({
-      key: `Sweet 16-${region}-${i}`,
-      roundName: "Sweet 16",
-      regionLabel: region,
-      top: leftWinner,
-      bottom: rightWinner,
-      winnerId: winnerFromGame(game, leftWinner.id, rightWinner.id),
-      loserId: loserFromGame(game, leftWinner.id, rightWinner.id),
-    });
-  }
-
-  const elite8: GuidedMatchup[] = [];
-  for (let i = 0; i < sweet16.length; i += 2) {
-    const leftWinner = winnerTeamFromMatchup(sweet16[i]);
-    const rightWinner = winnerTeamFromMatchup(sweet16[i + 1]);
-    const game = findGameForTeams(games, "Elite Eight", leftWinner.id, rightWinner.id);
-
-    elite8.push({
-      key: `Elite Eight-${region}-${i}`,
-      roundName: "Elite Eight",
-      regionLabel: region,
-      top: leftWinner,
-      bottom: rightWinner,
-      winnerId: winnerFromGame(game, leftWinner.id, rightWinner.id),
-      loserId: loserFromGame(game, leftWinner.id, rightWinner.id),
-    });
-  }
-
-  return {
-    round64,
-    round32,
-    sweet16,
-    elite8,
-    champion: elite8.length > 0 ? winnerTeamFromMatchup(elite8[0]) : emptyTeam(),
-  };
-}
-
-function buildFinalRoundMatchup(
-  games: Game[],
-  roundName: string,
-  regionLabel: string,
-  top: MatchupTeam,
-  bottom: MatchupTeam
-): GuidedMatchup {
-  const game = findGameForTeams(games, roundName, top.id, bottom.id);
-
-  return {
-    key: `${roundName}-${regionLabel}-${top.id ?? "tbd"}-${bottom.id ?? "tbd"}`,
-    roundName,
-    regionLabel,
-    top,
-    bottom,
-    winnerId: winnerFromGame(game, top.id, bottom.id),
-    loserId: loserFromGame(game, top.id, bottom.id),
-  };
-}
-
-function buildGuidedMatchups(teams: Team[], games: Game[]) {
-  const regionData = REGIONS.map((region) => {
-    const teamsForRegion = teams.filter((team) => team.region === region);
-    return {
-      region,
-      ...buildRegionRounds(teamsForRegion, games, region),
-    };
-  });
-
-  const eastChampion =
-    regionData.find((r) => r.region === "East")?.champion ?? emptyTeam();
-  const westChampion =
-    regionData.find((r) => r.region === "West")?.champion ?? emptyTeam();
-  const southChampion =
-    regionData.find((r) => r.region === "South")?.champion ?? emptyTeam();
-  const midwestChampion =
-    regionData.find((r) => r.region === "Midwest")?.champion ?? emptyTeam();
-
-  const finalFour1 = buildFinalRoundMatchup(
-    games,
-    "Final Four",
-    "East vs West",
-    eastChampion,
-    westChampion
-  );
-
-  const finalFour2 = buildFinalRoundMatchup(
-    games,
-    "Final Four",
-    "South vs Midwest",
-    southChampion,
-    midwestChampion
-  );
-
-  const championship = buildFinalRoundMatchup(
-    games,
-    "Championship",
-    "National Championship",
-    winnerTeamFromMatchup(finalFour1),
-    winnerTeamFromMatchup(finalFour2)
-  );
-
-  return {
-    "Round of 64": regionData.flatMap((r) => r.round64),
-    "Round of 32": regionData.flatMap((r) => r.round32),
-    "Sweet 16": regionData.flatMap((r) => r.sweet16),
-    "Elite Eight": regionData.flatMap((r) => r.elite8),
-    "Final Four": [finalFour1, finalFour2],
-    Championship: [championship],
-  } as Record<string, GuidedMatchup[]>;
-}
-
-function ResultEntryCard({
-  matchup,
-  onSelectWinner,
-  isLoading,
-}: {
-  matchup: GuidedMatchup;
-  onSelectWinner: (winnerTeamId: string, loserTeamId: string, roundName: string) => void;
-  isLoading: boolean;
-}) {
-  const teamsReady = !!matchup.top.id && !!matchup.bottom.id;
-  const alreadyRecorded = !!matchup.winnerId;
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            {matchup.regionLabel}
-          </div>
-          <div className="mt-1 text-sm text-slate-600">{matchup.roundName}</div>
-        </div>
-
-        {alreadyRecorded ? (
-          <span className="rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
-            Complete
-          </span>
-        ) : (
-          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
-            Pending
-          </span>
-        )}
-      </div>
-
-      <div className="space-y-3">
-        <button
-          type="button"
-          disabled={!teamsReady || alreadyRecorded || isLoading || !matchup.top.id || !matchup.bottom.id}
-          onClick={() =>
-            matchup.top.id &&
-            matchup.bottom.id &&
-            onSelectWinner(matchup.top.id, matchup.bottom.id, matchup.roundName)
-          }
-          className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <div className="flex items-center gap-3">
-            <TeamLogo teamName={matchup.top.name} size={28} />
-            <div>
-              <div className="font-semibold text-slate-900">
-                {matchup.top.seed ? `${matchup.top.seed}. ` : ""}
-                {matchup.top.name}
-              </div>
-              <div className="text-sm text-slate-500">Mark as winner</div>
-            </div>
-          </div>
-
-          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-            Win
-          </span>
-        </button>
-
-        <button
-          type="button"
-          disabled={!teamsReady || alreadyRecorded || isLoading || !matchup.top.id || !matchup.bottom.id}
-          onClick={() =>
-            matchup.top.id &&
-            matchup.bottom.id &&
-            onSelectWinner(matchup.bottom.id, matchup.top.id, matchup.roundName)
-          }
-          className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <div className="flex items-center gap-3">
-            <TeamLogo teamName={matchup.bottom.name} size={28} />
-            <div>
-              <div className="font-semibold text-slate-900">
-                {matchup.bottom.seed ? `${matchup.bottom.seed}. ` : ""}
-                {matchup.bottom.name}
-              </div>
-              <div className="text-sm text-slate-500">Mark as winner</div>
-            </div>
-          </div>
-
-          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-            Win
-          </span>
-        </button>
-      </div>
-
-      {!teamsReady ? (
-        <div className="mt-3 text-sm text-slate-500">
-          Waiting for prior round results before this matchup becomes available.
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 export default function AdminPage() {
@@ -408,7 +66,9 @@ export default function AdminPage() {
   const [password, setPassword] = useState("");
   const [isSigningIn, setIsSigningIn] = useState(false);
 
-  const [roundName, setRoundName] = useState<string>("Round of 64");
+  const [winnerTeamId, setWinnerTeamId] = useState("");
+  const [loserTeamId, setLoserTeamId] = useState("");
+  const [roundName, setRoundName] = useState("Round of 64");
   const [seasonYear, setSeasonYear] = useState<number>(2026);
 
   const [isRunningLottery, setIsRunningLottery] = useState(false);
@@ -417,6 +77,9 @@ export default function AdminPage() {
   >({});
   const [status, setStatus] = useState<StatusType>("idle");
   const [message, setMessage] = useState("");
+
+  const [isRunningSyncCycle, setIsRunningSyncCycle] = useState(false);
+  const [syncDate, setSyncDate] = useState("20260319");
 
   async function loadData() {
     const [
@@ -474,26 +137,6 @@ export default function AdminPage() {
     () => new Map(teams.map((t) => [t.id, t.school_name])),
     [teams]
   );
-
-  const guidedMatchups = useMemo(() => {
-    return buildGuidedMatchups(teams, games);
-  }, [teams, games]);
-
-  const pendingMatchupsForRound = useMemo(() => {
-    return (guidedMatchups[roundName] ?? []).filter(
-      (matchup) =>
-        !!matchup.top.id &&
-        !!matchup.bottom.id &&
-        !matchup.winnerId &&
-        !matchup.loserId
-    );
-  }, [guidedMatchups, roundName]);
-
-  const completedMatchupsForRound = useMemo(() => {
-    return (guidedMatchups[roundName] ?? []).filter(
-      (matchup) => !!matchup.winnerId
-    );
-  }, [guidedMatchups, roundName]);
 
   function setStatusMessage(nextStatus: StatusType, nextMessage: string) {
     setStatus(nextStatus);
@@ -621,11 +264,9 @@ export default function AdminPage() {
     }
   }
 
-  async function submitMatchupResult(
-    winnerTeamId: string,
-    loserTeamId: string,
-    selectedRoundName: string
-  ) {
+  async function submitResult(e: React.FormEvent) {
+    e.preventDefault();
+
     if (!isCommissioner) {
       setStatusMessage("error", "Only the commissioner can record results.");
       return;
@@ -636,13 +277,15 @@ export default function AdminPage() {
       return;
     }
 
-    const winnerName = teamMap.get(winnerTeamId) ?? "Winner";
-    const loserName = teamMap.get(loserTeamId) ?? "Loser";
+    if (!winnerTeamId || !loserTeamId) {
+      setStatusMessage("error", "Please select both a winning team and losing team.");
+      return;
+    }
 
-    const confirmed = window.confirm(
-      `Record result: ${winnerName} defeated ${loserName} in ${selectedRoundName}?`
-    );
-    if (!confirmed) return;
+    if (winnerTeamId === loserTeamId) {
+      setStatusMessage("error", "Winning team and losing team cannot be the same.");
+      return;
+    }
 
     setStatusMessage("loading", "Saving result...");
 
@@ -656,7 +299,7 @@ export default function AdminPage() {
           leagueId: league.id,
           winnerTeamId,
           loserTeamId,
-          roundName: selectedRoundName,
+          roundName,
         }),
       });
 
@@ -667,6 +310,8 @@ export default function AdminPage() {
         return;
       }
 
+      setWinnerTeamId("");
+      setLoserTeamId("");
       await refreshResults();
       setStatusMessage("success", "Game result recorded.");
     } catch {
@@ -781,11 +426,59 @@ export default function AdminPage() {
       }
 
       await loadData();
+      setWinnerTeamId("");
+      setLoserTeamId("");
       setRoundName("Round of 64");
       setLotteryResults({});
       setStatusMessage("success", "League reset complete.");
     } catch {
       setStatusMessage("error", "Reset failed.");
+    }
+  }
+
+  async function runSyncCycle() {
+    if (!isCommissioner) {
+      setStatusMessage("error", "Only the commissioner can run the sync cycle.");
+      return;
+    }
+
+    if (!syncDate.trim()) {
+      setStatusMessage("error", "Please enter a sync date in YYYYMMDD format.");
+      return;
+    }
+
+    setIsRunningSyncCycle(true);
+    setStatusMessage("loading", `Running ESPN sync cycle for ${syncDate}...`);
+
+    try {
+      const res = await fetch("/api/admin/run-sync-cycle", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET ?? "757mm2026"}`,
+        },
+        body: JSON.stringify({
+          date: syncDate.trim(),
+        }),
+      });
+
+      const result = await res.json();
+
+      if (!result.ok) {
+        setStatusMessage("error", result.error || "Sync cycle failed.");
+        return;
+      }
+
+      await refreshResults();
+
+      setStatusMessage(
+        "success",
+        `Sync complete for ${result.date}. Events seen: ${result.eventsSeen}. Rows upserted: ${result.rowsUpserted}. Mapped rows: ${result.mappedRows}. Promoted games: ${result.promotedGames}.`
+      );
+    } catch {
+      setStatusMessage("error", "Sync cycle failed.");
+    } finally {
+      setIsRunningSyncCycle(false);
     }
   }
 
@@ -797,7 +490,7 @@ export default function AdminPage() {
             Admin Panel
           </h1>
           <p className="mt-2 text-sm text-slate-600 sm:text-base">
-            Commissioner controls for lottery, guided results entry, season archive, and league maintenance.
+            Commissioner controls for lottery, live sync, results, season archive, and league maintenance.
           </p>
           <p className="mt-1 text-sm text-slate-500">
             {latestUpdated
@@ -883,6 +576,45 @@ export default function AdminPage() {
       {isCommissioner ? (
         <>
           <section className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold">Live Sync Engine</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Pull ESPN scoreboard data, map teams, and promote final games into official results.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div>
+                  <label
+                    htmlFor="syncDate"
+                    className="mb-2 block text-sm font-medium text-slate-700"
+                  >
+                    Sync Date
+                  </label>
+                  <input
+                    id="syncDate"
+                    type="text"
+                    value={syncDate}
+                    onChange={(e) => setSyncDate(e.target.value)}
+                    placeholder="YYYYMMDD"
+                    className="w-full rounded-xl border px-3 py-2 sm:w-[160px]"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={runSyncCycle}
+                  disabled={isRunningSyncCycle}
+                  className="rounded-xl bg-slate-950 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isRunningSyncCycle ? "Running Sync..." : "Run Sync Cycle"}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
             <h2 className="text-xl font-semibold">Draft Lottery</h2>
 
             <div className="mt-4 flex flex-col gap-4">
@@ -929,15 +661,10 @@ export default function AdminPage() {
 
           <section className="grid gap-6 xl:grid-cols-2">
             <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold">Guided Result Entry</h2>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Select a round, then tap the winning team from each valid matchup.
-                  </p>
-                </div>
+              <h2 className="text-xl font-semibold">Record Game Result</h2>
 
-                <div className="w-full sm:w-[220px]">
+              <form onSubmit={submitResult} className="mt-4 space-y-4">
+                <div>
                   <label className="mb-2 block text-sm font-medium">Round</label>
                   <select
                     className="w-full rounded-xl border px-3 py-2"
@@ -951,35 +678,46 @@ export default function AdminPage() {
                     ))}
                   </select>
                 </div>
-              </div>
 
-              <div className="mt-5 grid gap-4">
-                {pendingMatchupsForRound.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-                    No pending matchups are currently available for {roundName}.
-                  </div>
-                ) : (
-                  pendingMatchupsForRound.map((matchup) => (
-                    <ResultEntryCard
-                      key={matchup.key}
-                      matchup={matchup}
-                      isLoading={status === "loading"}
-                      onSelectWinner={submitMatchupResult}
-                    />
-                  ))
-                )}
-              </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Winning Team</label>
+                  <select
+                    className="w-full rounded-xl border px-3 py-2"
+                    value={winnerTeamId}
+                    onChange={(e) => setWinnerTeamId(e.target.value)}
+                  >
+                    <option value="">Select winner</option>
+                    {teams.map((team) => (
+                      <option key={team.id} value={team.id}>
+                        {team.school_name} • {team.seed} Seed • {team.region}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-sm font-semibold text-slate-900">
-                  Round Progress
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Losing Team</label>
+                  <select
+                    className="w-full rounded-xl border px-3 py-2"
+                    value={loserTeamId}
+                    onChange={(e) => setLoserTeamId(e.target.value)}
+                  >
+                    <option value="">Select loser</option>
+                    {teams.map((team) => (
+                      <option key={team.id} value={team.id}>
+                        {team.school_name} • {team.seed} Seed • {team.region}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <div className="mt-2 text-sm text-slate-600">
-                  Pending: <span className="font-semibold">{pendingMatchupsForRound.length}</span>
-                  <span className="mx-2 text-slate-400">•</span>
-                  Completed: <span className="font-semibold">{completedMatchupsForRound.length}</span>
-                </div>
-              </div>
+
+                <button
+                  type="submit"
+                  className="rounded-xl bg-black px-4 py-2 text-white"
+                >
+                  Submit Result
+                </button>
+              </form>
             </div>
 
             <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
@@ -1047,7 +785,7 @@ export default function AdminPage() {
                   href="/results"
                   className="rounded-xl border px-4 py-3 hover:bg-slate-50"
                 >
-                  Results Page
+                  Results Entry
                 </Link>
 
                 <Link
