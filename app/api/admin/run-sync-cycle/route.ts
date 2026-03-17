@@ -4,12 +4,55 @@ import { fetchEspnScoreboard, normalizeEspnEvent } from "@/lib/espn";
 import { mapEspnTeamsToInternal } from "@/lib/teamMapping";
 import { promoteResults } from "@/lib/promoteResults";
 
-function getTodayDateString() {
-  const now = new Date();
-  const yyyy = now.getUTCFullYear();
-  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(now.getUTCDate()).padStart(2, "0");
+function formatDateToYYYYMMDD(date: Date) {
+  const yyyy = date.getUTCFullYear();
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(date.getUTCDate()).padStart(2, "0");
   return `${yyyy}${mm}${dd}`;
+}
+
+function getTodayUtcDate() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+function buildRollingDateWindow(daysBack = 2, daysForward = 5) {
+  const base = getTodayUtcDate();
+  const dates: string[] = [];
+
+  for (let offset = -daysBack; offset <= daysForward; offset += 1) {
+    const next = new Date(base);
+    next.setUTCDate(base.getUTCDate() + offset);
+    dates.push(formatDateToYYYYMMDD(next));
+  }
+
+  return dates;
+}
+
+function parseRequestedDates(body: unknown) {
+  if (!body || typeof body !== "object") {
+    return buildRollingDateWindow();
+  }
+
+  const maybeBody = body as {
+    date?: unknown;
+    dates?: unknown;
+  };
+
+  if (Array.isArray(maybeBody.dates)) {
+    const cleaned = maybeBody.dates
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim())
+      .filter((value) => /^\d{8}$/.test(value));
+
+    return cleaned.length > 0 ? cleaned : buildRollingDateWindow();
+  }
+
+  if (typeof maybeBody.date === "string" && /^\d{8}$/.test(maybeBody.date.trim())) {
+    return [maybeBody.date.trim()];
+  }
+
+  return buildRollingDateWindow();
 }
 
 export async function POST(request: NextRequest) {
@@ -26,49 +69,51 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient();
     const body = await request.json().catch(() => ({}));
-    const date =
-      typeof body?.date === "string" && body.date.trim()
-        ? body.date.trim()
-        : getTodayDateString();
+    const requestedDates = parseRequestedDates(body);
 
-    const scoreboard = await fetchEspnScoreboard(date);
-    const events = scoreboard.events ?? [];
+    let totalEventsSeen = 0;
+    let totalRowsUpserted = 0;
 
-    let rowsUpserted = 0;
+    for (const date of requestedDates) {
+      const scoreboard = await fetchEspnScoreboard(date);
+      const events = scoreboard.events ?? [];
 
-    for (const event of events) {
-      const normalized = normalizeEspnEvent(event);
-      if (!normalized) continue;
+      totalEventsSeen += events.length;
 
-      const { error } = await supabase.from("external_game_sync").upsert(
-        {
-          provider: normalized.provider,
-          sport: "mens-college-basketball",
-          external_game_id: normalized.external_game_id,
-          espn_event_name: normalized.espn_event_name,
-          espn_status: normalized.espn_status,
-          espn_period: normalized.espn_period,
-          espn_clock: normalized.espn_clock,
-          start_time: normalized.start_time,
-          home_team_external_id: normalized.home_team_external_id,
-          away_team_external_id: normalized.away_team_external_id,
-          home_team_name: normalized.home_team_name,
-          away_team_name: normalized.away_team_name,
-          home_score: normalized.home_score,
-          away_score: normalized.away_score,
-          last_synced_at: new Date().toISOString(),
-          raw_payload: normalized.raw_payload,
-        },
-        {
-          onConflict: "provider,external_game_id",
+      for (const event of events) {
+        const normalized = normalizeEspnEvent(event);
+        if (!normalized) continue;
+
+        const { error } = await supabase.from("external_game_sync").upsert(
+          {
+            provider: normalized.provider,
+            sport: "mens-college-basketball",
+            external_game_id: normalized.external_game_id,
+            espn_event_name: normalized.espn_event_name,
+            espn_status: normalized.espn_status,
+            espn_period: normalized.espn_period,
+            espn_clock: normalized.espn_clock,
+            start_time: normalized.start_time,
+            home_team_external_id: normalized.home_team_external_id,
+            away_team_external_id: normalized.away_team_external_id,
+            home_team_name: normalized.home_team_name,
+            away_team_name: normalized.away_team_name,
+            home_score: normalized.home_score,
+            away_score: normalized.away_score,
+            last_synced_at: new Date().toISOString(),
+            raw_payload: normalized.raw_payload,
+          },
+          {
+            onConflict: "provider,external_game_id",
+          }
+        );
+
+        if (error) {
+          throw new Error(error.message);
         }
-      );
 
-      if (error) {
-        throw new Error(error.message);
+        totalRowsUpserted += 1;
       }
-
-      rowsUpserted += 1;
     }
 
     const mappingResult = await mapEspnTeamsToInternal();
@@ -76,9 +121,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      date,
-      eventsSeen: events.length,
-      rowsUpserted,
+      datesProcessed: requestedDates,
+      eventsSeen: totalEventsSeen,
+      rowsUpserted: totalRowsUpserted,
       mappedRows: mappingResult.mappedRows,
       promotedGames: promotionResult.promotedGames,
     });
