@@ -27,6 +27,19 @@ export type PickGradeResult = {
   rationale: string;
 };
 
+export type TeamComparisonResult = {
+  projected_winner: string;
+  projected_loser: string;
+  winner_probability: number;
+  loser_probability: number;
+  confidence: "Low" | "Moderate" | "High";
+  analytic_edge: string;
+  resume_edge: string;
+  style_edge: string;
+  volatility_note: string;
+  summary_bullets: string[];
+};
+
 function clamp(value: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, value));
 }
@@ -418,5 +431,159 @@ export function getPickGrade(team: TeamIntelligenceInput): PickGradeResult {
     numeric_score: finalScore,
     grade,
     rationale,
+  };
+}
+
+function getHeadToHeadModelScore(team: TeamIntelligenceInput) {
+  const intel = getTeamIntelligence(team);
+  const q1 = parseRecord(team.quad1_record);
+  const q2 = parseRecord(team.quad2_record);
+
+  let score = 50;
+
+  if (intel.composite_rank !== null) {
+    score += Math.max(0, 45 - intel.composite_rank) * 0.75;
+  }
+
+  if (team.off_efficiency !== null) {
+    score += Math.max(0, team.off_efficiency - 108) * 0.9;
+  }
+
+  if (team.def_efficiency !== null) {
+    score += Math.max(0, 104 - team.def_efficiency) * 1.1;
+  }
+
+  if (team.sos_net_rating !== null) {
+    score += Math.max(0, team.sos_net_rating) * 1.4;
+  }
+
+  score += q1.wins * 1.4;
+  score += q2.wins * 0.5;
+
+  if (intel.value_score !== null) score += intel.value_score * 0.45;
+  if (intel.risk_score !== null) score -= intel.risk_score * 0.2;
+  if (intel.contender_score !== null) score += intel.contender_score * 0.18;
+
+  return score;
+}
+
+export function compareTeams(
+  teamA: TeamIntelligenceInput,
+  teamB: TeamIntelligenceInput
+): TeamComparisonResult {
+  const intelA = getTeamIntelligence(teamA);
+  const intelB = getTeamIntelligence(teamB);
+
+  const q1A = parseRecord(teamA.quad1_record);
+  const q1B = parseRecord(teamB.quad1_record);
+  const q2A = parseRecord(teamA.quad2_record);
+  const q2B = parseRecord(teamB.quad2_record);
+
+  const analyticScoreA =
+    (intelA.composite_rank !== null ? 100 - intelA.composite_rank : 0) +
+    (teamA.off_efficiency ?? 0) +
+    (120 - (teamA.def_efficiency ?? 120));
+
+  const analyticScoreB =
+    (intelB.composite_rank !== null ? 100 - intelB.composite_rank : 0) +
+    (teamB.off_efficiency ?? 0) +
+    (120 - (teamB.def_efficiency ?? 120));
+
+  const resumeScoreA =
+    q1A.wins * 3 +
+    q2A.wins * 1.2 +
+    (teamA.sos_net_rating ?? 0) * 2;
+
+  const resumeScoreB =
+    q1B.wins * 3 +
+    q2B.wins * 1.2 +
+    (teamB.sos_net_rating ?? 0) * 2;
+
+  const styleScoreA =
+    (teamA.off_efficiency ?? 0) * 0.55 +
+    (120 - (teamA.def_efficiency ?? 120)) * 0.75 +
+    (intelA.contender_score ?? 0) * 0.25;
+
+  const styleScoreB =
+    (teamB.off_efficiency ?? 0) * 0.55 +
+    (120 - (teamB.def_efficiency ?? 120)) * 0.75 +
+    (intelB.contender_score ?? 0) * 0.25;
+
+  const scoreA = getHeadToHeadModelScore(teamA);
+  const scoreB = getHeadToHeadModelScore(teamB);
+  const spread = scoreA - scoreB;
+
+  const probabilityA = clamp(50 + spread * 1.6, 5, 95);
+  const probabilityB = round1(100 - probabilityA);
+
+  const projectedWinner = probabilityA >= 50 ? teamA.school_name : teamB.school_name;
+  const projectedLoser = probabilityA >= 50 ? teamB.school_name : teamA.school_name;
+  const winnerProbability = probabilityA >= 50 ? probabilityA : probabilityB;
+  const loserProbability = probabilityA >= 50 ? probabilityB : probabilityA;
+
+  const margin = Math.abs(probabilityA - probabilityB);
+
+  const confidence: "Low" | "Moderate" | "High" =
+    margin >= 18 ? "High" : margin >= 10 ? "Moderate" : "Low";
+
+  const analytic_edge =
+    Math.abs(analyticScoreA - analyticScoreB) < 4
+      ? "Analytic profiles are very close"
+      : analyticScoreA > analyticScoreB
+      ? `${teamA.school_name} holds the stronger analytic edge`
+      : `${teamB.school_name} holds the stronger analytic edge`;
+
+  const resume_edge =
+    Math.abs(resumeScoreA - resumeScoreB) < 3
+      ? "Résumé strength is fairly even"
+      : resumeScoreA > resumeScoreB
+      ? `${teamA.school_name} owns the stronger résumé`
+      : `${teamB.school_name} owns the stronger résumé`;
+
+  let style_edge = "Style matchup looks fairly balanced";
+
+  if ((teamA.off_efficiency ?? 0) - (teamB.off_efficiency ?? 0) >= 4) {
+    style_edge = `${teamA.school_name} projects the stronger offensive ceiling`;
+  } else if ((teamB.off_efficiency ?? 0) - (teamA.off_efficiency ?? 0) >= 4) {
+    style_edge = `${teamB.school_name} projects the stronger offensive ceiling`;
+  } else if ((teamA.def_efficiency ?? 999) + 3 <= (teamB.def_efficiency ?? 999)) {
+    style_edge = `${teamA.school_name} projects the stronger defensive resistance`;
+  } else if ((teamB.def_efficiency ?? 999) + 3 <= (teamA.def_efficiency ?? 999)) {
+    style_edge = `${teamB.school_name} projects the stronger defensive resistance`;
+  }
+
+  const avgRisk =
+    ((intelA.risk_score ?? 50) + (intelB.risk_score ?? 50)) / 2;
+
+  const volatility_note =
+    avgRisk >= 58
+      ? "This profiles as a volatile matchup with upset potential"
+      : margin < 8
+      ? "This projects as a tight matchup with limited separation"
+      : "This matchup has a relatively stable projection profile";
+
+  const summary_bullets: string[] = [];
+
+  summary_bullets.push(
+    `${projectedWinner} projects as the internal favorite at ${winnerProbability.toFixed(
+      1
+    )}%`
+  );
+  summary_bullets.push(analytic_edge);
+  summary_bullets.push(resume_edge);
+  summary_bullets.push(style_edge);
+  summary_bullets.push(volatility_note);
+
+  return {
+    projected_winner: projectedWinner,
+    projected_loser: projectedLoser,
+    winner_probability: round1(winnerProbability),
+    loser_probability: round1(loserProbability),
+    confidence,
+    analytic_edge,
+    resume_edge,
+    style_edge,
+    volatility_note,
+    summary_bullets,
   };
 }

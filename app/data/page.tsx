@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import TeamLogo from "../components/TeamLogo";
 import {
+  compareTeams,
   getCompositeRank,
   getTeamIntelligence,
 } from "@/lib/teamIntelligence";
@@ -111,15 +112,12 @@ function getArchetypeBadgeClasses(tag: string) {
   if (normalized.includes("offense") || normalized.includes("offensive")) {
     return "border-emerald-200 bg-emerald-50 text-emerald-700";
   }
-
   if (normalized.includes("defense") || normalized.includes("defensive")) {
     return "border-red-200 bg-red-50 text-red-700";
   }
-
   if (normalized.includes("balanced")) {
     return "border-blue-200 bg-blue-50 text-blue-700";
   }
-
   if (
     normalized.includes("title") ||
     normalized.includes("contender") ||
@@ -127,19 +125,15 @@ function getArchetypeBadgeClasses(tag: string) {
   ) {
     return "border-amber-200 bg-amber-50 text-amber-700";
   }
-
   if (normalized.includes("upset") || normalized.includes("sleeper")) {
     return "border-purple-200 bg-purple-50 text-purple-700";
   }
-
   if (normalized.includes("risk") || normalized.includes("volatile")) {
     return "border-rose-200 bg-rose-50 text-rose-700";
   }
-
   if (normalized.includes("tempo") || normalized.includes("fast")) {
     return "border-orange-200 bg-orange-50 text-orange-700";
   }
-
   if (normalized.includes("slow")) {
     return "border-stone-200 bg-stone-50 text-stone-700";
   }
@@ -256,6 +250,21 @@ function MobileMetric({
   );
 }
 
+function DictionaryItem({
+  term,
+  description,
+}: {
+  term: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="text-sm font-semibold text-slate-900">{term}</div>
+      <div className="mt-1 text-sm text-slate-600">{description}</div>
+    </div>
+  );
+}
+
 export default function DataPage() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -332,6 +341,7 @@ export default function DataPage() {
       teamB: compareTeamB,
       intelA: getTeamIntelligence(compareTeamA),
       intelB: getTeamIntelligence(compareTeamB),
+      comparison: compareTeams(compareTeamA, compareTeamB),
     };
   }, [compareTeamA, compareTeamB]);
 
@@ -534,7 +544,7 @@ export default function DataPage() {
               Team Comparison
             </h3>
             <p className="mt-1 text-sm text-slate-600">
-              Select two teams to compare profile, rankings, and intelligence scores.
+              Select two teams to compare profile, rankings, intelligence, and matchup projection.
             </p>
           </div>
 
@@ -628,6 +638,84 @@ export default function DataPage() {
                     ) : (
                       <span className="text-xs text-slate-500">No archetype tags</span>
                     )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Matchup Projection
+                    </div>
+                    <div className="mt-1 text-xl font-bold text-slate-950">
+                      {comparisonState.comparison.projected_winner} over{" "}
+                      {comparisonState.comparison.projected_loser}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      Internal model estimate • Confidence: {comparisonState.comparison.confidence}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                      Win Probability
+                    </div>
+                    <div className="mt-1 text-lg font-semibold">
+                      {comparisonState.comparison.projected_winner}{" "}
+                      {comparisonState.comparison.winner_probability.toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                      Analytic Edge
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                      {comparisonState.comparison.analytic_edge}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                      Résumé Edge
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                      {comparisonState.comparison.resume_edge}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                      Style Edge
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                      {comparisonState.comparison.style_edge}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                      Volatility
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                      {comparisonState.comparison.volatility_note}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                    Comparison Insights
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {comparisonState.comparison.summary_bullets.map((bullet) => (
+                      <div key={bullet} className="text-sm text-slate-700">
+                        • {bullet}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1235,6 +1323,115 @@ export default function DataPage() {
               )}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mt-8 sm:p-6">
+        <div className="mb-4">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Reference
+          </div>
+          <h3 className="mt-1 text-xl font-bold text-slate-950 sm:text-2xl">
+            Data Dictionary
+          </h3>
+          <p className="mt-2 text-sm text-slate-600">
+            Quick-reference guide for the rankings, derived metrics, and archetypes used on this page.
+          </p>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <DictionaryItem
+            term="KenPom Rank"
+            description="Lower is better. Efficiency-based ranking built from adjusted offensive and defensive efficiency."
+          />
+          <DictionaryItem
+            term="BPI Rank"
+            description="Lower is better. ESPN-style power indicator intended to reflect team strength and future performance quality."
+          />
+          <DictionaryItem
+            term="NET Rank"
+            description="Lower is better. NCAA sorting tool that incorporates efficiency, results, and opponent quality."
+          />
+          <DictionaryItem
+            term="Composite Rank"
+            description="Lower is better. Internal blended average of KenPom, BPI, and NET to smooth out single-source bias."
+          />
+          <DictionaryItem
+            term="Off Efficiency"
+            description="Higher is better. Estimated offensive points generated per 100 possessions."
+          />
+          <DictionaryItem
+            term="Def Efficiency"
+            description="Lower is better. Estimated points allowed per 100 possessions."
+          />
+          <DictionaryItem
+            term="Adj Tempo"
+            description="Higher means faster pace. Reflects estimated possessions per game after adjustment."
+          />
+          <DictionaryItem
+            term="SOS Net Rating"
+            description="Higher is better. Indicates stronger schedule quality and résumé difficulty."
+          />
+          <DictionaryItem
+            term="Quad 1 / Quad 2"
+            description="Résumé buckets tied to opponent quality and game location. Stronger records indicate better win quality."
+          />
+          <DictionaryItem
+            term="Value Score"
+            description="Higher is better. Internal measure of how much stronger a team looks than its seed baseline suggests."
+          />
+          <DictionaryItem
+            term="Risk Score"
+            description="Lower is better. Internal volatility / fragility indicator driven by defense, résumé quality, and seed inflation risk."
+          />
+          <DictionaryItem
+            term="Upset Score"
+            description="Higher is better for underdogs. Internal signal for teams with the tools to outperform seed expectations."
+          />
+          <DictionaryItem
+            term="Contender Score"
+            description="Higher is better. Internal measure of true deep-run or title-path strength."
+          />
+          <DictionaryItem
+            term="Elite Offense"
+            description="Team projects as a top-end offensive unit."
+          />
+          <DictionaryItem
+            term="Elite Defense"
+            description="Team projects as a top-end defensive unit."
+          />
+          <DictionaryItem
+            term="Balanced Contender"
+            description="Team shows both strong offensive and defensive profile strength."
+          />
+          <DictionaryItem
+            term="Tempo Pressure"
+            description="Team tends to play with pace and can stress slower opponents."
+          />
+          <DictionaryItem
+            term="Undervalued Seed"
+            description="Seed may underrate the team’s underlying profile."
+          />
+          <DictionaryItem
+            term="Fragile Resume"
+            description="Profile shows vulnerability despite seed or surface résumé."
+          />
+          <DictionaryItem
+            term="High Variance Team"
+            description="Team may carry big ceiling but also greater outcome volatility."
+          />
+          <DictionaryItem
+            term="Bracket Buster"
+            description="Lower-seeded team with traits that support upset potential."
+          />
+          <DictionaryItem
+            term="Analytics Darling"
+            description="Team rates especially well across blended analytic measures and résumé quality."
+          />
+          <DictionaryItem
+            term="Title Threat"
+            description="Team has the profile of a legitimate championship-level contender."
+          />
         </div>
       </section>
     </div>
