@@ -105,6 +105,60 @@ function getCompositeRankDisplay(team: Team) {
   return getCompositeRank(team);
 }
 
+function getArchetypeBadgeClasses(tag: string) {
+  const normalized = tag.toLowerCase();
+
+  if (normalized.includes("offense") || normalized.includes("offensive")) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+
+  if (normalized.includes("defense") || normalized.includes("defensive")) {
+    return "border-red-200 bg-red-50 text-red-700";
+  }
+
+  if (normalized.includes("balanced")) {
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+
+  if (
+    normalized.includes("title") ||
+    normalized.includes("contender") ||
+    normalized.includes("threat")
+  ) {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+
+  if (normalized.includes("upset") || normalized.includes("sleeper")) {
+    return "border-purple-200 bg-purple-50 text-purple-700";
+  }
+
+  if (normalized.includes("risk") || normalized.includes("volatile")) {
+    return "border-rose-200 bg-rose-50 text-rose-700";
+  }
+
+  if (normalized.includes("tempo") || normalized.includes("fast")) {
+    return "border-orange-200 bg-orange-50 text-orange-700";
+  }
+
+  if (normalized.includes("slow")) {
+    return "border-stone-200 bg-stone-50 text-stone-700";
+  }
+
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function ArchetypeTag({ tag }: { tag: string }) {
+  return (
+    <span
+      className={`rounded-full border px-2.5 py-1 text-xs font-medium ${getArchetypeBadgeClasses(
+        tag
+      )}`}
+    >
+      {tag}
+    </span>
+  );
+}
+
 function SortButton({
   label,
   sortKey,
@@ -211,6 +265,7 @@ export default function DataPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [compareTeamAId, setCompareTeamAId] = useState("none");
   const [compareTeamBId, setCompareTeamBId] = useState("none");
+  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
 
   const compareOptions = useMemo(() => {
     return [...teams].sort((a, b) => a.school_name.localeCompare(b.school_name));
@@ -544,12 +599,7 @@ export default function DataPage() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     {comparisonState.intelA.archetype_tags.length > 0 ? (
                       comparisonState.intelA.archetype_tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
-                        >
-                          {tag}
-                        </span>
+                        <ArchetypeTag key={tag} tag={tag} />
                       ))
                     ) : (
                       <span className="text-xs text-slate-500">No archetype tags</span>
@@ -573,12 +623,7 @@ export default function DataPage() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     {comparisonState.intelB.archetype_tags.length > 0 ? (
                       comparisonState.intelB.archetype_tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
-                        >
-                          {tag}
-                        </span>
+                        <ArchetypeTag key={tag} tag={tag} />
                       ))
                     ) : (
                       <span className="text-xs text-slate-500">No archetype tags</span>
@@ -794,7 +839,7 @@ export default function DataPage() {
       </section>
 
       <section className="mb-4 md:hidden">
-        <div className="space-y-4">
+        <div className="space-y-3">
           {filteredAndSortedTeams.length === 0 ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-5 text-center text-slate-500 shadow-sm">
               No teams matched your search.
@@ -802,110 +847,75 @@ export default function DataPage() {
           ) : (
             filteredAndSortedTeams.map((team) => {
               const compositeRank = getCompositeRankDisplay(team);
+              const isExpanded = expandedTeamId === team.id;
 
               return (
                 <div
                   key={team.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
                 >
-                  <div className="flex items-start gap-3">
-                    <TeamLogo teamName={team.school_name} size={30} />
-                    <div className="min-w-0">
-                      <div className="text-base font-semibold text-slate-900">
-                        {team.school_name}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedTeamId((current) =>
+                        current === team.id ? null : team.id
+                      )
+                    }
+                    className="flex w-full items-center justify-between gap-3 p-4 text-left"
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <TeamLogo teamName={team.school_name} size={28} />
+                      <div className="min-w-0">
+                        <div className="truncate text-base font-semibold text-slate-900">
+                          {team.school_name}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-500">
+                          {team.seed} Seed • {team.region} • {team.record ?? "—"}
+                        </div>
+                        <div className="mt-1 text-sm font-medium text-slate-700">
+                          Composite {compositeRank === null ? "—" : compositeRank.toFixed(2)}
+                        </div>
                       </div>
-                      <div className="mt-1 text-sm text-slate-500">
-                        {team.seed} Seed • {team.region} • {team.record ?? "—"}
+                    </div>
+
+                    <div className="shrink-0 text-lg text-slate-500">
+                      {isExpanded ? "▴" : "▾"}
+                    </div>
+                  </button>
+
+                  {isExpanded ? (
+                    <div className="border-t border-slate-200 px-4 pb-4 pt-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <MobileMetric label="KenPom" value={formatRank(team.kenpom_rank)} />
+                        <MobileMetric label="BPI" value={formatRank(team.bpi_rank)} />
+                        <MobileMetric label="NET" value={formatRank(team.net_rank)} />
+                        <MobileMetric label="Value" value={team.value_score == null ? "—" : team.value_score.toFixed(1)} />
+                        <MobileMetric label="Risk" value={team.risk_score == null ? "—" : team.risk_score.toFixed(1)} />
+                        <MobileMetric label="Upset" value={team.upset_score == null ? "—" : team.upset_score.toFixed(1)} />
+                        <MobileMetric label="Contender" value={team.contender_score == null ? "—" : team.contender_score.toFixed(1)} />
+                        <MobileMetric label="Off Eff" value={formatMetric(team.off_efficiency)} />
+                        <MobileMetric label="Def Eff" value={formatMetric(team.def_efficiency)} />
+                        <MobileMetric label="Adj Tempo" value={formatMetric(team.adj_tempo)} />
+                        <MobileMetric label="Quad 1" value={team.quad1_record ?? "—"} />
+                        <MobileMetric label="Quad 2" value={team.quad2_record ?? "—"} />
+                      </div>
+
+                      <div className="mt-4">
+                        <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                          Archetypes
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {team.archetype_tags && team.archetype_tags.length > 0 ? (
+                            team.archetype_tags.map((tag) => (
+                              <ArchetypeTag key={tag} tag={tag} />
+                            ))
+                          ) : (
+                            <span className="text-sm text-slate-400">—</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <MobileMetric
-                      label="Composite"
-                      value={compositeRank === null ? "—" : compositeRank.toFixed(2)}
-                    />
-                    <MobileMetric
-                      label="Value"
-                      value={
-                        team.value_score === null || team.value_score === undefined
-                          ? "—"
-                          : team.value_score.toFixed(1)
-                      }
-                    />
-                    <MobileMetric
-                      label="KenPom"
-                      value={formatRank(team.kenpom_rank)}
-                    />
-                    <MobileMetric
-                      label="BPI"
-                      value={formatRank(team.bpi_rank)}
-                    />
-                    <MobileMetric
-                      label="NET"
-                      value={formatRank(team.net_rank)}
-                    />
-                    <MobileMetric
-                      label="Risk"
-                      value={
-                        team.risk_score === null || team.risk_score === undefined
-                          ? "—"
-                          : team.risk_score.toFixed(1)
-                      }
-                    />
-                    <MobileMetric
-                      label="Upset"
-                      value={
-                        team.upset_score === null || team.upset_score === undefined
-                          ? "—"
-                          : team.upset_score.toFixed(1)
-                      }
-                    />
-                    <MobileMetric
-                      label="Contender"
-                      value={
-                        team.contender_score === null || team.contender_score === undefined
-                          ? "—"
-                          : team.contender_score.toFixed(1)
-                      }
-                    />
-                    <MobileMetric
-                      label="Off Eff"
-                      value={formatMetric(team.off_efficiency)}
-                    />
-                    <MobileMetric
-                      label="Def Eff"
-                      value={formatMetric(team.def_efficiency)}
-                    />
-                    <MobileMetric
-                      label="Quad 1"
-                      value={team.quad1_record ?? "—"}
-                    />
-                    <MobileMetric
-                      label="Quad 2"
-                      value={team.quad2_record ?? "—"}
-                    />
-                  </div>
-
-                  <div className="mt-4">
-                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
-                      Archetypes
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {team.archetype_tags && team.archetype_tags.length > 0 ? (
-                        team.archetype_tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700"
-                          >
-                            {tag}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-sm text-slate-400">—</span>
-                      )}
-                    </div>
-                  </div>
+                  ) : null}
                 </div>
               );
             })
@@ -1212,12 +1222,7 @@ export default function DataPage() {
                         <div className="flex flex-wrap gap-2">
                           {team.archetype_tags && team.archetype_tags.length > 0 ? (
                             team.archetype_tags.map((tag) => (
-                              <span
-                                key={tag}
-                                className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700"
-                              >
-                                {tag}
-                              </span>
+                              <ArchetypeTag key={tag} tag={tag} />
                             ))
                           ) : (
                             <span className="text-slate-400">—</span>
