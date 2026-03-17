@@ -185,6 +185,23 @@ function CompareMetricRow({
   );
 }
 
+function MobileMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </div>
+      <div className="mt-1 text-sm font-semibold text-slate-900">{value}</div>
+    </div>
+  );
+}
+
 export default function DataPage() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -391,23 +408,23 @@ export default function DataPage() {
 
   return (
     <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
-      <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:mb-8 sm:p-8">
+      <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mb-6 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 sm:text-sm">
-              Team Analytics Reference
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Data
             </div>
-            <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
-              2026 Field Data Board
+            <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">
+              2026 Field Analytics
             </h2>
-            <p className="mt-3 max-w-4xl text-sm text-slate-600 sm:text-base">
-              Tournament field reference board with ranking, efficiency, tempo,
-              résumé, and derived intelligence across KenPom, BPI, and NET.
+            <p className="mt-2 max-w-4xl text-sm text-slate-600">
+              Search, compare, and sort tournament teams across rankings,
+              efficiency, résumé, and derived intelligence signals.
             </p>
           </div>
 
-          <div className="rounded-2xl bg-slate-950 px-5 py-4 text-white shadow-sm">
-            <div className="text-xs uppercase tracking-wide text-slate-400">
+          <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white shadow-sm">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
               Teams Shown
             </div>
             <div className="mt-1 text-lg font-semibold">
@@ -416,7 +433,7 @@ export default function DataPage() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_auto]">
+        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto]">
           <div>
             <label
               htmlFor="team-search"
@@ -435,7 +452,7 @@ export default function DataPage() {
 
           <div className="grid grid-cols-2 gap-3 lg:min-w-[260px]">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
                 Default Sort
               </div>
               <div className="mt-1 text-sm font-semibold text-slate-900">
@@ -444,7 +461,7 @@ export default function DataPage() {
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
                 Current Sort
               </div>
               <div className="mt-1 text-sm font-semibold capitalize text-slate-900">
@@ -455,16 +472,14 @@ export default function DataPage() {
         </div>
       </section>
 
-      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:mb-8 sm:p-6">
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mb-8 sm:p-6">
         <div className="flex flex-col gap-4">
           <div>
-            <h3 className="text-xl font-semibold text-slate-950">
+            <h3 className="text-lg font-semibold text-slate-950 sm:text-xl">
               Team Comparison
             </h3>
             <p className="mt-1 text-sm text-slate-600">
-              Select any two teams to compare their profile, intelligence scores,
-              and stylistic tags. Leave either selection on NONE to hide the
-              comparison panel.
+              Select two teams to compare profile, rankings, and intelligence scores.
             </p>
           </div>
 
@@ -572,7 +587,105 @@ export default function DataPage() {
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-slate-200">
+              <div className="grid gap-4 lg:hidden">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 text-sm font-semibold text-slate-900">
+                    {comparisonState.teamA.school_name}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <MobileMetric
+                      label="Composite"
+                      value={
+                        comparisonState.intelA.composite_rank === null
+                          ? "—"
+                          : comparisonState.intelA.composite_rank.toFixed(2)
+                      }
+                    />
+                    <MobileMetric
+                      label="Value"
+                      value={
+                        comparisonState.intelA.value_score === null
+                          ? "—"
+                          : comparisonState.intelA.value_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="Risk"
+                      value={
+                        comparisonState.intelA.risk_score === null
+                          ? "—"
+                          : comparisonState.intelA.risk_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="Contender"
+                      value={
+                        comparisonState.intelA.contender_score === null
+                          ? "—"
+                          : comparisonState.intelA.contender_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="KenPom"
+                      value={formatRank(comparisonState.teamA.kenpom_rank)}
+                    />
+                    <MobileMetric
+                      label="NET"
+                      value={formatRank(comparisonState.teamA.net_rank)}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 text-sm font-semibold text-slate-900">
+                    {comparisonState.teamB.school_name}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <MobileMetric
+                      label="Composite"
+                      value={
+                        comparisonState.intelB.composite_rank === null
+                          ? "—"
+                          : comparisonState.intelB.composite_rank.toFixed(2)
+                      }
+                    />
+                    <MobileMetric
+                      label="Value"
+                      value={
+                        comparisonState.intelB.value_score === null
+                          ? "—"
+                          : comparisonState.intelB.value_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="Risk"
+                      value={
+                        comparisonState.intelB.risk_score === null
+                          ? "—"
+                          : comparisonState.intelB.risk_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="Contender"
+                      value={
+                        comparisonState.intelB.contender_score === null
+                          ? "—"
+                          : comparisonState.intelB.contender_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="KenPom"
+                      value={formatRank(comparisonState.teamB.kenpom_rank)}
+                    />
+                    <MobileMetric
+                      label="NET"
+                      value={formatRank(comparisonState.teamB.net_rank)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="hidden overflow-hidden rounded-2xl border border-slate-200 lg:block">
                 <div className="overflow-x-auto">
                   <table className="min-w-[900px] w-full text-sm">
                     <thead className="bg-slate-950 text-white">
@@ -680,7 +793,127 @@ export default function DataPage() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section className="mb-4 md:hidden">
+        <div className="space-y-4">
+          {filteredAndSortedTeams.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 text-center text-slate-500 shadow-sm">
+              No teams matched your search.
+            </div>
+          ) : (
+            filteredAndSortedTeams.map((team) => {
+              const compositeRank = getCompositeRankDisplay(team);
+
+              return (
+                <div
+                  key={team.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                >
+                  <div className="flex items-start gap-3">
+                    <TeamLogo teamName={team.school_name} size={30} />
+                    <div className="min-w-0">
+                      <div className="text-base font-semibold text-slate-900">
+                        {team.school_name}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500">
+                        {team.seed} Seed • {team.region} • {team.record ?? "—"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <MobileMetric
+                      label="Composite"
+                      value={compositeRank === null ? "—" : compositeRank.toFixed(2)}
+                    />
+                    <MobileMetric
+                      label="Value"
+                      value={
+                        team.value_score === null || team.value_score === undefined
+                          ? "—"
+                          : team.value_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="KenPom"
+                      value={formatRank(team.kenpom_rank)}
+                    />
+                    <MobileMetric
+                      label="BPI"
+                      value={formatRank(team.bpi_rank)}
+                    />
+                    <MobileMetric
+                      label="NET"
+                      value={formatRank(team.net_rank)}
+                    />
+                    <MobileMetric
+                      label="Risk"
+                      value={
+                        team.risk_score === null || team.risk_score === undefined
+                          ? "—"
+                          : team.risk_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="Upset"
+                      value={
+                        team.upset_score === null || team.upset_score === undefined
+                          ? "—"
+                          : team.upset_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="Contender"
+                      value={
+                        team.contender_score === null || team.contender_score === undefined
+                          ? "—"
+                          : team.contender_score.toFixed(1)
+                      }
+                    />
+                    <MobileMetric
+                      label="Off Eff"
+                      value={formatMetric(team.off_efficiency)}
+                    />
+                    <MobileMetric
+                      label="Def Eff"
+                      value={formatMetric(team.def_efficiency)}
+                    />
+                    <MobileMetric
+                      label="Quad 1"
+                      value={team.quad1_record ?? "—"}
+                    />
+                    <MobileMetric
+                      label="Quad 2"
+                      value={team.quad2_record ?? "—"}
+                    />
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                      Archetypes
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {team.archetype_tags && team.archetype_tags.length > 0 ? (
+                        team.archetype_tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700"
+                          >
+                            {tag}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-slate-400">—</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      <section className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
         <div className="overflow-x-auto">
           <table className="min-w-[2050px] w-full text-sm">
             <thead className="bg-slate-950 text-white">
