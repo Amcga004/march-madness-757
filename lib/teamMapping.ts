@@ -1,69 +1,85 @@
 import { createClient } from "@/lib/supabase/server";
+import { getInternalAliasKeys, normalizeTeamAlias } from "@/lib/teamAliases";
 
-function normalize(name?: string | null) {
-  if (!name) return "";
+type TeamRow = {
+  id: string;
+  school_name: string;
+};
 
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9 ]/g, "")
-    .replace(/\bsaint\b/g, "st")
-    .replace(/\bnorth\b/g, "n")
-    .replace(/\bsouth\b/g, "s")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+type ExternalGameSyncRow = {
+  id: string;
+  home_team_name: string | null;
+  away_team_name: string | null;
+  mapped_home_team_id: string | null;
+  mapped_away_team_id: string | null;
+};
 
 export async function mapEspnTeamsToInternal() {
   const supabase = await createClient();
 
-  // Pull ESPN sync rows
-  const { data: games, error: gamesError } = await supabase
-    .from("external_game_sync")
-    .select("*");
+  const [{ data: teams, error: teamsError }, { data: externalRows, error: externalError }] =
+    await Promise.all([
+      supabase.from("teams").select("id, school_name").order("school_name", { ascending: true }),
+      supabase
+        .from("external_game_sync")
+        .select("id, home_team_name, away_team_name, mapped_home_team_id, mapped_away_team_id"),
+    ]);
 
-  if (gamesError) throw new Error(gamesError.message);
+  if (teamsError) {
+    throw new Error(teamsError.message || "Failed to load teams for mapping.");
+  }
 
-  // Pull internal teams
-  const { data: teams, error: teamsError } = await supabase
-    .from("teams")
-    .select("id, school_name, normalized_name");
+  if (externalError) {
+    throw new Error(externalError.message || "Failed to load external game sync rows.");
+  }
 
-  if (teamsError) throw new Error(teamsError.message);
+  const typedTeams = (teams ?? []) as TeamRow[];
+  const typedExternalRows = (externalRows ?? []) as ExternalGameSyncRow[];
 
-  let mapped = 0;
+  const teamLookup = new Map<string, string>();
 
-  for (const game of games || []) {
-    if (!game.home_team_name || !game.away_team_name) continue;
+  for (const team of typedTeams) {
+    const aliasKeys = getInternalAliasKeys(team.school_name);
 
-    const homeNorm = normalize(game.home_team_name);
-    const awayNorm = normalize(game.away_team_name);
+    for (const aliasKey of aliasKeys) {
+      if (!teamLookup.has(aliasKey)) {
+        teamLookup.set(aliasKey, team.id);
+      }
+    }
+  }
 
-    const homeMatch = teams.find(
-      (t) =>
-        homeNorm.includes(t.normalized_name) ||
-        t.normalized_name.includes(homeNorm)
-    );
+  let mappedRows = 0;
 
-    const awayMatch = teams.find(
-      (t) =>
-        awayNorm.includes(t.normalized_name) ||
-        t.normalized_name.includes(awayNorm)
-    );
+  for (const row of typedExternalRows) {
+    const normalizedHome = normalizeTeamAlias(row.home_team_name);
+    const normalizedAway = normalizeTeamAlias(row.away_team_name);
 
-    const { error } = await supabase
+    const mappedHomeTeamId = normalizedHome ? teamLookup.get(normalizedHome) ?? null : null;
+    const mappedAwayTeamId = normalizedAway ? teamLookup.get(normalizedAway) ?? null : null;
+
+    const homeChanged = mappedHomeTeamId !== row.mapped_home_team_id;
+    const awayChanged = mappedAwayTeamId !== row.mapped_away_team_id;
+
+    if (!homeChanged && !awayChanged) {
+      continue;
+    }
+
+    const { error: updateError } = await supabase
       .from("external_game_sync")
       .update({
-        mapped_home_team_id: homeMatch?.id ?? null,
-        mapped_away_team_id: awayMatch?.id ?? null,
+        mapped_home_team_id: mappedHomeTeamId,
+        mapped_away_team_id: mappedAwayTeamId,
       })
-      .eq("id", game.id);
+      .eq("id", row.id);
 
-    if (error) throw new Error(error.message);
+    if (updateError) {
+      throw new Error(updateError.message || "Failed to update mapped team ids.");
+    }
 
-    mapped++;
+    mappedRows += 1;
   }
 
   return {
-    mappedRows: mapped,
+    mappedRows,
   };
 }
