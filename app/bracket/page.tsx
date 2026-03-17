@@ -79,6 +79,27 @@ const MANAGER_STYLES: Record<string, string> = {
   Greg: "bg-orange-100 text-orange-700 border-orange-200",
 };
 
+function formatEasternDateTime(value: string) {
+  return new Date(value).toLocaleString([], {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatEasternFullDateTime(value: string) {
+  return new Date(value).toLocaleString([], {
+    timeZone: "America/New_York",
+    month: "numeric",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function emptyTeam(): MatchupTeam {
   return {
     id: null,
@@ -266,12 +287,7 @@ function getDisplayStatus(game: ExternalGameSync | null) {
   if (status === "STATUS_SCHEDULED") {
     if (!game.start_time) return "Scheduled";
 
-    return new Date(game.start_time).toLocaleString([], {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatEasternDateTime(game.start_time);
   }
 
   if (status === "STATUS_FINAL") {
@@ -537,12 +553,12 @@ export default async function BracketPage() {
           <div className="space-y-1 text-sm text-slate-500 sm:text-right">
             <div>
               {latestOfficialUpdate
-                ? `Last official result: ${new Date(latestOfficialUpdate).toLocaleString()}`
+                ? `Last official result: ${formatEasternFullDateTime(latestOfficialUpdate)}`
                 : "No official results entered yet"}
             </div>
             <div>
               {nextScheduledGame
-                ? `Next scheduled game: ${new Date(nextScheduledGame).toLocaleString()}`
+                ? `Next scheduled game: ${formatEasternFullDateTime(nextScheduledGame)}`
                 : "No upcoming scheduled games in feed window"}
             </div>
           </div>
