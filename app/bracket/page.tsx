@@ -836,6 +836,43 @@ function MobileRoundSection({
   );
 }
 
+function JumpChip({
+  href,
+  label,
+  live = false,
+}: {
+  href: string;
+  label: string;
+  live?: boolean;
+}) {
+  return (
+    <a
+      href={href}
+      className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] transition hover:-translate-y-0.5 ${
+        live
+          ? "border-red-500/40 bg-red-500/10 text-red-200"
+          : "border-slate-700/80 bg-[#172033] text-slate-200 hover:bg-[#1c2940]"
+      }`}
+    >
+      {label}
+    </a>
+  );
+}
+
+function LegendPill({
+  label,
+  classes,
+}: {
+  label: string;
+  classes: string;
+}) {
+  return (
+    <div className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] ${classes}`}>
+      {label}
+    </div>
+  );
+}
+
 export default async function BracketPage() {
   const supabase = await createClient();
 
@@ -982,9 +1019,51 @@ export default async function BracketPage() {
         </div>
       </section>
 
+      <section className="mb-4 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] sm:p-4">
+        <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+          Quick Jump
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {liveGames.length > 0 ? <JumpChip href="#live-games" label="Live" live /> : null}
+          {activePlayInGames.length > 0 ? <JumpChip href="#active-playin" label="Play-In" /> : null}
+          <JumpChip href="#east-region" label="East" />
+          <JumpChip href="#west-region" label="West" />
+          <JumpChip href="#south-region" label="South" />
+          <JumpChip href="#midwest-region" label="Midwest" />
+          <JumpChip href="#finals-section" label="Finals" />
+        </div>
+      </section>
+
+      <section className="mb-6 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] sm:p-4">
+        <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+          Legend
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <LegendPill
+            label="Live"
+            classes="border-red-500/40 bg-red-500/10 text-red-200"
+          />
+          <LegendPill
+            label="Winner"
+            classes="border-green-500/40 bg-green-500/10 text-green-200"
+          />
+          <LegendPill
+            label="Eliminated"
+            classes="border-red-500/40 bg-red-500/10 text-red-200"
+          />
+          <LegendPill
+            label="Owned Team"
+            classes="border-blue-500/30 bg-blue-500/10 text-blue-200"
+          />
+        </div>
+      </section>
+
       <div className="space-y-6 sm:space-y-8">
         {liveGames.length > 0 ? (
-          <section className="rounded-3xl border border-red-500/40 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
+          <section
+            id="live-games"
+            className="rounded-3xl border border-red-500/40 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5"
+          >
             <div className="mb-5">
               <h3 className="text-2xl font-bold text-white">Live Games Right Now</h3>
               <p className="mt-1 text-sm text-slate-300">
