@@ -211,7 +211,6 @@ export default function DraftPage() {
           "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency,is_play_in_actual"
         )
         .eq("is_play_in_actual", false)
-        .order("region", { ascending: true })
         .order("seed", { ascending: true })
         .order("school_name", { ascending: true }),
       supabase
@@ -266,25 +265,49 @@ export default function DraftPage() {
   }));
 
   const draftedTeamIds = new Set(picks.map((pick) => pick.team_id));
-  const availableTeams = normalizedTeams.filter((team) => !draftedTeamIds.has(team.id));
 
-  const filteredAvailableTeams = availableTeams.filter((team) => {
+  const availableTeams = useMemo(() => {
+    return normalizedTeams
+      .filter((team) => !draftedTeamIds.has(team.id))
+      .sort((a, b) => {
+        if (a.seed !== b.seed) return a.seed - b.seed;
+
+        const aComposite = getCompositeRank(a);
+        const bComposite = getCompositeRank(b);
+
+        if (aComposite !== null && bComposite !== null && aComposite !== bComposite) {
+          return aComposite - bComposite;
+        }
+
+        if (aComposite !== null && bComposite === null) return -1;
+        if (aComposite === null && bComposite !== null) return 1;
+
+        return a.school_name.localeCompare(b.school_name);
+      });
+  }, [normalizedTeams, draftedTeamIds]);
+
+  const filteredAvailableTeams = useMemo(() => {
     const query = teamSearch.trim().toLowerCase();
-    if (!query) return true;
 
-    const searchable = [
-      ...getTeamSearchTerms(team.school_name),
-      team.region,
-      String(team.seed),
-      team.record ?? "",
-      team.conference_record ?? "",
-      team.kenpom_rank ? `kenpom ${team.kenpom_rank}` : "",
-      team.bpi_rank ? `bpi ${team.bpi_rank}` : "",
-      team.net_rank ? `net ${team.net_rank}` : "",
-    ].map((value) => value.toLowerCase());
+    const filtered = availableTeams.filter((team) => {
+      if (!query) return true;
 
-    return searchable.some((value) => value.includes(query));
-  });
+      const searchable = [
+        ...getTeamSearchTerms(team.school_name),
+        team.region,
+        String(team.seed),
+        team.record ?? "",
+        team.conference_record ?? "",
+        team.kenpom_rank ? `kenpom ${team.kenpom_rank}` : "",
+        team.bpi_rank ? `bpi ${team.bpi_rank}` : "",
+        team.net_rank ? `net ${team.net_rank}` : "",
+      ].map((value) => value.toLowerCase());
+
+      return searchable.some((value) => value.includes(query));
+    });
+
+    return filtered.slice(0, 30);
+  }, [availableTeams, teamSearch]);
 
   const memberMap = new Map(members.map((m) => [m.id, m.display_name]));
   const teamMap = new Map(normalizedTeams.map((t) => [t.id, t]));
@@ -670,24 +693,81 @@ export default function DraftPage() {
                       className="w-full rounded-xl border px-3 py-2"
                       disabled={!canMakeCurrentPick}
                     />
+                    <div className="mt-2 text-xs text-slate-500">
+                      Sorted from highest seeds to lowest seeds. Drafted teams are automatically removed.
+                    </div>
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm font-medium">Select Team</label>
-                    <select
-                      className="w-full rounded-xl border px-3 py-2"
-                      value={selectedTeamId}
-                      onChange={(e) => setSelectedTeamId(e.target.value)}
-                      required
-                      disabled={!canMakeCurrentPick}
-                    >
-                      <option value="">Choose a team</option>
-                      {filteredAvailableTeams.map((team) => (
-                        <option key={team.id} value={team.id}>
-                          {team.school_name} • {team.seed} Seed • {team.region} • KP {team.kenpom_rank ?? "—"} • BPI {team.bpi_rank ?? "—"} • NET {team.net_rank ?? "—"} • {team.record ?? "No Record"}
-                        </option>
-                      ))}
-                    </select>
+                    <label className="mb-2 block text-sm font-medium">Available Teams</label>
+
+                    <div className="max-h-[420px] overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-2">
+                      {filteredAvailableTeams.length === 0 ? (
+                        <div className="rounded-xl bg-white p-4 text-sm text-slate-600">
+                          No teams match your search.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {filteredAvailableTeams.map((team) => {
+                            const isSelected = selectedTeamId === team.id;
+                            const composite = getCompositeRank(team);
+
+                            return (
+                              <button
+                                key={team.id}
+                                type="button"
+                                onClick={() => setSelectedTeamId(team.id)}
+                                disabled={!canMakeCurrentPick}
+                                className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+                                  isSelected
+                                    ? "border-slate-900 bg-slate-900 text-white"
+                                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-100"
+                                } disabled:cursor-not-allowed disabled:opacity-60`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex min-w-0 items-start gap-3">
+                                    <TeamLogo teamName={team.school_name} size={26} />
+                                    <div className="min-w-0">
+                                      <div className="font-semibold">
+                                        {team.school_name}
+                                      </div>
+                                      <div
+                                        className={`mt-1 text-sm ${
+                                          isSelected ? "text-slate-200" : "text-slate-600"
+                                        }`}
+                                      >
+                                        {team.seed} Seed • {team.region} • {team.record ?? "—"}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="shrink-0 text-right">
+                                    <div
+                                      className={`text-xs uppercase tracking-wide ${
+                                        isSelected ? "text-slate-300" : "text-slate-500"
+                                      }`}
+                                    >
+                                      Composite
+                                    </div>
+                                    <div className="mt-1 text-sm font-semibold">
+                                      {formatComposite(composite)}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div
+                                  className={`mt-2 text-xs ${
+                                    isSelected ? "text-slate-300" : "text-slate-500"
+                                  }`}
+                                >
+                                  KP {team.kenpom_rank ?? "—"} • BPI {team.bpi_rank ?? "—"} • NET {team.net_rank ?? "—"}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {selectedTeam ? (
@@ -757,16 +837,10 @@ export default function DraftPage() {
                     </div>
                   ) : null}
 
-                  {teamSearch && filteredAvailableTeams.length === 0 ? (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                      No teams match your search.
-                    </div>
-                  ) : null}
-
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <button
                       type="submit"
-                      disabled={!canMakeCurrentPick}
+                      disabled={!canMakeCurrentPick || !selectedTeamId}
                       className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                     >
                       Draft Team
