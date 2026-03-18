@@ -79,17 +79,6 @@ const MANAGER_STYLES: Record<string, string> = {
   Greg: "bg-orange-100 text-orange-700 border-orange-200",
 };
 
-const PLAY_IN_TEAM_NAMES = new Set([
-  "Howard",
-  "UMBC",
-  "Lehigh",
-  "Prairie View",
-  "N.C. State",
-  "Texas",
-  "SMU",
-  "Miami (OH)",
-]);
-
 function formatEasternDateTime(value: string) {
   return new Date(value).toLocaleString([], {
     timeZone: "America/New_York",
@@ -323,7 +312,6 @@ function getDisplayStatus(game: ExternalGameSync | null) {
 
   if (status === "STATUS_SCHEDULED") {
     if (!game.start_time) return "Scheduled";
-
     return formatEasternDateTime(game.start_time);
   }
 
@@ -405,16 +393,28 @@ function inferLoserIdFromExternalGame(game: ExternalGameSync | null) {
   return null;
 }
 
-function isPlayInExternalGame(game: ExternalGameSync) {
+function isPlayInExternalGame(game: ExternalGameSync, playInTeamIds: Set<string>) {
   const roundName = (game.round_name ?? "").toLowerCase();
-  const homeName = game.home_team_name ?? "";
-  const awayName = game.away_team_name ?? "";
 
   if (roundName.includes("first four") || roundName.includes("play-in")) {
     return true;
   }
 
-  return PLAY_IN_TEAM_NAMES.has(homeName) || PLAY_IN_TEAM_NAMES.has(awayName);
+  if (
+    game.mapped_home_team_id &&
+    playInTeamIds.has(game.mapped_home_team_id)
+  ) {
+    return true;
+  }
+
+  if (
+    game.mapped_away_team_id &&
+    playInTeamIds.has(game.mapped_away_team_id)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function ManagerTag({ manager }: { manager: string | null }) {
@@ -642,7 +642,26 @@ export default async function BracketPage() {
   );
   const teamById = new Map(typedTeams.map((team) => [team.id, team]));
 
-  const playInGames = typedExternalGames.filter(isPlayInExternalGame);
+  const playInTeamIds = new Set(
+    typedTeams
+      .filter((team) =>
+        [
+          "Howard",
+          "UMBC",
+          "Lehigh",
+          "Prairie View",
+          "N.C. State",
+          "Texas",
+          "SMU",
+          "Miami (OH)",
+        ].includes(team.school_name)
+      )
+      .map((team) => team.id)
+  );
+
+  const playInGames = typedExternalGames.filter((game) =>
+    isPlayInExternalGame(game, playInTeamIds)
+  );
 
   const regionBrackets = REGIONS.map((region) => {
     const teamsForRegion = typedTeams.filter((team) => team.region === region);
@@ -715,13 +734,11 @@ export default async function BracketPage() {
       <div className="space-y-8 sm:space-y-10">
         {playInGames.length > 0 ? (
           <section className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
-            <div className="mb-5 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-2xl font-bold">First Four / Play-In Games</h3>
-                <p className="mt-1 text-sm text-slate-600">
-                  Live and final play-in matchups from the ESPN sync feed.
-                </p>
-              </div>
+            <div className="mb-5">
+              <h3 className="text-2xl font-bold">First Four / Play-In Games</h3>
+              <p className="mt-1 text-sm text-slate-600">
+                Live and final play-in matchups from the ESPN sync feed.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
