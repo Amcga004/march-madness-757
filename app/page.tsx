@@ -93,6 +93,94 @@ function getDisplayStatus(status: string | null | undefined) {
   return status.replace("STATUS_", "").replaceAll("_", " ").trim();
 }
 
+function getWinnerLoserRows(args: {
+  homeName: string;
+  awayName: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  statusLabel: string;
+}) {
+  const { homeName, awayName, homeScore, awayScore, statusLabel } = args;
+
+  const isFinal = statusLabel.toLowerCase() === "final";
+  const hasScores = homeScore !== null && awayScore !== null;
+
+  if (!isFinal || !hasScores) {
+    return {
+      top: {
+        name: homeName,
+        score: homeScore,
+        winner: false,
+        loser: false,
+      },
+      bottom: {
+        name: awayName,
+        score: awayScore,
+        winner: false,
+        loser: false,
+      },
+    };
+  }
+
+  const homeWon = (homeScore ?? 0) > (awayScore ?? 0);
+
+  return {
+    top: {
+      name: homeName,
+      score: homeScore,
+      winner: homeWon,
+      loser: !homeWon,
+    },
+    bottom: {
+      name: awayName,
+      score: awayScore,
+      winner: !homeWon,
+      loser: homeWon,
+    },
+  };
+}
+
+function ResultTeamRow({
+  teamName,
+  score,
+  winner,
+  loser,
+  size = 18,
+}: {
+  teamName: string;
+  score: number | null;
+  winner: boolean;
+  loser: boolean;
+  size?: number;
+}) {
+  const winnerClasses = winner
+    ? "border-green-500/60 bg-green-500/12 text-green-200"
+    : "";
+  const loserClasses = loser
+    ? "border-red-500/60 bg-red-500/12 text-red-200"
+    : "";
+  const neutralClasses =
+    !winner && !loser ? "border-slate-700/80 bg-[#172033] text-white" : "";
+
+  return (
+    <div
+      className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${winnerClasses} ${loserClasses} ${neutralClasses}`}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <TeamLogo teamName={teamName} size={size} />
+        <span
+          className={`truncate text-sm font-semibold ${
+            loser ? "line-through opacity-90" : ""
+          }`}
+        >
+          {teamName}
+        </span>
+      </div>
+      <div className="text-sm font-bold">{score ?? "—"}</div>
+    </div>
+  );
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
 
@@ -325,6 +413,14 @@ export default async function DashboardPage() {
                 const awayScore = externalGame?.away_score ?? null;
                 const statusLabel = getDisplayStatus(externalGame?.espn_status ?? game.status);
 
+                const rows = getWinnerLoserRows({
+                  homeName,
+                  awayName,
+                  homeScore,
+                  awayScore,
+                  statusLabel,
+                });
+
                 return (
                   <div
                     key={game.id}
@@ -338,29 +434,20 @@ export default async function DashboardPage() {
                     </div>
 
                     <div className="grid gap-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <TeamLogo teamName={homeName} size={18} />
-                          <span className="truncate text-sm font-semibold text-white">
-                            {homeName}
-                          </span>
-                        </div>
-                        <div className="text-sm font-bold text-white">
-                          {homeScore ?? "—"}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <TeamLogo teamName={awayName} size={18} />
-                          <span className="truncate text-sm font-semibold text-white">
-                            {awayName}
-                          </span>
-                        </div>
-                        <div className="text-sm font-bold text-white">
-                          {awayScore ?? "—"}
-                        </div>
-                      </div>
+                      <ResultTeamRow
+                        teamName={rows.top.name}
+                        score={rows.top.score}
+                        winner={rows.top.winner}
+                        loser={rows.top.loser}
+                        size={18}
+                      />
+                      <ResultTeamRow
+                        teamName={rows.bottom.name}
+                        score={rows.bottom.score}
+                        winner={rows.bottom.winner}
+                        loser={rows.bottom.loser}
+                        size={18}
+                      />
                     </div>
                   </div>
                 );
@@ -394,6 +481,14 @@ export default async function DashboardPage() {
                 const awayScore = externalGame?.away_score ?? null;
                 const statusLabel = getDisplayStatus(externalGame?.espn_status ?? game.status);
 
+                const rows = getWinnerLoserRows({
+                  homeName,
+                  awayName,
+                  homeScore,
+                  awayScore,
+                  statusLabel,
+                });
+
                 return (
                   <div
                     key={game.id}
@@ -407,29 +502,20 @@ export default async function DashboardPage() {
                     </div>
 
                     <div className="grid gap-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <TeamLogo teamName={homeName} size={18} />
-                          <span className="truncate text-sm font-semibold text-white">
-                            {homeName}
-                          </span>
-                        </div>
-                        <div className="text-sm font-bold text-white">
-                          {homeScore ?? "—"}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <TeamLogo teamName={awayName} size={18} />
-                          <span className="truncate text-sm font-semibold text-white">
-                            {awayName}
-                          </span>
-                        </div>
-                        <div className="text-sm font-bold text-white">
-                          {awayScore ?? "—"}
-                        </div>
-                      </div>
+                      <ResultTeamRow
+                        teamName={rows.top.name}
+                        score={rows.top.score}
+                        winner={rows.top.winner}
+                        loser={rows.top.loser}
+                        size={18}
+                      />
+                      <ResultTeamRow
+                        teamName={rows.bottom.name}
+                        score={rows.bottom.score}
+                        winner={rows.bottom.winner}
+                        loser={rows.bottom.loser}
+                        size={18}
+                      />
                     </div>
                   </div>
                 );

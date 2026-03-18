@@ -40,8 +40,96 @@ function formatEasternDateTime(value: string) {
 
 function getDisplayStatus(status: string | null) {
   if (!status) return "Final";
-  if (status === "STATUS_FINAL") return "Final";
+  if (status === "STATUS_FINAL" || status === "complete") return "Final";
   return status.replace("STATUS_", "").replaceAll("_", " ").trim();
+}
+
+function getWinnerLoserRows(args: {
+  homeName: string;
+  awayName: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  statusLabel: string;
+}) {
+  const { homeName, awayName, homeScore, awayScore, statusLabel } = args;
+
+  const isFinal = statusLabel.toLowerCase() === "final";
+  const hasScores = homeScore !== null && awayScore !== null;
+
+  if (!isFinal || !hasScores) {
+    return {
+      top: {
+        name: homeName,
+        score: homeScore,
+        winner: false,
+        loser: false,
+      },
+      bottom: {
+        name: awayName,
+        score: awayScore,
+        winner: false,
+        loser: false,
+      },
+    };
+  }
+
+  const homeWon = (homeScore ?? 0) > (awayScore ?? 0);
+
+  return {
+    top: {
+      name: homeName,
+      score: homeScore,
+      winner: homeWon,
+      loser: !homeWon,
+    },
+    bottom: {
+      name: awayName,
+      score: awayScore,
+      winner: !homeWon,
+      loser: homeWon,
+    },
+  };
+}
+
+function ResultTeamRow({
+  teamName,
+  score,
+  winner,
+  loser,
+  size = 22,
+}: {
+  teamName: string;
+  score: number | null;
+  winner: boolean;
+  loser: boolean;
+  size?: number;
+}) {
+  const winnerClasses = winner
+    ? "border-green-500/60 bg-green-500/12 text-green-200"
+    : "";
+  const loserClasses = loser
+    ? "border-red-500/60 bg-red-500/12 text-red-200"
+    : "";
+  const neutralClasses =
+    !winner && !loser ? "border-slate-700/80 bg-[#172033] text-white" : "";
+
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${winnerClasses} ${loserClasses} ${neutralClasses}`}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <TeamLogo teamName={teamName} size={size} />
+        <span
+          className={`truncate text-sm font-semibold ${
+            loser ? "line-through opacity-90" : ""
+          }`}
+        >
+          {teamName}
+        </span>
+      </div>
+      <div className="text-base font-bold">{score ?? "—"}</div>
+    </div>
+  );
 }
 
 export default async function HistoryPage() {
@@ -127,15 +215,25 @@ export default async function HistoryPage() {
 
             const homeName =
               externalGame?.mapped_home_team_id
-                ? teamMap.get(externalGame.mapped_home_team_id) ?? externalGame.home_team_name ?? "Home"
+                ? teamMap.get(externalGame.mapped_home_team_id) ??
+                  externalGame.home_team_name ??
+                  "Home"
                 : externalGame?.home_team_name ?? winnerName;
 
             const awayName =
               externalGame?.mapped_away_team_id
-                ? teamMap.get(externalGame.mapped_away_team_id) ?? externalGame.away_team_name ?? "Away"
+                ? teamMap.get(externalGame.mapped_away_team_id) ??
+                  externalGame.away_team_name ??
+                  "Away"
                 : externalGame?.away_team_name ?? loserName;
 
-            const hasScoreline = homeScore !== null && awayScore !== null;
+            const rows = getWinnerLoserRows({
+              homeName,
+              awayName,
+              homeScore,
+              awayScore,
+              statusLabel,
+            });
 
             return (
               <div
@@ -151,49 +249,27 @@ export default async function HistoryPage() {
                   </div>
                 </div>
 
-                {hasScoreline ? (
-                  <div className="grid gap-2">
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-700/80 bg-[#172033] px-3 py-2">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <TeamLogo teamName={homeName} size={22} />
-                        <span className="truncate text-sm font-semibold text-white">
-                          {homeName}
-                        </span>
-                      </div>
-                      <div className="text-base font-bold text-white">{homeScore}</div>
-                    </div>
+                <div className="grid gap-2">
+                  <ResultTeamRow
+                    teamName={rows.top.name}
+                    score={rows.top.score}
+                    winner={rows.top.winner}
+                    loser={rows.top.loser}
+                    size={22}
+                  />
 
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-700/80 bg-[#172033] px-3 py-2">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <TeamLogo teamName={awayName} size={22} />
-                        <span className="truncate text-sm font-semibold text-white">
-                          {awayName}
-                        </span>
-                      </div>
-                      <div className="text-base font-bold text-white">{awayScore}</div>
-                    </div>
+                  <ResultTeamRow
+                    teamName={rows.bottom.name}
+                    score={rows.bottom.score}
+                    winner={rows.bottom.winner}
+                    loser={rows.bottom.loser}
+                    size={22}
+                  />
 
-                    <div className="pt-1 text-center text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      {statusLabel}
-                    </div>
+                  <div className="pt-1 text-center text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                    {statusLabel}
                   </div>
-                ) : (
-                  <div className="grid gap-2">
-                    <div className="flex items-center gap-2 rounded-xl border border-slate-700/80 bg-[#172033] px-3 py-2">
-                      <TeamLogo teamName={winnerName} size={22} />
-                      <span className="text-sm font-semibold text-white">{winnerName}</span>
-                    </div>
-
-                    <div className="flex items-center gap-2 rounded-xl border border-slate-700/80 bg-[#172033] px-3 py-2">
-                      <TeamLogo teamName={loserName} size={22} />
-                      <span className="text-sm font-semibold text-white">{loserName}</span>
-                    </div>
-
-                    <div className="pt-1 text-center text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      {statusLabel}
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
             );
           })
