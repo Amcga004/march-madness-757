@@ -75,10 +75,10 @@ const ROUND_OF_64_PAIRS = [
 ] as const;
 
 const MANAGER_STYLES: Record<string, string> = {
-  Andrew: "bg-blue-500/15 text-blue-200 border-blue-400/40",
-  Wesley: "bg-green-500/15 text-green-200 border-green-400/40",
-  Eric: "bg-purple-500/15 text-purple-200 border-purple-400/40",
-  Greg: "bg-orange-500/15 text-orange-200 border-orange-400/40",
+  Andrew: "bg-blue-100 text-blue-700 border-blue-200",
+  Wesley: "bg-green-100 text-green-700 border-green-200",
+  Eric: "bg-purple-100 text-purple-700 border-purple-200",
+  Greg: "bg-orange-100 text-orange-700 border-orange-200",
 };
 
 function formatEasternDateTime(value: string) {
@@ -242,6 +242,45 @@ function getDisplayStatus(game: ExternalGameSync | null) {
   return status.replace("STATUS_", "").replaceAll("_", " ").trim() || null;
 }
 
+function isLiveGame(game: ExternalGameSync | null) {
+  if (!game) return false;
+
+  return (
+    game.espn_status === "STATUS_IN_PROGRESS" ||
+    game.espn_status === "STATUS_END_PERIOD" ||
+    game.espn_status === "STATUS_HALFTIME" ||
+    (game.espn_status ?? "").includes("HALFTIME")
+  );
+}
+
+function isFinalGame(game: ExternalGameSync | null) {
+  return game?.espn_status === "STATUS_FINAL";
+}
+
+function getCardClasses(game: ExternalGameSync | null) {
+  if (isLiveGame(game)) {
+    return "border-red-500/70 bg-[#1a1220] shadow-[0_0_0_1px_rgba(239,68,68,0.18),0_0_20px_rgba(239,68,68,0.14)]";
+  }
+
+  if (isFinalGame(game)) {
+    return "border-slate-700/80 bg-[#111827]";
+  }
+
+  return "border-slate-700/80 bg-[#111827]";
+}
+
+function getStatusClasses(game: ExternalGameSync | null) {
+  if (isLiveGame(game)) {
+    return "text-red-300";
+  }
+
+  if (isFinalGame(game)) {
+    return "text-slate-400";
+  }
+
+  return "text-slate-400";
+}
+
 function getTeamScore(game: ExternalGameSync | null, teamId: string | null) {
   if (!game || !teamId) return null;
   if (game.mapped_home_team_id === teamId) return game.home_score;
@@ -302,13 +341,15 @@ function isPlayInExternalGame(game: ExternalGameSync, playInTeamIds: Set<string>
     return true;
   }
 
-  const homeIsPlayIn =
-    !!game.mapped_home_team_id && playInTeamIds.has(game.mapped_home_team_id);
+  if (game.mapped_home_team_id && playInTeamIds.has(game.mapped_home_team_id)) {
+    return true;
+  }
 
-  const awayIsPlayIn =
-    !!game.mapped_away_team_id && playInTeamIds.has(game.mapped_away_team_id);
+  if (game.mapped_away_team_id && playInTeamIds.has(game.mapped_away_team_id)) {
+    return true;
+  }
 
-  return homeIsPlayIn && awayIsPlayIn;
+  return false;
 }
 
 function getPlayInParticipantsFromPlaceholder(placeholderName: string) {
@@ -478,7 +519,7 @@ function ManagerTag({ manager }: { manager: string | null }) {
   return (
     <span
       className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-        MANAGER_STYLES[manager] ?? "bg-slate-500/15 text-slate-200 border-slate-400/30"
+        MANAGER_STYLES[manager] ?? "bg-slate-100 text-slate-700 border-slate-200"
       }`}
     >
       {manager}
@@ -498,19 +539,17 @@ function TeamLine({
   isLoser: boolean;
 }) {
   const winnerClasses = isWinner
-    ? "border-green-500/70 bg-green-500/10 text-green-200 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.15)]"
+    ? "border-green-500/60 bg-green-500/10 text-green-200"
     : "";
   const loserClasses = isLoser
     ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
     : "";
   const baseClasses =
-    !isWinner && !isLoser
-      ? "border-slate-700/80 bg-[#172033] text-slate-100"
-      : "";
+    !isWinner && !isLoser ? "border-slate-700/80 bg-[#172033] text-white" : "";
 
   return (
     <div
-      className={`rounded-xl border px-3 py-2 transition ${winnerClasses} ${loserClasses} ${baseClasses}`}
+      className={`rounded-lg border px-3 py-2 transition ${winnerClasses} ${loserClasses} ${baseClasses}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -540,21 +579,8 @@ function MatchupCard({
   const bottomScore = getTeamScore(externalGame, matchup.bottom.id);
   const statusLabel = getDisplayStatus(externalGame);
 
-  const isLive =
-    !!externalGame &&
-    !!externalGame.espn_status &&
-    (externalGame.espn_status === "STATUS_IN_PROGRESS" ||
-      externalGame.espn_status === "STATUS_END_PERIOD" ||
-      externalGame.espn_status === "STATUS_HALFTIME");
-
   return (
-    <div
-      className={`space-y-2 rounded-2xl p-3 shadow-sm transition ${
-        isLive
-          ? "border-2 border-red-500 bg-red-950/15 shadow-[0_0_14px_rgba(239,68,68,0.22)]"
-          : "border border-slate-700/80 bg-[#111827]"
-      }`}
-    >
+    <div className={`space-y-2 rounded-xl border p-3 shadow-sm transition ${getCardClasses(externalGame)}`}>
       <TeamLine
         team={matchup.top}
         score={topScore}
@@ -569,12 +595,8 @@ function MatchupCard({
         isLoser={matchup.loserId !== null && matchup.loserId === matchup.bottom.id}
       />
 
-      <div className="px-1 pt-1 text-xs font-medium uppercase tracking-wide text-slate-400">
-        {isLive ? (
-          <span className="font-semibold text-red-400">🔴 LIVE</span>
-        ) : (
-          statusLabel ?? "Awaiting matchup"
-        )}
+      <div className={`px-1 pt-1 text-xs font-medium uppercase tracking-wide ${getStatusClasses(externalGame)}`}>
+        {statusLabel ?? "Awaiting matchup"}
       </div>
     </div>
   );
@@ -606,20 +628,8 @@ function PlayInMatchupCard({
   const inferredLoserId = inferLoserIdFromExternalGame(externalGame);
   const statusLabel = getDisplayStatus(externalGame);
 
-  const isLive =
-    !!externalGame.espn_status &&
-    (externalGame.espn_status === "STATUS_IN_PROGRESS" ||
-      externalGame.espn_status === "STATUS_END_PERIOD" ||
-      externalGame.espn_status === "STATUS_HALFTIME");
-
   return (
-    <div
-      className={`space-y-2 rounded-2xl p-3 shadow-sm transition ${
-        isLive
-          ? "border-2 border-red-500 bg-red-950/15 shadow-[0_0_14px_rgba(239,68,68,0.22)]"
-          : "border border-slate-700/80 bg-[#111827]"
-      }`}
-    >
+    <div className={`space-y-2 rounded-xl border p-3 shadow-sm transition ${getCardClasses(externalGame)}`}>
       <TeamLine
         team={top}
         score={getTeamScoreBySide(externalGame, "home", top.id)}
@@ -634,12 +644,8 @@ function PlayInMatchupCard({
         isLoser={inferredLoserId !== null && inferredLoserId === bottom.id}
       />
 
-      <div className="px-1 pt-1 text-xs font-medium uppercase tracking-wide text-slate-400">
-        {isLive ? (
-          <span className="font-semibold text-red-400">🔴 LIVE</span>
-        ) : (
-          statusLabel ?? "Awaiting matchup"
-        )}
+      <div className={`px-1 pt-1 text-xs font-medium uppercase tracking-wide ${getStatusClasses(externalGame)}`}>
+        {statusLabel ?? "Awaiting matchup"}
       </div>
     </div>
   );
@@ -790,7 +796,7 @@ export default async function BracketPage() {
 
   return (
     <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
-      <AutoRefreshClient intervalMs={20000} />
+      <AutoRefreshClient intervalMs={15000} hiddenIntervalMs={60000} />
 
       <section className="mb-6 sm:mb-8">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
