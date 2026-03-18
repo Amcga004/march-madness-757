@@ -702,6 +702,38 @@ function ConnectorColumn({
   );
 }
 
+function MobileCollapsibleSection({
+  title,
+  subtitle,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details
+      className="group rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)]"
+      open={defaultOpen}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+        <div>
+          <h3 className="text-xl font-bold text-white">{title}</h3>
+          {subtitle ? <p className="mt-1 text-sm text-slate-400">{subtitle}</p> : null}
+        </div>
+
+        <div className="shrink-0 text-slate-300 transition-transform duration-200 group-open:rotate-180">
+          ▼
+        </div>
+      </summary>
+
+      <div className="mt-4">{children}</div>
+    </details>
+  );
+}
+
 export default async function BracketPage() {
   const supabase = await createClient();
 
@@ -876,62 +908,71 @@ export default async function BracketPage() {
         ) : null}
 
         {activePlayInGames.length > 0 ? (
-          <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
-            <div className="mb-5">
-              <h3 className="text-2xl font-bold text-white">First Four / Play-In Games</h3>
-              <p className="mt-1 text-sm text-slate-300">
-                Live and final play-in matchups from the ESPN sync feed.
-              </p>
+          <>
+            <div className="lg:hidden">
+              <MobileCollapsibleSection
+                title="First Four / Play-In Games"
+                subtitle="Tap to collapse or expand this section."
+                defaultOpen={true}
+              >
+                <div className="grid grid-cols-1 gap-4">
+                  {activePlayInGames.map((game) => (
+                    <div key={game.id} className="min-w-0">
+                      <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        {game.round_name ?? "Play-In"}
+                      </div>
+                      <ExternalMatchupCard
+                        externalGame={game}
+                        teamById={teamById}
+                        managerByTeamId={managerByTeamId}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </MobileCollapsibleSection>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {activePlayInGames.map((game) => (
-                <div key={game.id} className="min-w-0">
-                  <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    {game.round_name ?? "Play-In"}
+            <section className="hidden rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5 lg:block">
+              <div className="mb-5">
+                <h3 className="text-2xl font-bold text-white">First Four / Play-In Games</h3>
+                <p className="mt-1 text-sm text-slate-300">
+                  Live and final play-in matchups from the ESPN sync feed.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {activePlayInGames.map((game) => (
+                  <div key={game.id} className="min-w-0">
+                    <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      {game.round_name ?? "Play-In"}
+                    </div>
+                    <ExternalMatchupCard
+                      externalGame={game}
+                      teamById={teamById}
+                      managerByTeamId={managerByTeamId}
+                    />
                   </div>
-                  <ExternalMatchupCard
-                    externalGame={game}
-                    teamById={teamById}
-                    managerByTeamId={managerByTeamId}
-                  />
-                </div>
-              ))}
-            </div>
-          </section>
+                ))}
+              </div>
+            </section>
+          </>
         ) : null}
 
-        {regionBrackets.map((region) => (
-          <section
-            key={region.region}
-            className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5"
-          >
-            <h3 className="mb-5 text-2xl font-bold text-white">{region.region} Region</h3>
-
-            <div className="overflow-x-auto">
-              <div className="flex min-w-max gap-6 pb-4 sm:gap-10">
-                <ConnectorColumn
-                  title="Round of 64"
-                  matchups={region.round64}
-                  externalGames={typedExternalGames}
-                />
-                <ConnectorColumn
-                  title="Round of 32"
-                  matchups={region.round32}
-                  externalGames={typedExternalGames}
-                />
-                <ConnectorColumn
-                  title="Sweet 16"
-                  matchups={region.sweet16}
-                  externalGames={typedExternalGames}
-                />
-                <div className="min-w-[240px] sm:min-w-[260px]">
-                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
-                    Elite Eight
+        <div className="space-y-4 lg:hidden">
+          {regionBrackets.map((region, index) => (
+            <MobileCollapsibleSection
+              key={region.region}
+              title={`${region.region} Region`}
+              subtitle="Tap to collapse or expand this region."
+              defaultOpen={index === 0}
+            >
+              <div className="space-y-5">
+                <div>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Round of 64
                   </h4>
-
-                  <div className="space-y-3 sm:space-y-5">
-                    {region.elite8.map((matchup, index) => {
+                  <div className="space-y-3">
+                    {region.round64.map((matchup, matchupIndex) => {
                       const externalGame = findExternalGameForTeams(
                         typedExternalGames,
                         matchup.top.id,
@@ -940,7 +981,76 @@ export default async function BracketPage() {
 
                       return (
                         <MatchupCard
-                          key={`elite-${region.region}-${index}`}
+                          key={`${region.region}-r64-${matchupIndex}`}
+                          matchup={matchup}
+                          externalGame={externalGame}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Round of 32
+                  </h4>
+                  <div className="space-y-3">
+                    {region.round32.map((matchup, matchupIndex) => {
+                      const externalGame = findExternalGameForTeams(
+                        typedExternalGames,
+                        matchup.top.id,
+                        matchup.bottom.id
+                      );
+
+                      return (
+                        <MatchupCard
+                          key={`${region.region}-r32-${matchupIndex}`}
+                          matchup={matchup}
+                          externalGame={externalGame}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Sweet 16
+                  </h4>
+                  <div className="space-y-3">
+                    {region.sweet16.map((matchup, matchupIndex) => {
+                      const externalGame = findExternalGameForTeams(
+                        typedExternalGames,
+                        matchup.top.id,
+                        matchup.bottom.id
+                      );
+
+                      return (
+                        <MatchupCard
+                          key={`${region.region}-s16-${matchupIndex}`}
+                          matchup={matchup}
+                          externalGame={externalGame}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Elite Eight
+                  </h4>
+                  <div className="space-y-3">
+                    {region.elite8.map((matchup, matchupIndex) => {
+                      const externalGame = findExternalGameForTeams(
+                        typedExternalGames,
+                        matchup.top.id,
+                        matchup.bottom.id
+                      );
+
+                      return (
+                        <MatchupCard
+                          key={`${region.region}-e8-${matchupIndex}`}
                           matchup={matchup}
                           externalGame={externalGame}
                         />
@@ -949,9 +1059,63 @@ export default async function BracketPage() {
                   </div>
                 </div>
               </div>
-            </div>
-          </section>
-        ))}
+            </MobileCollapsibleSection>
+          ))}
+        </div>
+
+        <div className="hidden space-y-6 sm:space-y-8 lg:block">
+          {regionBrackets.map((region) => (
+            <section
+              key={region.region}
+              className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5"
+            >
+              <h3 className="mb-5 text-2xl font-bold text-white">{region.region} Region</h3>
+
+              <div className="overflow-x-auto">
+                <div className="flex min-w-max gap-6 pb-4 sm:gap-10">
+                  <ConnectorColumn
+                    title="Round of 64"
+                    matchups={region.round64}
+                    externalGames={typedExternalGames}
+                  />
+                  <ConnectorColumn
+                    title="Round of 32"
+                    matchups={region.round32}
+                    externalGames={typedExternalGames}
+                  />
+                  <ConnectorColumn
+                    title="Sweet 16"
+                    matchups={region.sweet16}
+                    externalGames={typedExternalGames}
+                  />
+                  <div className="min-w-[240px] sm:min-w-[260px]">
+                    <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+                      Elite Eight
+                    </h4>
+
+                    <div className="space-y-3 sm:space-y-5">
+                      {region.elite8.map((matchup, index) => {
+                        const externalGame = findExternalGameForTeams(
+                          typedExternalGames,
+                          matchup.top.id,
+                          matchup.bottom.id
+                        );
+
+                        return (
+                          <MatchupCard
+                            key={`elite-${region.region}-${index}`}
+                            matchup={matchup}
+                            externalGame={externalGame}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          ))}
+        </div>
 
         <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
           <h3 className="mb-5 text-2xl font-bold text-white">Final Four & Championship</h3>
@@ -1005,7 +1169,7 @@ export default async function BracketPage() {
 
         {archivedPlayInGames.length > 0 ? (
           <details className="rounded-3xl border border-slate-700/80 bg-[#0b1220]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] sm:p-5">
-            <summary className="cursor-pointer list-none select-none">
+            <summary className="cursor-pointer list-none">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <h3 className="text-xl font-bold text-white">
