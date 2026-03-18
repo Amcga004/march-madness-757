@@ -126,6 +126,11 @@ function normalizeTeamName(value: string | null | undefined) {
     .trim();
 }
 
+function getRegionAnchor(region: string | null | undefined) {
+  if (!region) return null;
+  return `${region.toLowerCase()}-region`;
+}
+
 function emptyTeam(): MatchupTeam {
   return {
     id: null,
@@ -523,6 +528,30 @@ function findExternalGameForTeams(
   );
 }
 
+function getLiveGameHref(
+  game: ExternalGameSync,
+  teamById: Map<string, Team>,
+  playInTeamIds: Set<string>
+) {
+  if (isPlayInExternalGame(game, playInTeamIds)) {
+    return "#active-playin";
+  }
+
+  const roundName = game.round_name ?? "";
+  if (roundName === "Final Four" || roundName === "Championship") {
+    return "#finals-section";
+  }
+
+  const homeRegion = game.mapped_home_team_id
+    ? teamById.get(game.mapped_home_team_id)?.region ?? null
+    : null;
+  const awayRegion = game.mapped_away_team_id
+    ? teamById.get(game.mapped_away_team_id)?.region ?? null
+    : null;
+
+  return `#${getRegionAnchor(homeRegion ?? awayRegion) ?? "finals-section"}`;
+}
+
 function ManagerTag({ manager }: { manager: string | null }) {
   if (!manager) return null;
 
@@ -707,14 +736,17 @@ function MobileCollapsibleSection({
   subtitle,
   defaultOpen = false,
   children,
+  id,
 }: {
   title: string;
   subtitle?: string;
   defaultOpen?: boolean;
   children: React.ReactNode;
+  id?: string;
 }) {
   return (
     <details
+      id={id}
       className="group rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)]"
       open={defaultOpen}
     >
@@ -886,23 +918,37 @@ export default async function BracketPage() {
             <div className="mb-5">
               <h3 className="text-2xl font-bold text-white">Live Games Right Now</h3>
               <p className="mt-1 text-sm text-slate-300">
-                Active tournament games pulled to the top for quick tracking.
+                Active tournament games pulled to the top for quick tracking. Tap a live game to jump to its bracket section.
               </p>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {liveGames.map((game) => (
-                <div key={game.id} className="min-w-0">
-                  <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-red-300">
-                    {game.round_name ?? "Live"}
-                  </div>
-                  <ExternalMatchupCard
-                    externalGame={game}
-                    teamById={teamById}
-                    managerByTeamId={managerByTeamId}
-                  />
-                </div>
-              ))}
+              {liveGames.map((game) => {
+                const href = getLiveGameHref(game, teamById, playInTeamIds);
+
+                return (
+                  <a
+                    key={game.id}
+                    href={href}
+                    className="group min-w-0 rounded-xl transition hover:-translate-y-0.5 hover:opacity-95"
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-3 px-1">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-red-300">
+                        {game.round_name ?? "Live"}
+                      </div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 group-hover:text-white">
+                        Jump ↓
+                      </div>
+                    </div>
+
+                    <ExternalMatchupCard
+                      externalGame={game}
+                      teamById={teamById}
+                      managerByTeamId={managerByTeamId}
+                    />
+                  </a>
+                );
+              })}
             </div>
           </section>
         ) : null}
@@ -911,6 +957,7 @@ export default async function BracketPage() {
           <>
             <div className="lg:hidden">
               <MobileCollapsibleSection
+                id="active-playin"
                 title="First Four / Play-In Games"
                 subtitle="Tap to collapse or expand this section."
                 defaultOpen={true}
@@ -932,7 +979,10 @@ export default async function BracketPage() {
               </MobileCollapsibleSection>
             </div>
 
-            <section className="hidden rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5 lg:block">
+            <section
+              id="active-playin"
+              className="hidden rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5 lg:block"
+            >
               <div className="mb-5">
                 <h3 className="text-2xl font-bold text-white">First Four / Play-In Games</h3>
                 <p className="mt-1 text-sm text-slate-300">
@@ -962,6 +1012,7 @@ export default async function BracketPage() {
           {regionBrackets.map((region, index) => (
             <MobileCollapsibleSection
               key={region.region}
+              id={getRegionAnchor(region.region) ?? undefined}
               title={`${region.region} Region`}
               subtitle="Tap to collapse or expand this region."
               defaultOpen={index === 0}
@@ -1067,6 +1118,7 @@ export default async function BracketPage() {
           {regionBrackets.map((region) => (
             <section
               key={region.region}
+              id={getRegionAnchor(region.region) ?? undefined}
               className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5"
             >
               <h3 className="mb-5 text-2xl font-bold text-white">{region.region} Region</h3>
@@ -1117,7 +1169,10 @@ export default async function BracketPage() {
           ))}
         </div>
 
-        <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
+        <section
+          id="finals-section"
+          className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5"
+        >
           <h3 className="mb-5 text-2xl font-bold text-white">Final Four & Championship</h3>
 
           <div className="overflow-x-auto">
