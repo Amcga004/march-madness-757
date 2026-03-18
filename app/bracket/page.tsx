@@ -302,15 +302,13 @@ function isPlayInExternalGame(game: ExternalGameSync, playInTeamIds: Set<string>
     return true;
   }
 
-  if (game.mapped_home_team_id && playInTeamIds.has(game.mapped_home_team_id)) {
-    return true;
-  }
+  const homeIsPlayIn =
+    !!game.mapped_home_team_id && playInTeamIds.has(game.mapped_home_team_id);
 
-  if (game.mapped_away_team_id && playInTeamIds.has(game.mapped_away_team_id)) {
-    return true;
-  }
+  const awayIsPlayIn =
+    !!game.mapped_away_team_id && playInTeamIds.has(game.mapped_away_team_id);
 
-  return false;
+  return homeIsPlayIn && awayIsPlayIn;
 }
 
 function getPlayInParticipantsFromPlaceholder(placeholderName: string) {
