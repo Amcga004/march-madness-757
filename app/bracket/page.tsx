@@ -6,6 +6,8 @@ type Team = {
   school_name: string;
   seed: number;
   region: string;
+  is_play_in_actual?: boolean;
+  is_play_in_placeholder?: boolean;
 };
 
 type Game = {
@@ -100,6 +102,19 @@ function formatEasternFullDateTime(value: string) {
   });
 }
 
+function normalizeTeamName(value: string | null | undefined) {
+  if (!value) return "";
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[.'’]/g, "")
+    .replace(/[()]/g, " ")
+    .replace(/\//g, " ")
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function emptyTeam(): MatchupTeam {
   return {
     id: null,
@@ -192,12 +207,166 @@ function winnerTeamFromMatchup(matchup: Matchup): MatchupTeam {
   return emptyTeam();
 }
 
+function getDisplayStatus(game: ExternalGameSync | null) {
+  if (!game) return null;
+
+  const status = game.espn_status ?? "";
+
+  if (status === "STATUS_SCHEDULED") {
+    if (!game.start_time) return "Scheduled";
+    return formatEasternDateTime(game.start_time);
+  }
+
+  if (status === "STATUS_FINAL") {
+    return "Final";
+  }
+
+  if (status.includes("HALFTIME")) {
+    return "Halftime";
+  }
+
+  if (
+    status === "STATUS_IN_PROGRESS" ||
+    status === "STATUS_END_PERIOD" ||
+    status === "STATUS_HALFTIME"
+  ) {
+    const clock = game.espn_clock && game.espn_clock !== "0:00" ? game.espn_clock : "";
+    const period =
+      game.espn_period && game.espn_period > 0 ? `${game.espn_period}H` : "";
+
+    const pieces = [clock, period].filter(Boolean);
+
+    return pieces.length > 0 ? `Live • ${pieces.join(" ")}` : "Live";
+  }
+
+  return status.replace("STATUS_", "").replaceAll("_", " ").trim() || null;
+}
+
+function getTeamScore(game: ExternalGameSync | null, teamId: string | null) {
+  if (!game || !teamId) return null;
+  if (game.mapped_home_team_id === teamId) return game.home_score;
+  if (game.mapped_away_team_id === teamId) return game.away_score;
+  return null;
+}
+
+function getTeamScoreBySide(
+  game: ExternalGameSync | null,
+  side: "home" | "away",
+  teamId: string | null
+) {
+  if (!game) return null;
+
+  if (teamId) {
+    return getTeamScore(game, teamId);
+  }
+
+  return side === "home" ? game.home_score : game.away_score;
+}
+
+function inferWinnerIdFromExternalGame(game: ExternalGameSync | null) {
+  if (!game || game.espn_status !== "STATUS_FINAL") return null;
+
+  if (
+    game.home_score !== null &&
+    game.away_score !== null &&
+    game.mapped_home_team_id &&
+    game.mapped_away_team_id
+  ) {
+    if (game.home_score > game.away_score) return game.mapped_home_team_id;
+    if (game.away_score > game.home_score) return game.mapped_away_team_id;
+  }
+
+  return null;
+}
+
+function inferLoserIdFromExternalGame(game: ExternalGameSync | null) {
+  if (!game || game.espn_status !== "STATUS_FINAL") return null;
+
+  if (
+    game.home_score !== null &&
+    game.away_score !== null &&
+    game.mapped_home_team_id &&
+    game.mapped_away_team_id
+  ) {
+    if (game.home_score > game.away_score) return game.mapped_away_team_id;
+    if (game.away_score > game.home_score) return game.mapped_home_team_id;
+  }
+
+  return null;
+}
+
+function isPlayInExternalGame(game: ExternalGameSync, playInTeamIds: Set<string>) {
+  const roundName = (game.round_name ?? "").toLowerCase();
+
+  if (roundName.includes("first four") || roundName.includes("play-in")) {
+    return true;
+  }
+
+  if (game.mapped_home_team_id && playInTeamIds.has(game.mapped_home_team_id)) {
+    return true;
+  }
+
+  if (game.mapped_away_team_id && playInTeamIds.has(game.mapped_away_team_id)) {
+    return true;
+  }
+
+  return false;
+}
+
+function getPlayInParticipantsFromPlaceholder(placeholderName: string) {
+  if (!placeholderName.startsWith("PLAY-IN:")) return [];
+
+  const raw = placeholderName.replace("PLAY-IN:", "").trim();
+  return raw
+    .split("/")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => normalizeTeamName(value));
+}
+
+function resolvePlayInWinnerForPlaceholder(
+  placeholderTeam: Team | undefined,
+  externalGames: ExternalGameSync[],
+  teamById: Map<string, Team>
+): Team | undefined {
+  if (!placeholderTeam || !placeholderTeam.is_play_in_placeholder) return placeholderTeam;
+
+  const participantNames = getPlayInParticipantsFromPlaceholder(placeholderTeam.school_name);
+  if (participantNames.length !== 2) return placeholderTeam;
+
+  const matchingExternalGame =
+    externalGames.find((game) => {
+      const homeNormalized = normalizeTeamName(game.home_team_name);
+      const awayNormalized = normalizeTeamName(game.away_team_name);
+
+      return (
+        participantNames.includes(homeNormalized) &&
+        participantNames.includes(awayNormalized)
+      );
+    }) ?? null;
+
+  if (!matchingExternalGame) return placeholderTeam;
+
+  const winnerId = inferWinnerIdFromExternalGame(matchingExternalGame);
+  if (!winnerId) return placeholderTeam;
+
+  return teamById.get(winnerId) ?? placeholderTeam;
+}
+
 function buildRegionBracket(
   regionTeams: Team[],
   games: Game[],
-  managerByTeamId: Map<string, string>
+  externalGames: ExternalGameSync[],
+  managerByTeamId: Map<string, string>,
+  teamById: Map<string, Team>
 ) {
-  const seedMap = new Map(regionTeams.map((team) => [team.seed, team]));
+  const baseSeedMap = new Map(regionTeams.map((team) => [team.seed, team]));
+
+  const seedMap = new Map<number, Team>();
+  for (const [seed, team] of baseSeedMap.entries()) {
+    const resolvedTeam = resolvePlayInWinnerForPlaceholder(team, externalGames, teamById);
+    seedMap.set(seed, resolvedTeam ?? team);
+  }
 
   const round64: Matchup[] = ROUND_OF_64_PAIRS.map(([seedA, seedB]) => {
     const teamA = seedMap.get(seedA);
@@ -303,118 +472,6 @@ function findExternalGameForTeams(
       );
     }) ?? null
   );
-}
-
-function getDisplayStatus(game: ExternalGameSync | null) {
-  if (!game) return null;
-
-  const status = game.espn_status ?? "";
-
-  if (status === "STATUS_SCHEDULED") {
-    if (!game.start_time) return "Scheduled";
-    return formatEasternDateTime(game.start_time);
-  }
-
-  if (status === "STATUS_FINAL") {
-    return "Final";
-  }
-
-  if (status.includes("HALFTIME")) {
-    return "Halftime";
-  }
-
-  if (
-    status === "STATUS_IN_PROGRESS" ||
-    status === "STATUS_END_PERIOD" ||
-    status === "STATUS_HALFTIME"
-  ) {
-    const clock = game.espn_clock && game.espn_clock !== "0:00" ? game.espn_clock : "";
-    const period =
-      game.espn_period && game.espn_period > 0 ? `${game.espn_period}H` : "";
-
-    const pieces = [clock, period].filter(Boolean);
-
-    return pieces.length > 0 ? `Live • ${pieces.join(" ")}` : "Live";
-  }
-
-  return status.replace("STATUS_", "").replaceAll("_", " ").trim() || null;
-}
-
-function getTeamScore(game: ExternalGameSync | null, teamId: string | null) {
-  if (!game || !teamId) return null;
-  if (game.mapped_home_team_id === teamId) return game.home_score;
-  if (game.mapped_away_team_id === teamId) return game.away_score;
-  return null;
-}
-
-function getTeamScoreBySide(
-  game: ExternalGameSync | null,
-  side: "home" | "away",
-  teamId: string | null
-) {
-  if (!game) return null;
-
-  if (teamId) {
-    return getTeamScore(game, teamId);
-  }
-
-  return side === "home" ? game.home_score : game.away_score;
-}
-
-function inferWinnerIdFromExternalGame(game: ExternalGameSync | null) {
-  if (!game || game.espn_status !== "STATUS_FINAL") return null;
-
-  if (
-    game.home_score !== null &&
-    game.away_score !== null &&
-    game.mapped_home_team_id &&
-    game.mapped_away_team_id
-  ) {
-    if (game.home_score > game.away_score) return game.mapped_home_team_id;
-    if (game.away_score > game.home_score) return game.mapped_away_team_id;
-  }
-
-  return null;
-}
-
-function inferLoserIdFromExternalGame(game: ExternalGameSync | null) {
-  if (!game || game.espn_status !== "STATUS_FINAL") return null;
-
-  if (
-    game.home_score !== null &&
-    game.away_score !== null &&
-    game.mapped_home_team_id &&
-    game.mapped_away_team_id
-  ) {
-    if (game.home_score > game.away_score) return game.mapped_away_team_id;
-    if (game.away_score > game.home_score) return game.mapped_home_team_id;
-  }
-
-  return null;
-}
-
-function isPlayInExternalGame(game: ExternalGameSync, playInTeamIds: Set<string>) {
-  const roundName = (game.round_name ?? "").toLowerCase();
-
-  if (roundName.includes("first four") || roundName.includes("play-in")) {
-    return true;
-  }
-
-  if (
-    game.mapped_home_team_id &&
-    playInTeamIds.has(game.mapped_home_team_id)
-  ) {
-    return true;
-  }
-
-  if (
-    game.mapped_away_team_id &&
-    playInTeamIds.has(game.mapped_away_team_id)
-  ) {
-    return true;
-  }
-
-  return false;
 }
 
 function ManagerTag({ manager }: { manager: string | null }) {
@@ -602,7 +659,7 @@ export default async function BracketPage() {
   ] = await Promise.all([
     supabase
       .from("teams")
-      .select("id, school_name, seed, region")
+      .select("id, school_name, seed, region, is_play_in_actual, is_play_in_placeholder")
       .order("region", { ascending: true })
       .order("seed", { ascending: true }),
     supabase
@@ -643,20 +700,7 @@ export default async function BracketPage() {
   const teamById = new Map(typedTeams.map((team) => [team.id, team]));
 
   const playInTeamIds = new Set(
-    typedTeams
-      .filter((team) =>
-        [
-          "Howard",
-          "UMBC",
-          "Lehigh",
-          "Prairie View",
-          "N.C. State",
-          "Texas",
-          "SMU",
-          "Miami (OH)",
-        ].includes(team.school_name)
-      )
-      .map((team) => team.id)
+    typedTeams.filter((team) => team.is_play_in_actual).map((team) => team.id)
   );
 
   const playInGames = typedExternalGames.filter((game) =>
@@ -664,11 +708,19 @@ export default async function BracketPage() {
   );
 
   const regionBrackets = REGIONS.map((region) => {
-    const teamsForRegion = typedTeams.filter((team) => team.region === region);
+    const teamsForRegion = typedTeams.filter(
+      (team) => team.region === region && !team.is_play_in_actual
+    );
 
     return {
       region,
-      ...buildRegionBracket(teamsForRegion, typedGames, managerByTeamId),
+      ...buildRegionBracket(
+        teamsForRegion,
+        typedGames,
+        playInGames,
+        managerByTeamId,
+        teamById
+      ),
     };
   });
 
