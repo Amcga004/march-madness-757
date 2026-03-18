@@ -79,6 +79,17 @@ const MANAGER_STYLES: Record<string, string> = {
   Greg: "bg-orange-100 text-orange-700 border-orange-200",
 };
 
+const PLAY_IN_TEAM_NAMES = new Set([
+  "Howard",
+  "UMBC",
+  "Lehigh",
+  "Prairie View",
+  "N.C. State",
+  "Texas",
+  "SMU",
+  "Miami (OH)",
+]);
+
 function formatEasternDateTime(value: string) {
   return new Date(value).toLocaleString([], {
     timeZone: "America/New_York",
@@ -117,6 +128,32 @@ function buildTeam(team?: Team, manager?: string | null): MatchupTeam {
     name: team.school_name,
     seed: team.seed,
     manager: manager ?? null,
+  };
+}
+
+function buildExternalMatchupTeam(
+  teamId: string | null,
+  fallbackName: string | null,
+  teamById: Map<string, Team>,
+  managerByTeamId: Map<string, string>
+): MatchupTeam {
+  if (teamId) {
+    const team = teamById.get(teamId);
+    if (team) {
+      return {
+        id: team.id,
+        name: team.school_name,
+        seed: team.seed,
+        manager: managerByTeamId.get(team.id) ?? null,
+      };
+    }
+  }
+
+  return {
+    id: teamId,
+    name: fallbackName ?? "TBD",
+    seed: null,
+    manager: teamId ? managerByTeamId.get(teamId) ?? null : null,
   };
 }
 
@@ -322,6 +359,64 @@ function getTeamScore(game: ExternalGameSync | null, teamId: string | null) {
   return null;
 }
 
+function getTeamScoreBySide(
+  game: ExternalGameSync | null,
+  side: "home" | "away",
+  teamId: string | null
+) {
+  if (!game) return null;
+
+  if (teamId) {
+    return getTeamScore(game, teamId);
+  }
+
+  return side === "home" ? game.home_score : game.away_score;
+}
+
+function inferWinnerIdFromExternalGame(game: ExternalGameSync | null) {
+  if (!game || game.espn_status !== "STATUS_FINAL") return null;
+
+  if (
+    game.home_score !== null &&
+    game.away_score !== null &&
+    game.mapped_home_team_id &&
+    game.mapped_away_team_id
+  ) {
+    if (game.home_score > game.away_score) return game.mapped_home_team_id;
+    if (game.away_score > game.home_score) return game.mapped_away_team_id;
+  }
+
+  return null;
+}
+
+function inferLoserIdFromExternalGame(game: ExternalGameSync | null) {
+  if (!game || game.espn_status !== "STATUS_FINAL") return null;
+
+  if (
+    game.home_score !== null &&
+    game.away_score !== null &&
+    game.mapped_home_team_id &&
+    game.mapped_away_team_id
+  ) {
+    if (game.home_score > game.away_score) return game.mapped_away_team_id;
+    if (game.away_score > game.home_score) return game.mapped_home_team_id;
+  }
+
+  return null;
+}
+
+function isPlayInExternalGame(game: ExternalGameSync) {
+  const roundName = (game.round_name ?? "").toLowerCase();
+  const homeName = game.home_team_name ?? "";
+  const awayName = game.away_team_name ?? "";
+
+  if (roundName.includes("first four") || roundName.includes("play-in")) {
+    return true;
+  }
+
+  return PLAY_IN_TEAM_NAMES.has(homeName) || PLAY_IN_TEAM_NAMES.has(awayName);
+}
+
 function ManagerTag({ manager }: { manager: string | null }) {
   if (!manager) return null;
 
@@ -402,6 +497,55 @@ function MatchupCard({
         score={bottomScore}
         isWinner={matchup.winnerId !== null && matchup.winnerId === matchup.bottom.id}
         isLoser={matchup.loserId !== null && matchup.loserId === matchup.bottom.id}
+      />
+
+      <div className="px-1 pt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+        {statusLabel ?? "Awaiting matchup"}
+      </div>
+    </div>
+  );
+}
+
+function PlayInMatchupCard({
+  externalGame,
+  teamById,
+  managerByTeamId,
+}: {
+  externalGame: ExternalGameSync;
+  teamById: Map<string, Team>;
+  managerByTeamId: Map<string, string>;
+}) {
+  const top = buildExternalMatchupTeam(
+    externalGame.mapped_home_team_id,
+    externalGame.home_team_name,
+    teamById,
+    managerByTeamId
+  );
+  const bottom = buildExternalMatchupTeam(
+    externalGame.mapped_away_team_id,
+    externalGame.away_team_name,
+    teamById,
+    managerByTeamId
+  );
+
+  const inferredWinnerId = inferWinnerIdFromExternalGame(externalGame);
+  const inferredLoserId = inferLoserIdFromExternalGame(externalGame);
+  const statusLabel = getDisplayStatus(externalGame);
+
+  return (
+    <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
+      <TeamLine
+        team={top}
+        score={getTeamScoreBySide(externalGame, "home", top.id)}
+        isWinner={inferredWinnerId !== null && inferredWinnerId === top.id}
+        isLoser={inferredLoserId !== null && inferredLoserId === top.id}
+      />
+
+      <TeamLine
+        team={bottom}
+        score={getTeamScoreBySide(externalGame, "away", bottom.id)}
+        isWinner={inferredWinnerId !== null && inferredWinnerId === bottom.id}
+        isLoser={inferredLoserId !== null && inferredLoserId === bottom.id}
       />
 
       <div className="px-1 pt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -496,6 +640,9 @@ export default async function BracketPage() {
   const managerByTeamId = new Map(
     typedPicks.map((pick) => [pick.team_id, memberNameById.get(pick.member_id) ?? "Unknown"])
   );
+  const teamById = new Map(typedTeams.map((team) => [team.id, team]));
+
+  const playInGames = typedExternalGames.filter(isPlayInExternalGame);
 
   const regionBrackets = REGIONS.map((region) => {
     const teamsForRegion = typedTeams.filter((team) => team.region === region);
@@ -566,6 +713,34 @@ export default async function BracketPage() {
       </section>
 
       <div className="space-y-8 sm:space-y-10">
+        {playInGames.length > 0 ? (
+          <section className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-bold">First Four / Play-In Games</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Live and final play-in matchups from the ESPN sync feed.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {playInGames.map((game) => (
+                <div key={game.id} className="min-w-0">
+                  <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {game.round_name ?? "Play-In"}
+                  </div>
+                  <PlayInMatchupCard
+                    externalGame={game}
+                    teamById={teamById}
+                    managerByTeamId={managerByTeamId}
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         {regionBrackets.map((region) => (
           <section key={region.region} className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
             <h3 className="mb-5 text-2xl font-bold">{region.region} Region</h3>

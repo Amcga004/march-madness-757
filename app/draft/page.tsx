@@ -208,8 +208,9 @@ export default function DraftPage() {
       supabase
         .from("teams")
         .select(
-          "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency"
+          "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency,is_play_in_actual"
         )
+        .eq("is_play_in_actual", false)
         .order("region", { ascending: true })
         .order("seed", { ascending: true })
         .order("school_name", { ascending: true }),

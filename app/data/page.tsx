@@ -285,15 +285,19 @@ export default function DataPage() {
       const { data } = await supabase
         .from("teams")
         .select(
-          "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency,quad1_record,quad2_record,adj_tempo,sos_net_rating,off_efg_pct,def_efg_pct"
+          "id,school_name,seed,region,kenpom_rank,bpi_rank,net_rank,record,conference_record,off_efficiency,def_efficiency,quad1_record,quad2_record,adj_tempo,sos_net_rating,off_efg_pct,def_efg_pct,is_play_in_placeholder"
         )
-        .not("school_name", "like", "PLAY-IN:%");
+        .eq("is_play_in_placeholder", false);
 
       if (data) {
-        const enrichedTeams = (data as Omit<
-          Team,
-          "value_score" | "risk_score" | "upset_score" | "contender_score" | "archetype_tags"
-        >[]).map((team) => {
+        const enrichedTeams = (
+          data as (Omit<
+            Team,
+            "value_score" | "risk_score" | "upset_score" | "contender_score" | "archetype_tags"
+          > & {
+            is_play_in_placeholder?: boolean;
+          })[]
+        ).map((team) => {
           const intelligence = getTeamIntelligence(team);
 
           return {
@@ -977,10 +981,24 @@ export default function DataPage() {
                         <MobileMetric label="KenPom" value={formatRank(team.kenpom_rank)} />
                         <MobileMetric label="BPI" value={formatRank(team.bpi_rank)} />
                         <MobileMetric label="NET" value={formatRank(team.net_rank)} />
-                        <MobileMetric label="Value" value={team.value_score == null ? "—" : team.value_score.toFixed(1)} />
-                        <MobileMetric label="Risk" value={team.risk_score == null ? "—" : team.risk_score.toFixed(1)} />
-                        <MobileMetric label="Upset" value={team.upset_score == null ? "—" : team.upset_score.toFixed(1)} />
-                        <MobileMetric label="Contender" value={team.contender_score == null ? "—" : team.contender_score.toFixed(1)} />
+                        <MobileMetric
+                          label="Value"
+                          value={team.value_score == null ? "—" : team.value_score.toFixed(1)}
+                        />
+                        <MobileMetric
+                          label="Risk"
+                          value={team.risk_score == null ? "—" : team.risk_score.toFixed(1)}
+                        />
+                        <MobileMetric
+                          label="Upset"
+                          value={team.upset_score == null ? "—" : team.upset_score.toFixed(1)}
+                        />
+                        <MobileMetric
+                          label="Contender"
+                          value={
+                            team.contender_score == null ? "—" : team.contender_score.toFixed(1)
+                          }
+                        />
                         <MobileMetric label="Off Eff" value={formatMetric(team.off_efficiency)} />
                         <MobileMetric label="Def Eff" value={formatMetric(team.def_efficiency)} />
                         <MobileMetric label="Adj Tempo" value={formatMetric(team.adj_tempo)} />

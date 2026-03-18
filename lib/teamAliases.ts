@@ -26,6 +26,7 @@ const DIRECT_ALIASES: Record<string, string> = {
   "nc state": "north carolina state",
   "n c state": "north carolina state",
   "north carolina state": "north carolina state",
+  "n.c. state": "north carolina state",
 
   "ohio st": "ohio state",
   "ohio state": "ohio state",
@@ -101,9 +102,29 @@ const DIRECT_ALIASES: Record<string, string> = {
   "prairie view": "prairie view a and m",
   "prairie view a&m": "prairie view a and m",
   "prairie view a and m": "prairie view a and m",
+  "prairie view am": "prairie view a and m",
 
   "miami": "miami fl",
   "miami fl": "miami fl",
+  "miami florida": "miami fl",
+
+  "miami oh": "miami ohio",
+  "miami ohio": "miami ohio",
+  "miami (oh)": "miami ohio",
+  "miami-oh": "miami ohio",
+
+  "umbc": "umbc",
+  "maryland baltimore county": "umbc",
+
+  "howard": "howard",
+
+  "lehigh": "lehigh",
+
+  "smu": "smu",
+  "southern methodist": "smu",
+
+  "texas": "texas",
+  "texas longhorns": "texas",
 };
 
 function basicNormalize(value: string) {
@@ -112,6 +133,7 @@ function basicNormalize(value: string) {
     .trim()
     .replace(/&/g, " and ")
     .replace(/[.'’]/g, "")
+    .replace(/[()]/g, " ")
     .replace(/\//g, " ")
     .replace(/-/g, " ")
     .replace(/\s+/g, " ");
@@ -161,6 +183,7 @@ export function getInternalAliasKeys(schoolName: string): string[] {
     case "north carolina state":
       keys.add("nc state");
       keys.add("n c state");
+      keys.add("n.c. state");
       break;
     case "ohio state":
       keys.add("ohio st");
@@ -216,9 +239,25 @@ export function getInternalAliasKeys(schoolName: string): string[] {
     case "prairie view a and m":
       keys.add("prairie view");
       keys.add("prairie view a&m");
+      keys.add("prairie view am");
       break;
     case "miami fl":
       keys.add("miami");
+      keys.add("miami florida");
+      break;
+    case "miami ohio":
+      keys.add("miami oh");
+      keys.add("miami (oh)");
+      keys.add("miami-oh");
+      break;
+    case "umbc":
+      keys.add("maryland baltimore county");
+      break;
+    case "smu":
+      keys.add("southern methodist");
+      break;
+    case "texas":
+      keys.add("texas longhorns");
       break;
     default:
       break;
