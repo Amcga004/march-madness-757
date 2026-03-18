@@ -132,6 +132,26 @@ function ResultTeamRow({
   );
 }
 
+function SummaryTile({
+  label,
+  value,
+  subtext,
+}: {
+  label: string;
+  value: string | number;
+  subtext?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+        {label}
+      </div>
+      <div className="mt-2 text-2xl font-bold text-white">{value}</div>
+      {subtext ? <div className="mt-1 text-sm text-slate-400">{subtext}</div> : null}
+    </div>
+  );
+}
+
 export default async function HistoryPage() {
   const supabase = await createClient();
 
@@ -177,6 +197,10 @@ export default async function HistoryPage() {
     typedExternalGames.map((game) => [game.external_game_id, game])
   );
 
+  const totalResults = typedGames.length;
+  const roundsRepresented = new Set(typedGames.map((game) => game.round_name)).size;
+  const latestRound = typedGames[0]?.round_name ?? "None";
+
   return (
     <main className="mx-auto max-w-6xl p-4 sm:p-6">
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -186,7 +210,7 @@ export default async function HistoryPage() {
           </div>
           <h1 className="mt-1 text-3xl font-bold text-white">Results History</h1>
           <p className="mt-2 text-slate-300">
-            Every recorded game result entered into the app.
+            Every official game result recorded in the app.
           </p>
         </div>
 
@@ -197,84 +221,122 @@ export default async function HistoryPage() {
         </div>
       </div>
 
-      <div className="space-y-3">
+      <section className="mb-6 grid gap-4 md:grid-cols-3">
+        <SummaryTile
+          label="Results Recorded"
+          value={totalResults}
+          subtext={totalResults > 0 ? "Official completed games" : "No entries yet"}
+        />
+        <SummaryTile
+          label="Latest Round"
+          value={latestRound}
+          subtext={totalResults > 0 ? "Most recent result type" : "Awaiting first result"}
+        />
+        <SummaryTile
+          label="Rounds Represented"
+          value={roundsRepresented}
+          subtext={roundsRepresented > 0 ? "Rounds with at least one result" : "No round activity yet"}
+        />
+      </section>
+
+      <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-white">Recorded Results Feed</h2>
+          <p className="mt-1 text-sm text-slate-400">
+            Latest official outcomes, shown in reverse chronological order.
+          </p>
+        </div>
+
         {typedGames.length === 0 ? (
-          <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 text-slate-400 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
-            No game results recorded yet.
+          <div className="rounded-2xl border border-dashed border-slate-700 bg-[#0f172a] px-4 py-8 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+            <div className="text-base font-semibold text-white">No results recorded yet</div>
+            <div className="mt-2 text-sm text-slate-400">
+              Once official games are promoted into the app, they’ll appear here with scores and winner/loser styling.
+            </div>
           </div>
         ) : (
-          typedGames.map((game) => {
-            const winnerName = teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner";
-            const loserName = teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser";
-            const externalGame =
-              game.external_game_id ? externalGameMap.get(game.external_game_id) ?? null : null;
+          <div className="space-y-3">
+            {typedGames.map((game, index) => {
+              const winnerName = teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner";
+              const loserName = teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser";
+              const externalGame =
+                game.external_game_id ? externalGameMap.get(game.external_game_id) ?? null : null;
 
-            const homeScore = externalGame?.home_score ?? null;
-            const awayScore = externalGame?.away_score ?? null;
-            const statusLabel = getDisplayStatus(externalGame?.espn_status ?? game.status ?? null);
+              const homeScore = externalGame?.home_score ?? null;
+              const awayScore = externalGame?.away_score ?? null;
+              const statusLabel = getDisplayStatus(externalGame?.espn_status ?? game.status ?? null);
 
-            const homeName =
-              externalGame?.mapped_home_team_id
-                ? teamMap.get(externalGame.mapped_home_team_id) ??
-                  externalGame.home_team_name ??
-                  "Home"
-                : externalGame?.home_team_name ?? winnerName;
+              const homeName =
+                externalGame?.mapped_home_team_id
+                  ? teamMap.get(externalGame.mapped_home_team_id) ??
+                    externalGame.home_team_name ??
+                    "Home"
+                  : externalGame?.home_team_name ?? winnerName;
 
-            const awayName =
-              externalGame?.mapped_away_team_id
-                ? teamMap.get(externalGame.mapped_away_team_id) ??
-                  externalGame.away_team_name ??
-                  "Away"
-                : externalGame?.away_team_name ?? loserName;
+              const awayName =
+                externalGame?.mapped_away_team_id
+                  ? teamMap.get(externalGame.mapped_away_team_id) ??
+                    externalGame.away_team_name ??
+                    "Away"
+                  : externalGame?.away_team_name ?? loserName;
 
-            const rows = getWinnerLoserRows({
-              homeName,
-              awayName,
-              homeScore,
-              awayScore,
-              statusLabel,
-            });
+              const rows = getWinnerLoserRows({
+                homeName,
+                awayName,
+                homeScore,
+                awayScore,
+                statusLabel,
+              });
 
-            return (
-              <div
-                key={game.id}
-                className="rounded-2xl border border-slate-700/80 bg-[#111827]/90 px-4 py-3 shadow-[0_12px_28px_rgba(0,0,0,0.24)]"
-              >
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                    {game.round_name}
+              return (
+                <div
+                  key={game.id}
+                  className="rounded-2xl border border-slate-700/80 bg-[#0f172a]/90 px-4 py-3 shadow-[0_12px_28px_rgba(0,0,0,0.20)]"
+                >
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                        {game.round_name}
+                      </div>
+                      {index < 3 ? (
+                        <div className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+                          Recent
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="text-xs text-slate-400">
+                      {formatEasternDateTime(game.created_at)}
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-400">
-                    {formatEasternDateTime(game.created_at)}
+
+                  <div className="grid gap-2">
+                    <ResultTeamRow
+                      teamName={rows.top.name}
+                      score={rows.top.score}
+                      winner={rows.top.winner}
+                      loser={rows.top.loser}
+                      size={22}
+                    />
+
+                    <ResultTeamRow
+                      teamName={rows.bottom.name}
+                      score={rows.bottom.score}
+                      winner={rows.bottom.winner}
+                      loser={rows.bottom.loser}
+                      size={22}
+                    />
+
+                    <div className="pt-1 text-center text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      {statusLabel}
+                    </div>
                   </div>
                 </div>
-
-                <div className="grid gap-2">
-                  <ResultTeamRow
-                    teamName={rows.top.name}
-                    score={rows.top.score}
-                    winner={rows.top.winner}
-                    loser={rows.top.loser}
-                    size={22}
-                  />
-
-                  <ResultTeamRow
-                    teamName={rows.bottom.name}
-                    score={rows.bottom.score}
-                    winner={rows.bottom.winner}
-                    loser={rows.bottom.loser}
-                    size={22}
-                  />
-
-                  <div className="pt-1 text-center text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                    {statusLabel}
-                  </div>
-                </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
-      </div>
+      </section>
     </main>
   );
 }
