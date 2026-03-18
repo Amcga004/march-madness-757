@@ -81,6 +81,17 @@ const MANAGER_STYLES: Record<string, string> = {
   Greg: "bg-orange-100 text-orange-700 border-orange-200",
 };
 
+const MANAGER_ROW_STYLES: Record<string, string> = {
+  Andrew:
+    "border-l-4 border-l-blue-400 bg-blue-500/8 shadow-[inset_3px_0_0_rgba(96,165,250,0.55)]",
+  Wesley:
+    "border-l-4 border-l-green-400 bg-green-500/8 shadow-[inset_3px_0_0_rgba(74,222,128,0.5)]",
+  Eric:
+    "border-l-4 border-l-purple-400 bg-purple-500/8 shadow-[inset_3px_0_0_rgba(192,132,252,0.5)]",
+  Greg:
+    "border-l-4 border-l-orange-400 bg-orange-500/8 shadow-[inset_3px_0_0_rgba(251,146,60,0.5)]",
+};
+
 function formatEasternDateTime(value: string) {
   return new Date(value).toLocaleString([], {
     timeZone: "America/New_York",
@@ -526,6 +537,11 @@ function ManagerTag({ manager }: { manager: string | null }) {
   );
 }
 
+function getOwnedRowClasses(manager: string | null) {
+  if (!manager) return "";
+  return MANAGER_ROW_STYLES[manager] ?? "";
+}
+
 function TeamLine({
   team,
   score,
@@ -537,6 +553,7 @@ function TeamLine({
   isWinner: boolean;
   isLoser: boolean;
 }) {
+  const ownedClasses = !isWinner && !isLoser ? getOwnedRowClasses(team.manager) : "";
   const winnerClasses = isWinner
     ? "border-green-500/60 bg-green-500/10 text-green-200"
     : "";
@@ -548,11 +565,11 @@ function TeamLine({
 
   return (
     <div
-      className={`rounded-lg border px-3 py-2 transition ${winnerClasses} ${loserClasses} ${baseClasses}`}
+      className={`rounded-lg border px-2.5 py-1.5 transition sm:px-3 sm:py-2 ${winnerClasses} ${loserClasses} ${baseClasses} ${ownedClasses}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <span className="block truncate text-sm font-medium">
+          <span className="block truncate text-[13px] font-medium sm:text-sm">
             {team.seed ? `${team.seed}. ` : ""}
             {team.name}
           </span>
@@ -579,7 +596,7 @@ function MatchupCard({
   const statusLabel = getDisplayStatus(externalGame);
 
   return (
-    <div className={`space-y-2 rounded-xl border p-3 shadow-sm transition ${getCardClasses(externalGame)}`}>
+    <div className={`space-y-2 rounded-xl border p-2.5 shadow-sm transition sm:p-3 ${getCardClasses(externalGame)}`}>
       <TeamLine
         team={matchup.top}
         score={topScore}
@@ -628,7 +645,7 @@ function PlayInMatchupCard({
   const statusLabel = getDisplayStatus(externalGame);
 
   return (
-    <div className={`space-y-2 rounded-xl border p-3 shadow-sm transition ${getCardClasses(externalGame)}`}>
+    <div className={`space-y-2 rounded-xl border p-2.5 shadow-sm transition sm:p-3 ${getCardClasses(externalGame)}`}>
       <TeamLine
         team={top}
         score={getTeamScoreBySide(externalGame, "home", top.id)}
@@ -665,7 +682,7 @@ function ConnectorColumn({
         {title}
       </h4>
 
-      <div className="space-y-4 sm:space-y-6">
+      <div className="space-y-3 sm:space-y-5">
         {matchups.map((matchup, index) => {
           const externalGame = findExternalGameForTeams(
             externalGames,
@@ -794,7 +811,7 @@ export default async function BracketPage() {
   const finalFourExternalGames = typedExternalGames;
 
   return (
-    <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
+    <div className="mx-auto max-w-[1700px] p-3 sm:p-6">
       <AutoRefreshClient intervalMs={15000} hiddenIntervalMs={60000} />
 
       <section className="mb-6 sm:mb-8">
@@ -821,7 +838,7 @@ export default async function BracketPage() {
         </div>
       </section>
 
-      <div className="space-y-8 sm:space-y-10">
+      <div className="space-y-6 sm:space-y-8">
         {playInGames.length > 0 ? (
           <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
             <div className="mb-5">
@@ -877,7 +894,7 @@ export default async function BracketPage() {
                     Elite Eight
                   </h4>
 
-                  <div className="space-y-4 sm:space-y-6">
+                  <div className="space-y-3 sm:space-y-5">
                     {region.elite8.map((matchup, index) => {
                       const externalGame = findExternalGameForTeams(
                         typedExternalGames,
