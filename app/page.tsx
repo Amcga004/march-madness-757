@@ -82,6 +82,51 @@ function MiniStat({
   );
 }
 
+function SummaryTile({
+  label,
+  value,
+  subtext,
+}: {
+  label: string;
+  value: string | number;
+  subtext?: string;
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+        {label}
+      </div>
+      <div className="mt-2 text-xl font-bold text-white">{value}</div>
+      {subtext ? <div className="mt-1 text-sm text-slate-300">{subtext}</div> : null}
+    </div>
+  );
+}
+
+function SectionShell({
+  title,
+  subtitle,
+  rightLabel,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  rightLabel?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold text-white">{title}</h3>
+          {subtitle ? <p className="mt-1 text-sm text-slate-300">{subtitle}</p> : null}
+        </div>
+        {rightLabel ? <div className="text-xs text-slate-400">{rightLabel}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function formatEasternDateTime(value: string) {
   return new Date(value).toLocaleString([], {
     timeZone: "America/New_York",
@@ -241,6 +286,21 @@ function SlateGameCard({
   );
 }
 
+function EmptyStateCard({
+  title,
+  body,
+}: {
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-700 bg-[#0f172a] px-4 py-8 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+      <div className="text-base font-semibold text-white">{title}</div>
+      <div className="mt-2 text-sm text-slate-400">{body}</div>
+    </div>
+  );
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
 
@@ -365,6 +425,12 @@ export default async function DashboardPage() {
   const closestRaceDiff =
     forecasts.length >= 2 ? Math.abs(forecasts[0].currentPoints - forecasts[1].currentPoints) : 0;
 
+  const slateSections = [
+    { key: "live", label: "Live", games: todaysLiveGames, tone: "text-red-300" },
+    { key: "upcoming", label: "Upcoming", games: todaysUpcomingGames, tone: "text-blue-300" },
+    { key: "final", label: "Final", games: todaysFinalGames, tone: "text-slate-400" },
+  ].filter((section) => section.games.length > 0);
+
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
       <AutoRefreshClient intervalMs={15000} hiddenIntervalMs={60000} />
@@ -392,19 +458,11 @@ export default async function DashboardPage() {
       </section>
 
       {liveGames.length > 0 ? (
-        <section className="mb-5 rounded-3xl border border-red-500/40 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-white">Live Now</h3>
-              <p className="mt-1 text-sm text-slate-300">
-                Active tournament games happening right now.
-              </p>
-            </div>
-            <div className="rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-red-300">
-              Live
-            </div>
-          </div>
-
+        <SectionShell
+          title="Live Now"
+          subtitle="Active tournament games happening right now."
+          rightLabel="Live"
+        >
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {liveGames.map((game) => (
               <SlateGameCard
@@ -414,113 +472,108 @@ export default async function DashboardPage() {
               />
             ))}
           </div>
-        </section>
+        </SectionShell>
       ) : (
-        <section className="mb-5 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-white">No Games Live Right Now</h3>
-              <p className="mt-1 text-sm text-slate-300">
-                {nextGame
-                  ? "No active games at the moment. Next tip is queued below."
-                  : "No active games in the current feed window."}
-              </p>
+        <SectionShell
+          title="No Games Live Right Now"
+          subtitle={
+            nextGame
+              ? "Nothing is currently in progress. The next scheduled tip is below."
+              : "No active games are in the current feed window."
+          }
+        >
+          <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
+            <div className="rounded-2xl border border-dashed border-slate-700 bg-[#0f172a] px-4 py-5">
+              <div className="text-base font-semibold text-white">
+                Live scoreboard is standing by
+              </div>
+              <div className="mt-2 text-sm text-slate-400">
+                Once a game tips, this area will automatically turn into your live game tracker.
+              </div>
             </div>
 
             {nextGame ? (
-              <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-200">
+              <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 px-4 py-4 text-sm text-blue-200">
                 Next Tip • {nextGame.start_time ? formatEasternDateTime(nextGame.start_time) : "Scheduled"}
               </div>
             ) : null}
           </div>
-        </section>
+        </SectionShell>
       )}
 
-      {nextGame ? (
-        <section className="mb-5 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
-          <div className="mb-3">
-            <h3 className="text-lg font-semibold text-white">Next Tip</h3>
-            <p className="mt-1 text-sm text-slate-300">
-              Next scheduled tournament game on deck.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-              {nextGame.round_name ?? "Tournament Game"}
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <TeamLogo teamName={getGameTeams(nextGame, teamMap).awayName} size={22} />
-                  <span className="text-sm font-semibold text-white">
-                    {getGameTeams(nextGame, teamMap).awayName}
-                  </span>
-                </div>
-                <span className="text-slate-500">vs</span>
-                <div className="flex items-center gap-2">
-                  <TeamLogo teamName={getGameTeams(nextGame, teamMap).homeName} size={22} />
-                  <span className="text-sm font-semibold text-white">
-                    {getGameTeams(nextGame, teamMap).homeName}
-                  </span>
-                </div>
+      <div className="mt-5">
+        {nextGame ? (
+          <SectionShell
+            title="Next Tip"
+            subtitle="Next scheduled tournament game on deck."
+          >
+            <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                {nextGame.round_name ?? "Tournament Game"}
               </div>
 
-              <div className="text-sm font-semibold text-slate-300">
-                {nextGame.start_time ? formatEasternDateTime(nextGame.start_time) : "Scheduled"}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <TeamLogo teamName={getGameTeams(nextGame, teamMap).awayName} size={22} />
+                    <span className="text-sm font-semibold text-white">
+                      {getGameTeams(nextGame, teamMap).awayName}
+                    </span>
+                  </div>
+                  <span className="text-slate-500">vs</span>
+                  <div className="flex items-center gap-2">
+                    <TeamLogo teamName={getGameTeams(nextGame, teamMap).homeName} size={22} />
+                    <span className="text-sm font-semibold text-white">
+                      {getGameTeams(nextGame, teamMap).homeName}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-sm font-semibold text-slate-300">
+                  {nextGame.start_time ? formatEasternDateTime(nextGame.start_time) : "Scheduled"}
+                </div>
               </div>
             </div>
-          </div>
-        </section>
-      ) : null}
+          </SectionShell>
+        ) : null}
+      </div>
 
-      <section className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Leader</div>
-          <div className="mt-2 text-xl font-bold text-white">
-            {leader ? leader.displayName : "—"}
-          </div>
-          <div className="mt-1 text-sm text-slate-300">
-            {leader ? `${leader.currentPoints} points` : "No standings yet"}
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Most Live Teams</div>
-          <div className="mt-2 text-xl font-bold text-white">
-            {mostLiveTeams ? mostLiveTeams.displayName : "—"}
-          </div>
-          <div className="mt-1 text-sm text-slate-300">
-            {mostLiveTeams ? `${mostLiveTeams.liveTeams} still alive` : "No active teams"}
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Closest Race</div>
-          <div className="mt-2 text-xl font-bold text-white">
-            {forecasts.length >= 2 ? `${closestRaceDiff} pts` : "—"}
-          </div>
-          <div className="mt-1 text-sm text-slate-300">
-            {forecasts.length >= 2 ? `${forecasts[0].displayName} vs ${forecasts[1].displayName}` : "Need two managers"}
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Today’s Games</div>
-          <div className="mt-2 text-xl font-bold text-white">{todaysGames.length}</div>
-          <div className="mt-1 text-sm text-slate-300">
-            {todaysLiveGames.length} live • {todaysUpcomingGames.length} upcoming • {todaysFinalGames.length} final
-          </div>
-        </div>
+      <section className="my-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryTile
+          label="Leader"
+          value={leader ? leader.displayName : "—"}
+          subtext={leader ? `${leader.currentPoints} points` : "No standings yet"}
+        />
+        <SummaryTile
+          label="Most Live Teams"
+          value={mostLiveTeams ? mostLiveTeams.displayName : "—"}
+          subtext={mostLiveTeams ? `${mostLiveTeams.liveTeams} still alive` : "No active teams"}
+        />
+        <SummaryTile
+          label="Closest Race"
+          value={forecasts.length >= 2 ? `${closestRaceDiff} pts` : "—"}
+          subtext={
+            forecasts.length >= 2
+              ? `${forecasts[0].displayName} vs ${forecasts[1].displayName}`
+              : "Need two managers"
+          }
+        />
+        <SummaryTile
+          label="Today’s Games"
+          value={todaysGames.length}
+          subtext={
+            todaysGames.length > 0
+              ? `${todaysLiveGames.length} live • ${todaysUpcomingGames.length} upcoming • ${todaysFinalGames.length} final`
+              : "No games in today’s slate"
+          }
+        />
       </section>
 
-      <section className="mb-5 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">League at a Glance</h3>
-          <div className="text-xs text-slate-400">10-second read</div>
-        </div>
-
+      <SectionShell
+        title="League at a Glance"
+        subtitle="Fast standings read with current totals and upside."
+        rightLabel="10-second read"
+      >
         <div className="space-y-3">
           {forecasts.map((forecast: ManagerForecast, index: number) => (
             <div
@@ -556,14 +609,10 @@ export default async function DashboardPage() {
             </div>
           ))}
         </div>
-      </section>
+      </SectionShell>
 
-      <section className="mb-5 grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
-        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
-          <div className="mb-3">
-            <h3 className="text-lg font-semibold text-white">Tournament Progress</h3>
-          </div>
-
+      <section className="my-5 grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
+        <SectionShell title="Tournament Progress">
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
             {roundProgress.map((round) => (
               <div
@@ -579,13 +628,9 @@ export default async function DashboardPage() {
               </div>
             ))}
           </div>
-        </div>
+        </SectionShell>
 
-        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
-          <div className="mb-3">
-            <h3 className="text-lg font-semibold text-white">Quick Totals</h3>
-          </div>
-
+        <SectionShell title="Quick Totals">
           <div className="grid grid-cols-2 gap-2">
             <MiniStat label="Results" value={typedGames.length} />
             <MiniStat
@@ -598,32 +643,30 @@ export default async function DashboardPage() {
             />
             <MiniStat label="Picks Made" value={typedPicks.length} />
           </div>
-        </div>
+        </SectionShell>
       </section>
 
-      <section className="mb-5 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">Today’s Slate</h3>
-          <div className="text-xs text-slate-400">
-            {todaysGames.length > 0 ? `${todaysGames.length} games` : "No games today"}
-          </div>
-        </div>
-
+      <SectionShell
+        title="Today’s Slate"
+        subtitle="Today’s tournament action grouped by status."
+        rightLabel={todaysGames.length > 0 ? `${todaysGames.length} games` : "No games today"}
+      >
         {todaysGames.length === 0 ? (
-          <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4 text-sm text-slate-400">
-            No tournament games are scheduled in today’s feed window.
-          </div>
+          <EmptyStateCard
+            title="No tournament games scheduled today"
+            body="When games land in today’s feed window, they’ll appear here grouped into live, upcoming, and final."
+          />
         ) : (
           <div className="space-y-5">
-            {todaysLiveGames.length > 0 ? (
-              <div>
-                <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-red-300">
-                  Live
+            {slateSections.map((section) => (
+              <div key={section.key}>
+                <div className={`mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] ${section.tone}`}>
+                  {section.label}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {todaysLiveGames.map((game) => (
+                  {section.games.map((game) => (
                     <SlateGameCard
-                      key={`live-${game.external_game_id}`}
+                      key={`${section.key}-${game.external_game_id}`}
                       game={game}
                       teamMap={teamMap}
                       compact
@@ -631,225 +674,191 @@ export default async function DashboardPage() {
                   ))}
                 </div>
               </div>
-            ) : null}
-
-            {todaysUpcomingGames.length > 0 ? (
-              <div>
-                <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-300">
-                  Upcoming
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {todaysUpcomingGames.map((game) => (
-                    <SlateGameCard
-                      key={`upcoming-${game.external_game_id}`}
-                      game={game}
-                      teamMap={teamMap}
-                      compact
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {todaysFinalGames.length > 0 ? (
-              <div>
-                <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Final
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {todaysFinalGames.map((game) => (
-                    <SlateGameCard
-                      key={`final-${game.external_game_id}`}
-                      game={game}
-                      teamMap={teamMap}
-                      compact
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : null}
+            ))}
           </div>
         )}
-      </section>
+      </SectionShell>
 
-      <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">Latest Results</h3>
-          <div className="text-xs text-slate-400">Most recent official games</div>
-        </div>
+      <div className="mt-5">
+        <SectionShell
+          title="Latest Results"
+          subtitle="Most recent official games recorded in the app."
+          rightLabel="Recent official results"
+        >
+          {typedGames.length === 0 ? (
+            <EmptyStateCard
+              title="No official results recorded yet"
+              body="Once completed games are promoted into the app, they’ll appear here with scorelines and winner/loser styling."
+            />
+          ) : (
+            <>
+              <div className="grid gap-2 sm:hidden">
+                {mobileRecentResults.map((game) => {
+                  const externalGame =
+                    game.external_game_id ? externalGameMap.get(game.external_game_id) ?? null : null;
 
-        {typedGames.length === 0 ? (
-          <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4 text-sm text-slate-400">
-            No game results recorded yet.
-          </div>
-        ) : (
-          <>
-            <div className="grid gap-2 sm:hidden">
-              {mobileRecentResults.map((game) => {
-                const externalGame =
-                  game.external_game_id ? externalGameMap.get(game.external_game_id) ?? null : null;
+                  const homeName =
+                    externalGame?.mapped_home_team_id
+                      ? teamMap.get(externalGame.mapped_home_team_id) ??
+                        externalGame.home_team_name ??
+                        "Home"
+                      : externalGame?.home_team_name ??
+                        teamMap.get(game.winning_team_id ?? "") ??
+                        "Home";
 
-                const homeName =
-                  externalGame?.mapped_home_team_id
-                    ? teamMap.get(externalGame.mapped_home_team_id) ??
-                      externalGame.home_team_name ??
-                      "Home"
-                    : externalGame?.home_team_name ??
-                      teamMap.get(game.winning_team_id ?? "") ??
-                      "Home";
+                  const awayName =
+                    externalGame?.mapped_away_team_id
+                      ? teamMap.get(externalGame.mapped_away_team_id) ??
+                        externalGame.away_team_name ??
+                        "Away"
+                      : externalGame?.away_team_name ??
+                        teamMap.get(game.losing_team_id ?? "") ??
+                        "Away";
 
-                const awayName =
-                  externalGame?.mapped_away_team_id
-                    ? teamMap.get(externalGame.mapped_away_team_id) ??
-                      externalGame.away_team_name ??
-                      "Away"
-                    : externalGame?.away_team_name ??
-                      teamMap.get(game.losing_team_id ?? "") ??
-                      "Away";
+                  const homeScore = externalGame?.home_score ?? null;
+                  const awayScore = externalGame?.away_score ?? null;
+                  const statusLabel = getDisplayStatus(externalGame, game.status);
 
-                const homeScore = externalGame?.home_score ?? null;
-                const awayScore = externalGame?.away_score ?? null;
-                const statusLabel = getDisplayStatus(externalGame, game.status);
+                  const awayWon =
+                    homeScore !== null && awayScore !== null ? awayScore > homeScore : false;
+                  const homeWon =
+                    homeScore !== null && awayScore !== null ? homeScore > awayScore : false;
 
-                const awayWon =
-                  homeScore !== null && awayScore !== null ? awayScore > homeScore : false;
-                const homeWon =
-                  homeScore !== null && awayScore !== null ? homeScore > awayScore : false;
-
-                return (
-                  <div
-                    key={game.id}
-                    className="rounded-2xl border border-slate-700/80 bg-[#172033] px-3 py-2"
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                        {game.round_name}
-                      </div>
-                      <div className="text-[11px] text-slate-500">{statusLabel}</div>
-                    </div>
-
-                    <div className="grid gap-1.5">
-                      <div
-                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
-                          awayWon
-                            ? "border-green-500/60 bg-green-500/10 text-green-200"
-                            : homeWon
-                            ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
-                            : "border-slate-700/80 bg-[#0f172a] text-white"
-                        }`}
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <TeamLogo teamName={awayName} size={18} />
-                          <span className="truncate text-sm font-semibold">{awayName}</span>
+                  return (
+                    <div
+                      key={game.id}
+                      className="rounded-2xl border border-slate-700/80 bg-[#172033] px-3 py-2"
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                          {game.round_name}
                         </div>
-                        <div className="text-sm font-bold">{awayScore ?? "—"}</div>
+                        <div className="text-[11px] text-slate-500">{statusLabel}</div>
                       </div>
 
-                      <div
-                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
-                          homeWon
-                            ? "border-green-500/60 bg-green-500/10 text-green-200"
-                            : awayWon
-                            ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
-                            : "border-slate-700/80 bg-[#0f172a] text-white"
-                        }`}
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <TeamLogo teamName={homeName} size={18} />
-                          <span className="truncate text-sm font-semibold">{homeName}</span>
+                      <div className="grid gap-1.5">
+                        <div
+                          className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                            awayWon
+                              ? "border-green-500/60 bg-green-500/10 text-green-200"
+                              : homeWon
+                              ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+                              : "border-slate-700/80 bg-[#0f172a] text-white"
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <TeamLogo teamName={awayName} size={18} />
+                            <span className="truncate text-sm font-semibold">{awayName}</span>
+                          </div>
+                          <div className="text-sm font-bold">{awayScore ?? "—"}</div>
                         </div>
-                        <div className="text-sm font-bold">{homeScore ?? "—"}</div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
 
-            <div className="hidden grid-cols-2 gap-3 sm:grid lg:grid-cols-3">
-              {desktopRecentResults.map((game) => {
-                const externalGame =
-                  game.external_game_id ? externalGameMap.get(game.external_game_id) ?? null : null;
-
-                const homeName =
-                  externalGame?.mapped_home_team_id
-                    ? teamMap.get(externalGame.mapped_home_team_id) ??
-                      externalGame.home_team_name ??
-                      "Home"
-                    : externalGame?.home_team_name ??
-                      teamMap.get(game.winning_team_id ?? "") ??
-                      "Home";
-
-                const awayName =
-                  externalGame?.mapped_away_team_id
-                    ? teamMap.get(externalGame.mapped_away_team_id) ??
-                      externalGame.away_team_name ??
-                      "Away"
-                    : externalGame?.away_team_name ??
-                      teamMap.get(game.losing_team_id ?? "") ??
-                      "Away";
-
-                const homeScore = externalGame?.home_score ?? null;
-                const awayScore = externalGame?.away_score ?? null;
-                const statusLabel = getDisplayStatus(externalGame, game.status);
-
-                const awayWon =
-                  homeScore !== null && awayScore !== null ? awayScore > homeScore : false;
-                const homeWon =
-                  homeScore !== null && awayScore !== null ? homeScore > awayScore : false;
-
-                return (
-                  <div
-                    key={game.id}
-                    className="rounded-2xl border border-slate-700/80 bg-[#172033] px-3 py-3"
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                        {game.round_name}
-                      </div>
-                      <div className="text-[11px] text-slate-500">{statusLabel}</div>
-                    </div>
-
-                    <div className="grid gap-2">
-                      <div
-                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
-                          awayWon
-                            ? "border-green-500/60 bg-green-500/10 text-green-200"
-                            : homeWon
-                            ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
-                            : "border-slate-700/80 bg-[#0f172a] text-white"
-                        }`}
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <TeamLogo teamName={awayName} size={18} />
-                          <span className="truncate text-sm font-semibold">{awayName}</span>
+                        <div
+                          className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                            homeWon
+                              ? "border-green-500/60 bg-green-500/10 text-green-200"
+                              : awayWon
+                              ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+                              : "border-slate-700/80 bg-[#0f172a] text-white"
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <TeamLogo teamName={homeName} size={18} />
+                            <span className="truncate text-sm font-semibold">{homeName}</span>
+                          </div>
+                          <div className="text-sm font-bold">{homeScore ?? "—"}</div>
                         </div>
-                        <div className="text-sm font-bold">{awayScore ?? "—"}</div>
-                      </div>
-
-                      <div
-                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
-                          homeWon
-                            ? "border-green-500/60 bg-green-500/10 text-green-200"
-                            : awayWon
-                            ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
-                            : "border-slate-700/80 bg-[#0f172a] text-white"
-                        }`}
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <TeamLogo teamName={homeName} size={18} />
-                          <span className="truncate text-sm font-semibold">{homeName}</span>
-                        </div>
-                        <div className="text-sm font-bold">{homeScore ?? "—"}</div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </section>
+                  );
+                })}
+              </div>
+
+              <div className="hidden grid-cols-2 gap-3 sm:grid lg:grid-cols-3">
+                {desktopRecentResults.map((game) => {
+                  const externalGame =
+                    game.external_game_id ? externalGameMap.get(game.external_game_id) ?? null : null;
+
+                  const homeName =
+                    externalGame?.mapped_home_team_id
+                      ? teamMap.get(externalGame.mapped_home_team_id) ??
+                        externalGame.home_team_name ??
+                        "Home"
+                      : externalGame?.home_team_name ??
+                        teamMap.get(game.winning_team_id ?? "") ??
+                        "Home";
+
+                  const awayName =
+                    externalGame?.mapped_away_team_id
+                      ? teamMap.get(externalGame.mapped_away_team_id) ??
+                        externalGame.away_team_name ??
+                        "Away"
+                      : externalGame?.away_team_name ??
+                        teamMap.get(game.losing_team_id ?? "") ??
+                        "Away";
+
+                  const homeScore = externalGame?.home_score ?? null;
+                  const awayScore = externalGame?.away_score ?? null;
+                  const statusLabel = getDisplayStatus(externalGame, game.status);
+
+                  const awayWon =
+                    homeScore !== null && awayScore !== null ? awayScore > homeScore : false;
+                  const homeWon =
+                    homeScore !== null && awayScore !== null ? homeScore > awayScore : false;
+
+                  return (
+                    <div
+                      key={game.id}
+                      className="rounded-2xl border border-slate-700/80 bg-[#172033] px-3 py-3"
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                          {game.round_name}
+                        </div>
+                        <div className="text-[11px] text-slate-500">{statusLabel}</div>
+                      </div>
+
+                      <div className="grid gap-2">
+                        <div
+                          className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                            awayWon
+                              ? "border-green-500/60 bg-green-500/10 text-green-200"
+                              : homeWon
+                              ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+                              : "border-slate-700/80 bg-[#0f172a] text-white"
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <TeamLogo teamName={awayName} size={18} />
+                            <span className="truncate text-sm font-semibold">{awayName}</span>
+                          </div>
+                          <div className="text-sm font-bold">{awayScore ?? "—"}</div>
+                        </div>
+
+                        <div
+                          className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                            homeWon
+                              ? "border-green-500/60 bg-green-500/10 text-green-200"
+                              : awayWon
+                              ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+                              : "border-slate-700/80 bg-[#0f172a] text-white"
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <TeamLogo teamName={homeName} size={18} />
+                            <span className="truncate text-sm font-semibold">{homeName}</span>
+                          </div>
+                          <div className="text-sm font-bold">{homeScore ?? "—"}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </SectionShell>
+      </div>
     </div>
   );
 }
