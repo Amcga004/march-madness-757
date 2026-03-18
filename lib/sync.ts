@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 
 const SCORING: Record<string, number> = {
+  "First Four": 0,
   "Round of 64": 2,
   "Round of 32": 4,
   "Sweet 16": 7,
@@ -9,10 +10,21 @@ const SCORING: Record<string, number> = {
   Championship: 37,
 };
 
+type SyncTeam = {
+  id: string;
+  school_name: string;
+  external_team_id: string | null;
+  is_play_in_actual: boolean;
+};
+
 function normalizeRound(round: string): string {
   const key = round.toLowerCase().trim();
 
   const map: Record<string, string> = {
+    "first four": "First Four",
+    "first-four": "First Four",
+    "play-in": "First Four",
+    "play in": "First Four",
     "round of 64": "Round of 64",
     "round-64": "Round of 64",
     "first round": "Round of 64",
@@ -71,34 +83,46 @@ export async function syncPublicResults() {
 
   const { data: teams, error: teamsError } = await supabase
     .from("teams")
-    .select("id, school_name, external_team_id");
+    .select("id, school_name, external_team_id, is_play_in_actual");
 
   if (teamsError) {
     throw teamsError;
   }
 
-  const teamMap = new Map(
-    (teams ?? []).map((team) => [team.external_team_id, team.id])
+  const typedTeams = (teams ?? []) as SyncTeam[];
+
+  const teamMap = new Map<string, string>(
+    typedTeams
+      .filter((team) => !!team.external_team_id)
+      .map((team) => [team.external_team_id as string, team.id])
   );
 
   let applied = 0;
   let skipped = 0;
 
   for (const game of completedGames) {
-    const winnerTeamId = teamMap.get(game.winner_team_id);
-    const loserTeamId = teamMap.get(game.loser_team_id);
-    const roundName = normalizeRound(game.round);
+    const winnerTeamId = teamMap.get(String(game.winner_team_id));
+    const loserTeamId = teamMap.get(String(game.loser_team_id));
+    const roundName = normalizeRound(String(game.round ?? ""));
 
     if (!winnerTeamId || !loserTeamId) {
       skipped += 1;
       continue;
     }
 
+    const winnerTeam = typedTeams.find((team) => team.id === winnerTeamId);
+    const loserTeam = typedTeams.find((team) => team.id === loserTeamId);
+
+    const effectiveRoundName =
+      winnerTeam?.is_play_in_actual === true && loserTeam?.is_play_in_actual === true
+        ? "First Four"
+        : roundName;
+
     const { data: existingGame } = await supabase
       .from("games")
       .select("id")
       .eq("league_id", league.id)
-      .eq("round_name", roundName)
+      .eq("round_name", effectiveRoundName)
       .eq("winning_team_id", winnerTeamId)
       .eq("losing_team_id", loserTeamId)
       .maybeSingle();
@@ -108,12 +132,12 @@ export async function syncPublicResults() {
       continue;
     }
 
-    const points = SCORING[roundName] ?? 0;
+    const points = SCORING[effectiveRoundName] ?? 0;
 
     const { error: gameError } = await supabase.from("games").insert({
       league_id: league.id,
       external_game_id: String(game.id),
-      round_name: roundName,
+      round_name: effectiveRoundName,
       winning_team_id: winnerTeamId,
       losing_team_id: loserTeamId,
       status: "complete",
