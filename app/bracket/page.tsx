@@ -75,10 +75,10 @@ const ROUND_OF_64_PAIRS = [
 ] as const;
 
 const MANAGER_STYLES: Record<string, string> = {
-  Andrew: "bg-blue-100 text-blue-700 border-blue-200",
-  Wesley: "bg-green-100 text-green-700 border-green-200",
-  Eric: "bg-purple-100 text-purple-700 border-purple-200",
-  Greg: "bg-orange-100 text-orange-700 border-orange-200",
+  Andrew: "bg-blue-500/15 text-blue-200 border-blue-400/40",
+  Wesley: "bg-green-500/15 text-green-200 border-green-400/40",
+  Eric: "bg-purple-500/15 text-purple-200 border-purple-400/40",
+  Greg: "bg-orange-500/15 text-orange-200 border-orange-400/40",
 };
 
 function formatEasternDateTime(value: string) {
@@ -480,7 +480,7 @@ function ManagerTag({ manager }: { manager: string | null }) {
   return (
     <span
       className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-        MANAGER_STYLES[manager] ?? "bg-slate-100 text-slate-700 border-slate-200"
+        MANAGER_STYLES[manager] ?? "bg-slate-500/15 text-slate-200 border-slate-400/30"
       }`}
     >
       {manager}
@@ -500,17 +500,19 @@ function TeamLine({
   isLoser: boolean;
 }) {
   const winnerClasses = isWinner
-    ? "border-green-300 bg-green-50 text-green-800"
+    ? "border-green-500/70 bg-green-500/10 text-green-200 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.15)]"
     : "";
   const loserClasses = isLoser
-    ? "border-red-300 bg-red-50 text-red-700 line-through"
+    ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
     : "";
   const baseClasses =
-    !isWinner && !isLoser ? "border-slate-200 bg-white text-slate-800" : "";
+    !isWinner && !isLoser
+      ? "border-slate-700/80 bg-[#172033] text-slate-100"
+      : "";
 
   return (
     <div
-      className={`rounded-lg border px-3 py-2 transition ${winnerClasses} ${loserClasses} ${baseClasses}`}
+      className={`rounded-xl border px-3 py-2 transition ${winnerClasses} ${loserClasses} ${baseClasses}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -540,8 +542,21 @@ function MatchupCard({
   const bottomScore = getTeamScore(externalGame, matchup.bottom.id);
   const statusLabel = getDisplayStatus(externalGame);
 
+  const isLive =
+    !!externalGame &&
+    !!externalGame.espn_status &&
+    (externalGame.espn_status === "STATUS_IN_PROGRESS" ||
+      externalGame.espn_status === "STATUS_END_PERIOD" ||
+      externalGame.espn_status === "STATUS_HALFTIME");
+
   return (
-    <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
+    <div
+      className={`space-y-2 rounded-2xl p-3 shadow-sm transition ${
+        isLive
+          ? "border-2 border-red-500 bg-red-950/15 shadow-[0_0_14px_rgba(239,68,68,0.22)]"
+          : "border border-slate-700/80 bg-[#111827]"
+      }`}
+    >
       <TeamLine
         team={matchup.top}
         score={topScore}
@@ -556,8 +571,12 @@ function MatchupCard({
         isLoser={matchup.loserId !== null && matchup.loserId === matchup.bottom.id}
       />
 
-      <div className="px-1 pt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-        {statusLabel ?? "Awaiting matchup"}
+      <div className="px-1 pt-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+        {isLive ? (
+          <span className="font-semibold text-red-400">🔴 LIVE</span>
+        ) : (
+          statusLabel ?? "Awaiting matchup"
+        )}
       </div>
     </div>
   );
@@ -589,8 +608,20 @@ function PlayInMatchupCard({
   const inferredLoserId = inferLoserIdFromExternalGame(externalGame);
   const statusLabel = getDisplayStatus(externalGame);
 
+  const isLive =
+    !!externalGame.espn_status &&
+    (externalGame.espn_status === "STATUS_IN_PROGRESS" ||
+      externalGame.espn_status === "STATUS_END_PERIOD" ||
+      externalGame.espn_status === "STATUS_HALFTIME");
+
   return (
-    <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
+    <div
+      className={`space-y-2 rounded-2xl p-3 shadow-sm transition ${
+        isLive
+          ? "border-2 border-red-500 bg-red-950/15 shadow-[0_0_14px_rgba(239,68,68,0.22)]"
+          : "border border-slate-700/80 bg-[#111827]"
+      }`}
+    >
       <TeamLine
         team={top}
         score={getTeamScoreBySide(externalGame, "home", top.id)}
@@ -605,8 +636,12 @@ function PlayInMatchupCard({
         isLoser={inferredLoserId !== null && inferredLoserId === bottom.id}
       />
 
-      <div className="px-1 pt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-        {statusLabel ?? "Awaiting matchup"}
+      <div className="px-1 pt-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+        {isLive ? (
+          <span className="font-semibold text-red-400">🔴 LIVE</span>
+        ) : (
+          statusLabel ?? "Awaiting matchup"
+        )}
       </div>
     </div>
   );
@@ -623,7 +658,7 @@ function ConnectorColumn({
 }) {
   return (
     <div className="min-w-[240px] sm:min-w-[260px]">
-      <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+      <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
         {title}
       </h4>
 
@@ -638,7 +673,7 @@ function ConnectorColumn({
           return (
             <div key={`${title}-${index}`} className="relative">
               <MatchupCard matchup={matchup} externalGame={externalGame} />
-              <div className="pointer-events-none absolute -right-3 top-1/2 hidden h-px w-6 -translate-y-1/2 bg-slate-300 xl:block" />
+              <div className="pointer-events-none absolute -right-3 top-1/2 hidden h-px w-6 -translate-y-1/2 bg-slate-700 xl:block" />
             </div>
           );
         })}
@@ -762,13 +797,13 @@ export default async function BracketPage() {
       <section className="mb-6 sm:mb-8">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-3xl font-bold">Tournament Bracket</h2>
-            <p className="mt-2 text-gray-600">
+            <h2 className="text-3xl font-bold text-white">Tournament Bracket</h2>
+            <p className="mt-2 text-slate-300">
               Live bracket view with scheduled tip times, in-game scores, and automatic advancement once results are promoted.
             </p>
           </div>
 
-          <div className="space-y-1 text-sm text-slate-500 sm:text-right">
+          <div className="space-y-1 text-sm text-slate-400 sm:text-right">
             <div>
               {latestOfficialUpdate
                 ? `Last official result: ${formatEasternFullDateTime(latestOfficialUpdate)}`
@@ -785,10 +820,10 @@ export default async function BracketPage() {
 
       <div className="space-y-8 sm:space-y-10">
         {playInGames.length > 0 ? (
-          <section className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
+          <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-6">
             <div className="mb-5">
-              <h3 className="text-2xl font-bold">First Four / Play-In Games</h3>
-              <p className="mt-1 text-sm text-slate-600">
+              <h3 className="text-2xl font-bold text-white">First Four / Play-In Games</h3>
+              <p className="mt-1 text-sm text-slate-300">
                 Live and final play-in matchups from the ESPN sync feed.
               </p>
             </div>
@@ -796,7 +831,7 @@ export default async function BracketPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               {playInGames.map((game) => (
                 <div key={game.id} className="min-w-0">
-                  <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
                     {game.round_name ?? "Play-In"}
                   </div>
                   <PlayInMatchupCard
@@ -811,8 +846,11 @@ export default async function BracketPage() {
         ) : null}
 
         {regionBrackets.map((region) => (
-          <section key={region.region} className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
-            <h3 className="mb-5 text-2xl font-bold">{region.region} Region</h3>
+          <section
+            key={region.region}
+            className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-6"
+          >
+            <h3 className="mb-5 text-2xl font-bold text-white">{region.region} Region</h3>
 
             <div className="overflow-x-auto">
               <div className="flex min-w-max gap-6 pb-4 sm:gap-10">
@@ -832,7 +870,7 @@ export default async function BracketPage() {
                   externalGames={typedExternalGames}
                 />
                 <div className="min-w-[240px] sm:min-w-[260px]">
-                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
                     Elite Eight
                   </h4>
 
@@ -859,13 +897,13 @@ export default async function BracketPage() {
           </section>
         ))}
 
-        <section className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
-          <h3 className="mb-5 text-2xl font-bold">Final Four & Championship</h3>
+        <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-6">
+          <h3 className="mb-5 text-2xl font-bold text-white">Final Four & Championship</h3>
 
           <div className="overflow-x-auto">
             <div className="flex min-w-max gap-6 pb-4 sm:gap-10">
               <div className="min-w-[240px] sm:min-w-[260px]">
-                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
                   Final Four 1
                 </h4>
                 <MatchupCard
@@ -879,7 +917,7 @@ export default async function BracketPage() {
               </div>
 
               <div className="min-w-[240px] sm:min-w-[260px]">
-                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
                   Final Four 2
                 </h4>
                 <MatchupCard
@@ -893,7 +931,7 @@ export default async function BracketPage() {
               </div>
 
               <div className="min-w-[240px] sm:min-w-[260px]">
-                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
                   Championship
                 </h4>
                 <MatchupCard

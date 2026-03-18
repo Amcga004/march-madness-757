@@ -15,40 +15,42 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-slate-100 text-slate-900 antialiased">
-        <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/95 text-white shadow-lg backdrop-blur">
-          <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-3">
-                  <span className="shrink-0 text-2xl">🏀</span>
-                  <div className="min-w-0">
-                    <h1 className="truncate text-xl font-extrabold tracking-tight sm:text-2xl">
-                      757 MM Draft
-                    </h1>
-                    <p className="hidden text-xs text-slate-400 sm:block">
-                      March Madness fantasy draft
-                    </p>
+      <body className="min-h-screen bg-[#081120] text-slate-100 antialiased">
+        <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.10),transparent_28%),radial-gradient(circle_at_20%_30%,rgba(168,85,247,0.08),transparent_22%),linear-gradient(180deg,#030712_0%,#081120_35%,#0b1220_100%)]">
+          <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-[#020817]/95 text-white shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+            <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-3">
+                    <span className="shrink-0 text-2xl">🏀</span>
+                    <div className="min-w-0">
+                      <h1 className="truncate text-xl font-extrabold tracking-tight text-white sm:text-2xl">
+                        757 MM Draft
+                      </h1>
+                      <p className="hidden text-xs text-slate-400 sm:block">
+                        March Madness fantasy draft
+                      </p>
+                    </div>
                   </div>
                 </div>
+
+                <HeaderMenu />
               </div>
-
-              <HeaderMenu />
             </div>
-          </div>
-        </header>
+          </header>
 
-        <LeaderboardBar />
+          <LeaderboardBar />
 
-        <LeagueStatusBanner />
+          <LeagueStatusBanner />
 
-        <main className="min-h-[calc(100vh-180px)]">{children}</main>
+          <main className="min-h-[calc(100vh-180px)]">{children}</main>
 
-        <footer className="mt-8 border-t border-slate-200 bg-white/80 backdrop-blur">
-          <div className="mx-auto max-w-7xl px-4 py-4 text-center text-sm text-slate-500 sm:px-6">
-            757 MM Draft • Built for annual March Madness competition
-          </div>
-        </footer>
+          <footer className="mt-8 border-t border-slate-800/80 bg-[#020817]/80 backdrop-blur">
+            <div className="mx-auto max-w-7xl px-4 py-4 text-center text-sm text-slate-400 sm:px-6">
+              757 MM Draft • Built for annual March Madness competition
+            </div>
+          </footer>
+        </div>
       </body>
     </html>
   );

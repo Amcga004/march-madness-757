@@ -113,17 +113,17 @@ export default function HeaderMenu() {
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-label="Open navigation menu"
-        className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-white transition hover:border-slate-500 hover:bg-slate-800"
+        className="inline-flex h-16 w-16 items-center justify-center rounded-[1.35rem] border border-slate-600/80 bg-slate-800/80 text-white shadow-[0_8px_24px_rgba(15,23,42,0.45),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur transition hover:border-slate-400 hover:bg-slate-700/80"
       >
-        <span className="flex flex-col gap-1">
-          <span className="block h-0.5 w-5 rounded bg-white" />
-          <span className="block h-0.5 w-5 rounded bg-white" />
-          <span className="block h-0.5 w-5 rounded bg-white" />
+        <span className="flex flex-col gap-1.5">
+          <span className="block h-1 w-7 rounded bg-white" />
+          <span className="block h-1 w-7 rounded bg-white" />
+          <span className="block h-1 w-7 rounded bg-white" />
         </span>
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-14 z-50 w-64 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/98 p-2 shadow-2xl backdrop-blur">
+        <div className="absolute right-0 top-20 z-50 w-72 overflow-hidden rounded-3xl border border-slate-700/80 bg-[#0f172a]/95 p-2 shadow-[0_20px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
           <div className="mb-2 px-3 pt-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
             Navigate
           </div>
@@ -134,10 +134,10 @@ export default function HeaderMenu() {
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
-                className={`rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                className={`rounded-2xl px-4 py-3 text-sm font-medium transition ${
                   link.admin
                     ? "border border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
-                    : "text-slate-100 hover:bg-slate-900"
+                    : "text-slate-100 hover:bg-slate-800/80"
                 }`}
               >
                 {link.label}
@@ -145,7 +145,7 @@ export default function HeaderMenu() {
             ))}
           </div>
 
-          <div className="my-3 border-t border-slate-800" />
+          <div className="my-3 border-t border-slate-700/80" />
 
           <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
             Account
@@ -160,7 +160,7 @@ export default function HeaderMenu() {
               <Link
                 href="/login"
                 onClick={() => setOpen(false)}
-                className="rounded-xl px-3 py-2.5 text-sm font-medium text-slate-100 transition hover:bg-slate-900"
+                className="rounded-2xl px-4 py-3 text-sm font-medium text-slate-100 transition hover:bg-slate-800/80"
               >
                 Login
               </Link>
@@ -168,7 +168,7 @@ export default function HeaderMenu() {
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-100 transition hover:bg-slate-900"
+                className="rounded-2xl px-4 py-3 text-left text-sm font-medium text-slate-100 transition hover:bg-slate-800/80"
               >
                 Sign Out
               </button>

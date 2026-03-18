@@ -110,35 +110,35 @@ function getArchetypeBadgeClasses(tag: string) {
   const normalized = tag.toLowerCase();
 
   if (normalized.includes("offense") || normalized.includes("offensive")) {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    return "border-emerald-400/30 bg-emerald-500/10 text-emerald-200";
   }
   if (normalized.includes("defense") || normalized.includes("defensive")) {
-    return "border-red-200 bg-red-50 text-red-700";
+    return "border-red-400/30 bg-red-500/10 text-red-200";
   }
   if (normalized.includes("balanced")) {
-    return "border-blue-200 bg-blue-50 text-blue-700";
+    return "border-blue-400/30 bg-blue-500/10 text-blue-200";
   }
   if (
     normalized.includes("title") ||
     normalized.includes("contender") ||
     normalized.includes("threat")
   ) {
-    return "border-amber-200 bg-amber-50 text-amber-700";
+    return "border-amber-400/30 bg-amber-500/10 text-amber-200";
   }
   if (normalized.includes("upset") || normalized.includes("sleeper")) {
-    return "border-purple-200 bg-purple-50 text-purple-700";
+    return "border-purple-400/30 bg-purple-500/10 text-purple-200";
   }
   if (normalized.includes("risk") || normalized.includes("volatile")) {
-    return "border-rose-200 bg-rose-50 text-rose-700";
+    return "border-rose-400/30 bg-rose-500/10 text-rose-200";
   }
   if (normalized.includes("tempo") || normalized.includes("fast")) {
-    return "border-orange-200 bg-orange-50 text-orange-700";
+    return "border-orange-400/30 bg-orange-500/10 text-orange-200";
   }
   if (normalized.includes("slow")) {
-    return "border-stone-200 bg-stone-50 text-stone-700";
+    return "border-stone-400/30 bg-stone-500/10 text-stone-200";
   }
 
-  return "border-slate-200 bg-slate-50 text-slate-700";
+  return "border-slate-500/30 bg-slate-500/10 text-slate-200";
 }
 
 function ArchetypeTag({ tag }: { tag: string }) {
@@ -185,7 +185,7 @@ function SortButton({
       className={`flex w-full items-center gap-2 ${alignmentClass} font-semibold text-white`}
     >
       <span>{label}</span>
-      <span className="text-[10px] text-slate-300">{arrow}</span>
+      <span className="text-[10px] text-slate-400">{arrow}</span>
     </button>
   );
 }
@@ -210,20 +210,20 @@ function CompareMetricRow({
         : (aValue as number) < (bValue as number);
 
     if (aBetter) {
-      aHighlight = "font-semibold text-emerald-700";
-      bHighlight = "text-slate-600";
+      aHighlight = "font-semibold text-emerald-300";
+      bHighlight = "text-slate-400";
     } else {
-      aHighlight = "text-slate-600";
-      bHighlight = "font-semibold text-emerald-700";
+      aHighlight = "text-slate-400";
+      bHighlight = "font-semibold text-emerald-300";
     }
   }
 
   return (
-    <tr className="border-t border-slate-200">
+    <tr className="border-t border-slate-700/80">
       <td className={`px-4 py-3 text-left ${aHighlight}`}>
         {formatter(aValue)}
       </td>
-      <td className="px-4 py-3 text-center font-medium text-slate-700">
+      <td className="px-4 py-3 text-center font-medium text-slate-300">
         {label}
       </td>
       <td className={`px-4 py-3 text-right ${bHighlight}`}>
@@ -241,11 +241,11 @@ function MobileMetric({
   value: string;
 }) {
   return (
-    <div className="rounded-xl bg-slate-50 p-3">
-      <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+    <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-3">
+      <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
         {label}
       </div>
-      <div className="mt-1 text-sm font-semibold text-slate-900">{value}</div>
+      <div className="mt-1 text-sm font-semibold text-white">{value}</div>
     </div>
   );
 }
@@ -258,9 +258,9 @@ function DictionaryItem({
   description: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <div className="text-sm font-semibold text-slate-900">{term}</div>
-      <div className="mt-1 text-sm text-slate-600">{description}</div>
+    <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+      <div className="text-sm font-semibold text-white">{term}</div>
+      <div className="mt-1 text-sm text-slate-300">{description}</div>
     </div>
   );
 }
@@ -477,22 +477,22 @@ export default function DataPage() {
 
   return (
     <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
-      <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mb-6 sm:p-6">
+      <section className="mb-5 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:mb-6 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
               Data
             </div>
-            <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">
+            <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
               2026 Field Analytics
             </h2>
-            <p className="mt-2 max-w-4xl text-sm text-slate-600">
+            <p className="mt-2 max-w-4xl text-sm text-slate-300">
               Search, compare, and sort tournament teams across rankings,
               efficiency, résumé, and derived intelligence signals.
             </p>
           </div>
 
-          <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white shadow-sm">
+          <div className="rounded-2xl border border-slate-700/80 bg-[#172033] px-4 py-3 text-white shadow-sm">
             <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
               Teams Shown
             </div>
@@ -506,7 +506,7 @@ export default function DataPage() {
           <div>
             <label
               htmlFor="team-search"
-              className="mb-2 block text-sm font-medium text-slate-700"
+              className="mb-2 block text-sm font-medium text-slate-300"
             >
               Search Teams
             </label>
@@ -515,25 +515,25 @@ export default function DataPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by team, region, seed, record, tag, or ranking"
-              className="w-full rounded-xl border border-slate-300 px-3 py-2"
+              className="w-full rounded-2xl border border-slate-600 bg-[#172033] px-3 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3 lg:min-w-[260px]">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+            <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-3">
+              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
                 Default Sort
               </div>
-              <div className="mt-1 text-sm font-semibold text-slate-900">
+              <div className="mt-1 text-sm font-semibold text-white">
                 Composite Rank
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+            <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-3">
+              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
                 Current Sort
               </div>
-              <div className="mt-1 text-sm font-semibold capitalize text-slate-900">
+              <div className="mt-1 text-sm font-semibold capitalize text-white">
                 {sortKey.replaceAll("_", " ")}
               </div>
             </div>
@@ -541,26 +541,26 @@ export default function DataPage() {
         </div>
       </section>
 
-      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mb-8 sm:p-6">
+      <section className="mb-6 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:mb-8 sm:p-6">
         <div className="flex flex-col gap-4">
           <div>
-            <h3 className="text-lg font-semibold text-slate-950 sm:text-xl">
+            <h3 className="text-lg font-semibold text-white sm:text-xl">
               Team Comparison
             </h3>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-1 text-sm text-slate-300">
               Select two teams to compare profile, rankings, intelligence, and matchup projection.
             </p>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label className="mb-2 block text-sm font-medium text-slate-300">
                 Team A
               </label>
               <select
                 value={compareTeamAId}
                 onChange={(e) => setCompareTeamAId(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                className="w-full rounded-2xl border border-slate-600 bg-[#172033] px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 <option value="none">NONE</option>
                 {compareOptions.map((team) => (
@@ -572,13 +572,13 @@ export default function DataPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label className="mb-2 block text-sm font-medium text-slate-300">
                 Team B
               </label>
               <select
                 value={compareTeamBId}
                 onChange={(e) => setCompareTeamBId(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                className="w-full rounded-2xl border border-slate-600 bg-[#172033] px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 <option value="none">NONE</option>
                 {compareOptions.map((team) => (
@@ -591,20 +591,20 @@ export default function DataPage() {
           </div>
 
           {!comparisonState ? (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+            <div className="rounded-2xl border border-dashed border-slate-600 bg-[#172033] p-4 text-sm text-slate-300">
               Select two teams to activate the comparison view.
             </div>
           ) : (
             <>
               <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-3xl border border-slate-700/80 bg-[#172033] p-4">
                   <div className="flex items-start gap-3">
                     <TeamLogo teamName={comparisonState.teamA.school_name} size={36} />
                     <div>
-                      <div className="text-lg font-semibold text-slate-950">
+                      <div className="text-lg font-semibold text-white">
                         {comparisonState.teamA.school_name}
                       </div>
-                      <div className="mt-1 text-sm text-slate-600">
+                      <div className="mt-1 text-sm text-slate-300">
                         {comparisonState.teamA.seed} Seed • {comparisonState.teamA.region} •{" "}
                         {comparisonState.teamA.record ?? "—"}
                       </div>
@@ -616,19 +616,19 @@ export default function DataPage() {
                         <ArchetypeTag key={tag} tag={tag} />
                       ))
                     ) : (
-                      <span className="text-xs text-slate-500">No archetype tags</span>
+                      <span className="text-xs text-slate-400">No archetype tags</span>
                     )}
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-3xl border border-slate-700/80 bg-[#172033] p-4">
                   <div className="flex items-start gap-3">
                     <TeamLogo teamName={comparisonState.teamB.school_name} size={36} />
                     <div>
-                      <div className="text-lg font-semibold text-slate-950">
+                      <div className="text-lg font-semibold text-white">
                         {comparisonState.teamB.school_name}
                       </div>
-                      <div className="mt-1 text-sm text-slate-600">
+                      <div className="mt-1 text-sm text-slate-300">
                         {comparisonState.teamB.seed} Seed • {comparisonState.teamB.region} •{" "}
                         {comparisonState.teamB.record ?? "—"}
                       </div>
@@ -640,28 +640,28 @@ export default function DataPage() {
                         <ArchetypeTag key={tag} tag={tag} />
                       ))
                     ) : (
-                      <span className="text-xs text-slate-500">No archetype tags</span>
+                      <span className="text-xs text-slate-400">No archetype tags</span>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+              <div className="rounded-3xl border border-slate-700/80 bg-[#172033] p-4 sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                       Matchup Projection
                     </div>
-                    <div className="mt-1 text-xl font-bold text-slate-950">
+                    <div className="mt-1 text-xl font-bold text-white">
                       {comparisonState.comparison.projected_winner} over{" "}
                       {comparisonState.comparison.projected_loser}
                     </div>
-                    <div className="mt-1 text-sm text-slate-600">
+                    <div className="mt-1 text-sm text-slate-300">
                       Internal model estimate • Confidence: {comparisonState.comparison.confidence}
                     </div>
                   </div>
 
-                  <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white">
+                  <div className="rounded-2xl border border-slate-700/80 bg-[#0f172a] px-4 py-3 text-white">
                     <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
                       Win Probability
                     </div>
@@ -673,50 +673,50 @@ export default function DataPage() {
                 </div>
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-xl border border-slate-200 bg-white p-4">
-                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                  <div className="rounded-2xl border border-slate-700/80 bg-[#111827] p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
                       Analytic Edge
                     </div>
-                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                    <div className="mt-1 text-sm font-semibold text-white">
                       {comparisonState.comparison.analytic_edge}
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-slate-200 bg-white p-4">
-                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                  <div className="rounded-2xl border border-slate-700/80 bg-[#111827] p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
                       Résumé Edge
                     </div>
-                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                    <div className="mt-1 text-sm font-semibold text-white">
                       {comparisonState.comparison.resume_edge}
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-slate-200 bg-white p-4">
-                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                  <div className="rounded-2xl border border-slate-700/80 bg-[#111827] p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
                       Style Edge
                     </div>
-                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                    <div className="mt-1 text-sm font-semibold text-white">
                       {comparisonState.comparison.style_edge}
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-slate-200 bg-white p-4">
-                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                  <div className="rounded-2xl border border-slate-700/80 bg-[#111827] p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
                       Volatility
                     </div>
-                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                    <div className="mt-1 text-sm font-semibold text-white">
                       {comparisonState.comparison.volatility_note}
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-                  <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                <div className="mt-4 rounded-2xl border border-slate-700/80 bg-[#111827] p-4">
+                  <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
                     Comparison Insights
                   </div>
                   <div className="mt-2 space-y-2">
                     {comparisonState.comparison.summary_bullets.map((bullet) => (
-                      <div key={bullet} className="text-sm text-slate-700">
+                      <div key={bullet} className="text-sm text-slate-300">
                         • {bullet}
                       </div>
                     ))}
@@ -725,8 +725,8 @@ export default function DataPage() {
               </div>
 
               <div className="grid gap-4 lg:hidden">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="mb-3 text-sm font-semibold text-slate-900">
+                <div className="rounded-3xl border border-slate-700/80 bg-[#172033] p-4">
+                  <div className="mb-3 text-sm font-semibold text-white">
                     {comparisonState.teamA.school_name}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -773,8 +773,8 @@ export default function DataPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="mb-3 text-sm font-semibold text-slate-900">
+                <div className="rounded-3xl border border-slate-700/80 bg-[#172033] p-4">
+                  <div className="mb-3 text-sm font-semibold text-white">
                     {comparisonState.teamB.school_name}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -822,10 +822,10 @@ export default function DataPage() {
                 </div>
               </div>
 
-              <div className="hidden overflow-hidden rounded-2xl border border-slate-200 lg:block">
+              <div className="hidden overflow-hidden rounded-3xl border border-slate-700/80 lg:block">
                 <div className="overflow-x-auto">
                   <table className="min-w-[900px] w-full text-sm">
-                    <thead className="bg-slate-950 text-white">
+                    <thead className="bg-[#0f172a] text-white">
                       <tr>
                         <th className="px-4 py-3 text-left">
                           {comparisonState.teamA.school_name}
@@ -836,7 +836,7 @@ export default function DataPage() {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white">
+                    <tbody className="bg-[#111827] text-slate-200">
                       <CompareMetricRow
                         label="Composite Rank"
                         aValue={comparisonState.intelA.composite_rank}
@@ -933,7 +933,7 @@ export default function DataPage() {
       <section className="mb-4 md:hidden">
         <div className="space-y-3">
           {filteredAndSortedTeams.length === 0 ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 text-center text-slate-500 shadow-sm">
+            <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 text-center text-slate-400 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
               No teams matched your search.
             </div>
           ) : (
@@ -944,7 +944,7 @@ export default function DataPage() {
               return (
                 <div
                   key={team.id}
-                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                  className="overflow-hidden rounded-3xl border border-slate-700/80 bg-[#111827]/90 shadow-[0_16px_40px_rgba(0,0,0,0.28)]"
                 >
                   <button
                     type="button"
@@ -958,25 +958,25 @@ export default function DataPage() {
                     <div className="flex min-w-0 items-start gap-3">
                       <TeamLogo teamName={team.school_name} size={28} />
                       <div className="min-w-0">
-                        <div className="truncate text-base font-semibold text-slate-900">
+                        <div className="truncate text-base font-semibold text-white">
                           {team.school_name}
                         </div>
-                        <div className="mt-1 text-sm text-slate-500">
+                        <div className="mt-1 text-sm text-slate-400">
                           {team.seed} Seed • {team.region} • {team.record ?? "—"}
                         </div>
-                        <div className="mt-1 text-sm font-medium text-slate-700">
+                        <div className="mt-1 text-sm font-medium text-slate-200">
                           Composite {compositeRank === null ? "—" : compositeRank.toFixed(2)}
                         </div>
                       </div>
                     </div>
 
-                    <div className="shrink-0 text-lg text-slate-500">
+                    <div className="shrink-0 text-lg text-slate-400">
                       {isExpanded ? "▴" : "▾"}
                     </div>
                   </button>
 
                   {isExpanded ? (
-                    <div className="border-t border-slate-200 px-4 pb-4 pt-3">
+                    <div className="border-t border-slate-700/80 px-4 pb-4 pt-3">
                       <div className="grid grid-cols-2 gap-3">
                         <MobileMetric label="KenPom" value={formatRank(team.kenpom_rank)} />
                         <MobileMetric label="BPI" value={formatRank(team.bpi_rank)} />
@@ -1007,7 +1007,7 @@ export default function DataPage() {
                       </div>
 
                       <div className="mt-4">
-                        <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                        <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
                           Archetypes
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -1016,7 +1016,7 @@ export default function DataPage() {
                               <ArchetypeTag key={tag} tag={tag} />
                             ))
                           ) : (
-                            <span className="text-sm text-slate-400">—</span>
+                            <span className="text-sm text-slate-500">—</span>
                           )}
                         </div>
                       </div>
@@ -1029,10 +1029,10 @@ export default function DataPage() {
         </div>
       </section>
 
-      <section className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
+      <section className="hidden overflow-hidden rounded-3xl border border-slate-700/80 bg-[#111827]/90 shadow-[0_16px_40px_rgba(0,0,0,0.28)] md:block">
         <div className="overflow-x-auto">
           <table className="min-w-[2050px] w-full text-sm">
-            <thead className="bg-slate-950 text-white">
+            <thead className="bg-[#0f172a] text-white">
               <tr>
                 <th className="px-4 py-3 text-left">
                   <SortButton
@@ -1216,10 +1216,10 @@ export default function DataPage() {
               </tr>
             </thead>
 
-            <tbody>
+            <tbody className="bg-[#111827]">
               {filteredAndSortedTeams.length === 0 ? (
                 <tr>
-                  <td colSpan={19} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={19} className="px-4 py-8 text-center text-slate-400">
                     No teams matched your search.
                   </td>
                 </tr>
@@ -1230,95 +1230,95 @@ export default function DataPage() {
                   return (
                     <tr
                       key={team.id}
-                      className="border-t border-slate-200 hover:bg-slate-50"
+                      className="border-t border-slate-700/80 hover:bg-[#172033]"
                     >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <TeamLogo teamName={team.school_name} size={28} />
                           <div>
-                            <div className="font-medium text-slate-900">
+                            <div className="font-medium text-white">
                               {team.school_name}
                             </div>
-                            <div className="text-xs text-slate-500">
+                            <div className="text-xs text-slate-400">
                               {team.seed} Seed • {team.region}
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 text-slate-700">
+                      <td className="px-4 py-3 text-slate-300">
                         {team.record ?? "—"}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-slate-700">
+                      <td className="px-4 py-3 text-right text-slate-300">
                         {formatRank(team.kenpom_rank)}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-slate-700">
+                      <td className="px-4 py-3 text-right text-slate-300">
                         {formatRank(team.bpi_rank)}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-slate-700">
+                      <td className="px-4 py-3 text-right text-slate-300">
                         {formatRank(team.net_rank)}
                       </td>
 
-                      <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                      <td className="px-4 py-3 text-right font-semibold text-white">
                         {compositeRank === null ? "—" : compositeRank.toFixed(2)}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-slate-700">
+                      <td className="px-4 py-3 text-right text-slate-300">
                         {formatMetric(team.off_efficiency)}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-slate-700">
+                      <td className="px-4 py-3 text-right text-slate-300">
                         {formatMetric(team.def_efficiency)}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-slate-700">
+                      <td className="px-4 py-3 text-right text-slate-300">
                         {formatMetric(team.off_efg_pct, 1)}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-slate-700">
+                      <td className="px-4 py-3 text-right text-slate-300">
                         {formatMetric(team.def_efg_pct, 1)}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-slate-700">
+                      <td className="px-4 py-3 text-right text-slate-300">
                         {formatMetric(team.adj_tempo, 1)}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-slate-700">
+                      <td className="px-4 py-3 text-right text-slate-300">
                         {team.sos_net_rating === null || team.sos_net_rating === undefined
                           ? "—"
                           : team.sos_net_rating.toFixed(2)}
                       </td>
 
-                      <td className="px-4 py-3 text-slate-700">
+                      <td className="px-4 py-3 text-slate-300">
                         {team.quad1_record ?? "—"}
                       </td>
 
-                      <td className="px-4 py-3 text-slate-700">
+                      <td className="px-4 py-3 text-slate-300">
                         {team.quad2_record ?? "—"}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-slate-700">
+                      <td className="px-4 py-3 text-right text-slate-300">
                         {team.value_score === null || team.value_score === undefined
                           ? "—"
                           : team.value_score.toFixed(1)}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-slate-700">
+                      <td className="px-4 py-3 text-right text-slate-300">
                         {team.risk_score === null || team.risk_score === undefined
                           ? "—"
                           : team.risk_score.toFixed(1)}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-slate-700">
+                      <td className="px-4 py-3 text-right text-slate-300">
                         {team.upset_score === null || team.upset_score === undefined
                           ? "—"
                           : team.upset_score.toFixed(1)}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-slate-700">
+                      <td className="px-4 py-3 text-right text-slate-300">
                         {team.contender_score === null || team.contender_score === undefined
                           ? "—"
                           : team.contender_score.toFixed(1)}
@@ -1331,7 +1331,7 @@ export default function DataPage() {
                               <ArchetypeTag key={tag} tag={tag} />
                             ))
                           ) : (
-                            <span className="text-slate-400">—</span>
+                            <span className="text-slate-500">—</span>
                           )}
                         </div>
                       </td>
@@ -1344,15 +1344,15 @@ export default function DataPage() {
         </div>
       </section>
 
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mt-8 sm:p-6">
+      <section className="mt-6 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:mt-8 sm:p-6">
         <div className="mb-4">
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
             Reference
           </div>
-          <h3 className="mt-1 text-xl font-bold text-slate-950 sm:text-2xl">
+          <h3 className="mt-1 text-xl font-bold text-white sm:text-2xl">
             Data Dictionary
           </h3>
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm text-slate-300">
             Quick-reference guide for the rankings, derived metrics, and archetypes used on this page.
           </p>
         </div>

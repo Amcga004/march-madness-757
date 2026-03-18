@@ -54,11 +54,11 @@ function MiniStat({
   value: number | string;
 }) {
   return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2">
-      <div className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
+    <div className="rounded-2xl border border-slate-700/80 bg-[#172033] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">
         {label}
       </div>
-      <div className="mt-1 text-base font-bold text-slate-950">{value}</div>
+      <div className="mt-1 text-base font-bold text-white">{value}</div>
     </div>
   );
 }
@@ -128,19 +128,21 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
-      <section className="mb-5">
+      <section className="mb-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
               Dashboard
             </div>
-            <h2 className="mt-1 text-3xl font-bold text-slate-950">League Pulse</h2>
-            <p className="mt-1 text-sm text-slate-600">
+            <h2 className="mt-1 text-3xl font-bold text-white sm:text-4xl">
+              League Pulse
+            </h2>
+            <p className="mt-1 text-sm text-slate-300">
               Fast view of standings, upside, and latest movement.
             </p>
           </div>
 
-          <div className="text-sm text-slate-500">
+          <div className="text-sm text-slate-400">
             {latestUpdated
               ? `Updated ${new Date(latestUpdated).toLocaleString()}`
               : "No results entered yet"}
@@ -148,27 +150,27 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <section className="mb-5 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur sm:p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-950">League at a Glance</h3>
-          <div className="text-xs text-slate-500">10-second read</div>
+          <h3 className="text-lg font-semibold text-white">League at a Glance</h3>
+          <div className="text-xs text-slate-400">10-second read</div>
         </div>
 
         <div className="space-y-3">
           {forecasts.map((forecast: ManagerForecast, index: number) => (
             <div
               key={forecast.memberId}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"
+              className="rounded-3xl border border-slate-700/80 bg-[linear-gradient(135deg,rgba(15,23,42,0.96),rgba(23,32,51,0.96))] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="text-sm font-semibold text-slate-500">#{index + 1}</div>
+                  <div className="text-sm font-semibold text-slate-400">#{index + 1}</div>
                   <ManagerBadge name={forecast.displayName} />
                 </div>
 
                 <div className="text-right">
-                  <div className="text-xs text-slate-500">Points</div>
-                  <div className="text-xl font-bold text-slate-950">
+                  <div className="text-xs text-slate-400">Points</div>
+                  <div className="text-xl font-bold text-white">
                     {forecast.currentPoints}
                   </div>
                 </div>
@@ -183,7 +185,7 @@ export default async function DashboardPage() {
                 </div>
               </div>
 
-              <div className="mt-2 text-xs text-slate-500 sm:hidden">
+              <div className="mt-2 text-xs text-slate-400 sm:hidden">
                 Max Final {forecast.maxFinalPoints}
               </div>
             </div>
@@ -192,21 +194,21 @@ export default async function DashboardPage() {
       </section>
 
       <section className="mb-5 grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
           <div className="mb-3">
-            <h3 className="text-lg font-semibold text-slate-950">Tournament Progress</h3>
+            <h3 className="text-lg font-semibold text-white">Tournament Progress</h3>
           </div>
 
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
             {roundProgress.map((round) => (
               <div
                 key={round.round}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-center"
+                className="rounded-2xl border border-slate-700/80 bg-[#172033] px-3 py-3 text-center"
               >
-                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                   {round.short}
                 </div>
-                <div className="mt-1 text-lg font-bold text-slate-950">
+                <div className="mt-1 text-lg font-bold text-white">
                   {round.completed}/{round.total}
                 </div>
               </div>
@@ -214,9 +216,9 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
           <div className="mb-3">
-            <h3 className="text-lg font-semibold text-slate-950">Quick Totals</h3>
+            <h3 className="text-lg font-semibold text-white">Quick Totals</h3>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -228,28 +230,28 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-950">Latest Results</h3>
-          <div className="text-xs text-slate-500">Most recent games</div>
+          <h3 className="text-lg font-semibold text-white">Latest Results</h3>
+          <div className="text-xs text-slate-400">Most recent games</div>
         </div>
 
         {typedGames.length === 0 ? (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+          <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4 text-sm text-slate-400">
             No game results recorded yet.
           </div>
         ) : (
           <>
             <div className="space-y-3 sm:hidden">
               {mobileRecentResults.map((game) => (
-                <div key={game.id} className="rounded-xl border border-slate-200 p-3">
-                  <div className="text-xs font-medium text-slate-500">{game.round_name}</div>
-                  <div className="mt-2 flex flex-col gap-2 text-sm font-semibold text-slate-900">
+                <div key={game.id} className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+                  <div className="text-xs font-medium text-slate-400">{game.round_name}</div>
+                  <div className="mt-2 flex flex-col gap-2 text-sm font-semibold text-white">
                     <div className="flex items-center gap-2">
                       <TeamLogo teamName={teamMap.get(game.winning_team_id ?? "") ?? "TBD"} size={22} />
                       <span>{teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner"}</span>
                     </div>
-                    <div className="text-slate-400">defeated</div>
+                    <div className="text-slate-500">defeated</div>
                     <div className="flex items-center gap-2">
                       <TeamLogo teamName={teamMap.get(game.losing_team_id ?? "") ?? "TBD"} size={22} />
                       <span>{teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser"}</span>
@@ -261,20 +263,20 @@ export default async function DashboardPage() {
 
             <div className="hidden space-y-3 sm:block">
               {desktopRecentResults.map((game) => (
-                <div key={game.id} className="rounded-xl border border-slate-200 p-4">
-                  <div className="text-sm font-medium text-slate-500">{game.round_name}</div>
-                  <div className="mt-2 flex flex-col gap-2 text-base font-semibold text-slate-900 sm:flex-row sm:flex-wrap sm:items-center">
+                <div key={game.id} className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+                  <div className="text-sm font-medium text-slate-400">{game.round_name}</div>
+                  <div className="mt-2 flex flex-col gap-2 text-base font-semibold text-white sm:flex-row sm:flex-wrap sm:items-center">
                     <div className="flex items-center gap-2">
                       <TeamLogo teamName={teamMap.get(game.winning_team_id ?? "") ?? "TBD"} size={24} />
                       <span>{teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner"}</span>
                     </div>
-                    <span className="text-slate-400">defeated</span>
+                    <span className="text-slate-500">defeated</span>
                     <div className="flex items-center gap-2">
                       <TeamLogo teamName={teamMap.get(game.losing_team_id ?? "") ?? "TBD"} size={24} />
                       <span>{teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser"}</span>
                     </div>
                   </div>
-                  <div className="mt-2 text-sm text-slate-500">
+                  <div className="mt-2 text-sm text-slate-400">
                     {new Date(game.created_at).toLocaleString()}
                   </div>
                 </div>
