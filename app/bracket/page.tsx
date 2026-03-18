@@ -790,7 +790,7 @@ export default async function BracketPage() {
 
   return (
     <div className="mx-auto max-w-[1700px] p-4 sm:p-6">
-      <AutoRefreshClient intervalMs={60000} />
+      <AutoRefreshClient intervalMs={20000} />
 
       <section className="mb-6 sm:mb-8">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
