@@ -52,6 +52,17 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function formatEasternDateTime(value: string) {
+  return new Date(value).toLocaleString([], {
+    timeZone: "America/New_York",
+    month: "numeric",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export default function AdminPage() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -148,10 +159,10 @@ export default function AdminPage() {
 
     const classes =
       status === "success"
-        ? "border-green-200 bg-green-50 text-green-700"
+        ? "border-green-500/40 bg-green-500/10 text-green-200"
         : status === "error"
-        ? "border-red-200 bg-red-50 text-red-700"
-        : "border-blue-200 bg-blue-50 text-blue-700";
+        ? "border-red-500/40 bg-red-500/10 text-red-200"
+        : "border-blue-500/40 bg-blue-500/10 text-blue-200";
 
     return (
       <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${classes}`}>
@@ -486,15 +497,15 @@ export default function AdminPage() {
     <div className="mx-auto max-w-7xl space-y-6 p-4 sm:space-y-8 sm:p-6">
       <section className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+          <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
             Admin Panel
           </h1>
-          <p className="mt-2 text-sm text-slate-600 sm:text-base">
+          <p className="mt-2 text-sm text-slate-300 sm:text-base">
             Commissioner controls for lottery, live sync, results, season archive, and league maintenance.
           </p>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-400">
             {latestUpdated
-              ? `Last result update: ${new Date(latestUpdated).toLocaleString()}`
+              ? `Last result update: ${formatEasternDateTime(latestUpdated)}`
               : "No results entered yet"}
           </p>
         </div>
@@ -502,26 +513,26 @@ export default function AdminPage() {
         {authUser ? (
           <button
             onClick={signOut}
-            className="w-full rounded-xl border px-4 py-2 text-sm hover:bg-slate-50 sm:w-auto"
+            className="w-full rounded-xl border border-slate-600 bg-[#172033] px-4 py-2 text-sm text-white transition hover:bg-[#1c2940] sm:w-auto"
           >
             Sign Out
           </button>
         ) : null}
       </section>
 
-      <section className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
+      <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-sm font-medium uppercase tracking-wide text-slate-500">
+            <div className="text-sm font-medium uppercase tracking-wide text-slate-400">
               Admin Access
             </div>
-            <div className="mt-2 text-2xl font-bold text-slate-900">
+            <div className="mt-2 text-2xl font-bold text-white">
               {authUser ? "Signed In" : "Commissioner Sign In Required"}
             </div>
-            <div className="mt-2 text-sm text-slate-600">
+            <div className="mt-2 text-sm text-slate-300">
               {authUser?.email ?? "Not signed in"}
             </div>
-            <div className="mt-2 text-sm font-medium text-slate-700">
+            <div className="mt-2 text-sm font-medium text-slate-200">
               {signedInMember
                 ? `${signedInMember.display_name} • ${signedInMember.role}`
                 : authUser
@@ -532,9 +543,11 @@ export default function AdminPage() {
         </div>
 
         {!authUser ? (
-          <div className="mt-5 max-w-md rounded-xl border bg-slate-50 p-4">
-            <div className="text-base font-semibold">Commissioner Email Login</div>
-            <div className="mt-1 text-sm text-slate-600">
+          <div className="mt-5 max-w-md rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+            <div className="text-base font-semibold text-white">
+              Commissioner Email Login
+            </div>
+            <div className="mt-1 text-sm text-slate-300">
               Sign in with your commissioner email and password
             </div>
 
@@ -543,7 +556,8 @@ export default function AdminPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Enter your commissioner email"
-              className="mt-4 w-full rounded-xl border px-3 py-2"
+              className="mt-4 w-full rounded-xl border border-slate-600 bg-[#0f172a] px-3 py-2 text-white placeholder:text-slate-400 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+              autoComplete="email"
             />
 
             <input
@@ -551,13 +565,14 @@ export default function AdminPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
-              className="mt-3 w-full rounded-xl border px-3 py-2"
+              className="mt-3 w-full rounded-xl border border-slate-600 bg-[#0f172a] px-3 py-2 text-white placeholder:text-slate-400 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+              autoComplete="current-password"
             />
 
             <button
               onClick={signInWithPassword}
               disabled={isSigningIn}
-              className="mt-3 rounded-xl bg-black px-4 py-2 text-white disabled:opacity-50"
+              className="mt-3 rounded-xl bg-slate-950 px-4 py-2 text-white transition hover:bg-slate-800 disabled:opacity-50"
             >
               {isSigningIn ? "Signing In..." : "Sign In"}
             </button>
@@ -568,18 +583,18 @@ export default function AdminPage() {
       </section>
 
       {authUser && !isCommissioner ? (
-        <section className="rounded-2xl border border-yellow-300 bg-yellow-50 p-4 text-yellow-800">
+        <section className="rounded-2xl border border-yellow-500/40 bg-yellow-500/10 p-4 text-yellow-200">
           Only the commissioner has access to admin controls.
         </section>
       ) : null}
 
       {isCommissioner ? (
         <>
-          <section className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <h2 className="text-xl font-semibold">Live Sync Engine</h2>
-                <p className="mt-1 text-sm text-slate-600">
+                <h2 className="text-xl font-semibold text-white">Live Sync Engine</h2>
+                <p className="mt-1 text-sm text-slate-300">
                   Pull ESPN scoreboard data, map teams, and promote final games into official results.
                 </p>
               </div>
@@ -588,7 +603,7 @@ export default function AdminPage() {
                 <div>
                   <label
                     htmlFor="syncDate"
-                    className="mb-2 block text-sm font-medium text-slate-700"
+                    className="mb-2 block text-sm font-medium text-slate-200"
                   >
                     Sync Date
                   </label>
@@ -598,7 +613,7 @@ export default function AdminPage() {
                     value={syncDate}
                     onChange={(e) => setSyncDate(e.target.value)}
                     placeholder="YYYYMMDD"
-                    className="w-full rounded-xl border px-3 py-2 sm:w-[160px]"
+                    className="w-full rounded-xl border border-slate-600 bg-[#172033] px-3 py-2 text-white placeholder:text-slate-400 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 sm:w-[160px]"
                   />
                 </div>
 
@@ -606,7 +621,7 @@ export default function AdminPage() {
                   type="button"
                   onClick={runSyncCycle}
                   disabled={isRunningSyncCycle}
-                  className="rounded-xl bg-slate-950 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-xl bg-slate-950 px-4 py-2 text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isRunningSyncCycle ? "Running Sync..." : "Run Sync Cycle"}
                 </button>
@@ -614,17 +629,17 @@ export default function AdminPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-            <h2 className="text-xl font-semibold">Draft Lottery</h2>
+          <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6">
+            <h2 className="text-xl font-semibold text-white">Draft Lottery</h2>
 
             <div className="mt-4 flex flex-col gap-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <div className="text-sm text-slate-600">
+                  <div className="text-sm text-slate-300">
                     Equal odds for all four managers. Reveals 4th, 3rd, 2nd, then 1st.
                   </div>
                   {lotteryLocked ? (
-                    <div className="mt-2 text-sm font-medium text-red-600">
+                    <div className="mt-2 text-sm font-medium text-red-300">
                       Lottery is locked once picks have been made.
                     </div>
                   ) : null}
@@ -633,7 +648,7 @@ export default function AdminPage() {
                 <button
                   onClick={runDraftLottery}
                   disabled={isRunningLottery || lotteryLocked}
-                  className="rounded-xl bg-black px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-xl bg-slate-950 px-4 py-2 text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isRunningLottery ? "Running..." : "Run Draft Lottery"}
                 </button>
@@ -646,10 +661,10 @@ export default function AdminPage() {
                   return (
                     <div
                       key={slot}
-                      className="rounded-xl border bg-slate-50 p-4 text-center"
+                      className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4 text-center"
                     >
-                      <div className="text-xs text-slate-500">Pick #{slot}</div>
-                      <div className="mt-3 text-3xl font-bold text-slate-900">
+                      <div className="text-xs text-slate-400">Pick #{slot}</div>
+                      <div className="mt-3 text-3xl font-bold text-white">
                         {member ? member.display_name : "Waiting"}
                       </div>
                     </div>
@@ -660,14 +675,16 @@ export default function AdminPage() {
           </section>
 
           <section className="grid gap-6 xl:grid-cols-2">
-            <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="text-xl font-semibold">Record Game Result</h2>
+            <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6">
+              <h2 className="text-xl font-semibold text-white">Record Game Result</h2>
 
               <form onSubmit={submitResult} className="mt-4 space-y-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium">Round</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-200">
+                    Round
+                  </label>
                   <select
-                    className="w-full rounded-xl border px-3 py-2"
+                    className="w-full rounded-xl border border-slate-600 bg-[#172033] px-3 py-2 text-white outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
                     value={roundName}
                     onChange={(e) => setRoundName(e.target.value)}
                   >
@@ -680,9 +697,11 @@ export default function AdminPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium">Winning Team</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-200">
+                    Winning Team
+                  </label>
                   <select
-                    className="w-full rounded-xl border px-3 py-2"
+                    className="w-full rounded-xl border border-slate-600 bg-[#172033] px-3 py-2 text-white outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
                     value={winnerTeamId}
                     onChange={(e) => setWinnerTeamId(e.target.value)}
                   >
@@ -696,9 +715,11 @@ export default function AdminPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium">Losing Team</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-200">
+                    Losing Team
+                  </label>
                   <select
-                    className="w-full rounded-xl border px-3 py-2"
+                    className="w-full rounded-xl border border-slate-600 bg-[#172033] px-3 py-2 text-white outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
                     value={loserTeamId}
                     onChange={(e) => setLoserTeamId(e.target.value)}
                   >
@@ -713,24 +734,24 @@ export default function AdminPage() {
 
                 <button
                   type="submit"
-                  className="rounded-xl bg-black px-4 py-2 text-white"
+                  className="rounded-xl bg-slate-950 px-4 py-2 text-white transition hover:bg-slate-800"
                 >
                   Submit Result
                 </button>
               </form>
             </div>
 
-            <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="text-xl font-semibold">Commissioner Tools</h2>
+            <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6">
+              <h2 className="text-xl font-semibold text-white">Commissioner Tools</h2>
 
               <div className="mt-4 grid gap-3">
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
                   <div className="flex flex-col gap-3">
                     <div>
-                      <h3 className="font-semibold text-amber-900">
+                      <h3 className="font-semibold text-amber-200">
                         Archive Current Season Standings
                       </h3>
-                      <p className="mt-1 text-sm text-amber-800">
+                      <p className="mt-1 text-sm text-amber-100/90">
                         Save a permanent historical snapshot before resetting the league.
                       </p>
                     </div>
@@ -739,7 +760,7 @@ export default function AdminPage() {
                       <div className="w-full sm:max-w-[180px]">
                         <label
                           htmlFor="seasonYear"
-                          className="mb-1 block text-xs font-medium uppercase tracking-wide text-amber-900"
+                          className="mb-1 block text-xs font-medium uppercase tracking-wide text-amber-200"
                         >
                           Season Year
                         </label>
@@ -751,14 +772,14 @@ export default function AdminPage() {
                             const value = Number(e.target.value);
                             setSeasonYear(Number.isNaN(value) ? 2026 : value);
                           }}
-                          className="w-full rounded-xl border border-amber-300 bg-white px-3 py-2"
+                          className="w-full rounded-xl border border-amber-500/40 bg-[#172033] px-3 py-2 text-white outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-400/20"
                         />
                       </div>
 
                       <button
                         type="button"
                         onClick={archiveSeason}
-                        className="w-full rounded-xl bg-amber-600 px-4 py-3 text-left font-medium text-white hover:bg-amber-700 sm:w-auto"
+                        className="w-full rounded-xl bg-amber-600 px-4 py-3 text-left font-medium text-white transition hover:bg-amber-700 sm:w-auto"
                       >
                         Archive Season
                       </button>
@@ -769,49 +790,49 @@ export default function AdminPage() {
                 <button
                   type="button"
                   onClick={resetLeague}
-                  className="w-full rounded-xl border border-red-300 px-4 py-3 text-left text-red-600 hover:bg-red-50"
+                  className="w-full rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-left text-red-200 transition hover:bg-red-500/20"
                 >
                   Reset Draft + Results
                 </button>
 
                 <Link
                   href="/draft"
-                  className="rounded-xl border px-4 py-3 hover:bg-slate-50"
+                  className="rounded-xl border border-slate-700/80 bg-[#172033] px-4 py-3 text-white transition hover:bg-[#1c2940]"
                 >
                   Draft Room
                 </Link>
 
                 <Link
                   href="/results"
-                  className="rounded-xl border px-4 py-3 hover:bg-slate-50"
+                  className="rounded-xl border border-slate-700/80 bg-[#172033] px-4 py-3 text-white transition hover:bg-[#1c2940]"
                 >
                   Results Entry
                 </Link>
 
                 <Link
                   href="/rosters"
-                  className="rounded-xl border px-4 py-3 hover:bg-slate-50"
+                  className="rounded-xl border border-slate-700/80 bg-[#172033] px-4 py-3 text-white transition hover:bg-[#1c2940]"
                 >
                   Team Rosters
                 </Link>
 
                 <Link
                   href="/history"
-                  className="rounded-xl border px-4 py-3 hover:bg-slate-50"
+                  className="rounded-xl border border-slate-700/80 bg-[#172033] px-4 py-3 text-white transition hover:bg-[#1c2940]"
                 >
                   Results History
                 </Link>
 
                 <Link
                   href="/standings"
-                  className="rounded-xl border px-4 py-3 hover:bg-slate-50"
+                  className="rounded-xl border border-slate-700/80 bg-[#172033] px-4 py-3 text-white transition hover:bg-[#1c2940]"
                 >
                   Standings
                 </Link>
 
                 <Link
                   href="/seasons"
-                  className="rounded-xl border px-4 py-3 hover:bg-slate-50"
+                  className="rounded-xl border border-slate-700/80 bg-[#172033] px-4 py-3 text-white transition hover:bg-[#1c2940]"
                 >
                   Seasons Archive
                 </Link>
@@ -819,12 +840,12 @@ export default function AdminPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-            <h2 className="text-xl font-semibold">Recent Results</h2>
+          <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6">
+            <h2 className="text-xl font-semibold text-white">Recent Results</h2>
 
             <div className="mt-4 space-y-3">
               {games.length === 0 ? (
-                <div className="rounded-xl border p-4 text-sm text-slate-500">
+                <div className="rounded-xl border border-slate-700/80 bg-[#172033] p-4 text-sm text-slate-400">
                   No results entered yet.
                 </div>
               ) : (
@@ -837,18 +858,18 @@ export default function AdminPage() {
                   return (
                     <div
                       key={game.id}
-                      className="flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      className="flex flex-col gap-3 rounded-2xl border border-slate-700/80 bg-[#172033] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div>
-                        <div className="text-sm text-slate-500">{game.round_name}</div>
+                        <div className="text-sm text-slate-400">{game.round_name}</div>
 
-                        <div className="mt-2 flex flex-col gap-2 font-semibold sm:flex-row sm:flex-wrap sm:items-center">
+                        <div className="mt-2 flex flex-col gap-2 font-semibold text-white sm:flex-row sm:flex-wrap sm:items-center">
                           <div className="flex items-center gap-2">
                             <TeamLogo teamName={winner} size={24} />
                             <span>{winner}</span>
                           </div>
 
-                          <span className="text-slate-400">defeated</span>
+                          <span className="text-slate-500">defeated</span>
 
                           <div className="flex items-center gap-2">
                             <TeamLogo teamName={loser} size={24} />
@@ -860,7 +881,7 @@ export default function AdminPage() {
                       <button
                         type="button"
                         onClick={() => deleteResult(game.id)}
-                        className="w-full rounded-lg border border-red-300 px-3 py-2 text-red-600 hover:bg-red-50 sm:w-auto"
+                        className="w-full rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-red-200 transition hover:bg-red-500/20 sm:w-auto"
                       >
                         Delete
                       </button>
@@ -871,26 +892,26 @@ export default function AdminPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-            <h2 className="text-xl font-semibold">Current League Members</h2>
+          <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6">
+            <h2 className="text-xl font-semibold text-white">Current League Members</h2>
 
             <div className="mt-4 space-y-3">
               {members.map((member) => (
                 <div
                   key={member.id}
-                  className="flex items-center justify-between rounded-xl border p-4"
+                  className="flex items-center justify-between rounded-2xl border border-slate-700/80 bg-[#172033] p-4"
                 >
                   <div className="flex items-center gap-3">
                     <ManagerBadge name={member.display_name} />
                     <div>
-                      <div className="font-semibold">{member.display_name}</div>
-                      <div className="text-sm text-slate-600">
+                      <div className="font-semibold text-white">{member.display_name}</div>
+                      <div className="text-sm text-slate-300">
                         {member.email ?? "—"} • {member.role ?? "—"}
                       </div>
                     </div>
                   </div>
 
-                  <div className="text-sm text-slate-600">
+                  <div className="text-sm text-slate-400">
                     Slot #{member.draft_slot}
                   </div>
                 </div>
