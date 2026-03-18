@@ -274,10 +274,6 @@ function getStatusClasses(game: ExternalGameSync | null) {
     return "text-red-300";
   }
 
-  if (isFinalGame(game)) {
-    return "text-slate-400";
-  }
-
   return "text-slate-400";
 }
 
@@ -336,20 +332,23 @@ function inferLoserIdFromExternalGame(game: ExternalGameSync | null) {
 
 function isPlayInExternalGame(game: ExternalGameSync, playInTeamIds: Set<string>) {
   const roundName = (game.round_name ?? "").toLowerCase();
+  const eventName = (game.espn_event_name ?? "").toLowerCase();
 
-  if (roundName.includes("first four") || roundName.includes("play-in")) {
+  if (
+    roundName.includes("first four") ||
+    roundName.includes("play-in") ||
+    eventName.includes("first four") ||
+    eventName.includes("play-in")
+  ) {
     return true;
   }
 
-  if (game.mapped_home_team_id && playInTeamIds.has(game.mapped_home_team_id)) {
-    return true;
-  }
+  const homeIsPlayIn =
+    !!game.mapped_home_team_id && playInTeamIds.has(game.mapped_home_team_id);
+  const awayIsPlayIn =
+    !!game.mapped_away_team_id && playInTeamIds.has(game.mapped_away_team_id);
 
-  if (game.mapped_away_team_id && playInTeamIds.has(game.mapped_away_team_id)) {
-    return true;
-  }
-
-  return false;
+  return homeIsPlayIn && awayIsPlayIn;
 }
 
 function getPlayInParticipantsFromPlaceholder(placeholderName: string) {
