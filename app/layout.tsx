@@ -1,5 +1,6 @@
 import "./globals.css";
 import LeaderboardBar from "./components/LeaderboardBar";
+import LiveNowBar from "./components/LiveNowBar";
 import LeagueStatusBanner from "./components/LeagueStatusBanner";
 import HeaderMenu from "./components/HeaderMenu";
 
@@ -40,10 +41,10 @@ export default function RootLayout({
           </header>
 
           <LeaderboardBar />
-
+          <LiveNowBar />
           <LeagueStatusBanner />
 
-          <main className="min-h-[calc(100vh-180px)]">{children}</main>
+          <main className="min-h-[calc(100vh-160px)]">{children}</main>
 
           <footer className="mt-8 border-t border-slate-800/80 bg-[#020817]/80 backdrop-blur">
             <div className="mx-auto max-w-7xl px-4 py-4 text-center text-sm text-slate-400 sm:px-6">
