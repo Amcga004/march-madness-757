@@ -66,18 +66,18 @@ export default async function LeaderboardBar() {
     });
 
   return (
-    <div className="border-b border-slate-800 bg-slate-950 text-white">
-      <div className="mx-auto max-w-7xl px-4 py-2 sm:px-6">
+    <div className="border-b border-slate-800/80 bg-[#020817]/90 text-white backdrop-blur">
+      <div className="mx-auto max-w-7xl px-3 py-2 sm:px-6">
         <div className="flex items-center gap-3">
-          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
             Live Leaderboard
           </span>
 
-          <div className="-mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1 pb-1">
+          <div className="-mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1">
             {leaderboard.map((entry, index) => (
               <div
                 key={entry.name}
-                className="shrink-0 rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs sm:text-sm"
+                className="shrink-0 rounded-full border border-slate-700/80 bg-[#0f172a] px-3 py-1.5 text-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
               >
                 <div className="flex items-center gap-2 whitespace-nowrap">
                   <span className="font-semibold text-white">
@@ -86,16 +86,10 @@ export default async function LeaderboardBar() {
 
                   <span className="text-slate-400">{entry.points} pts</span>
 
-                  <span className="hidden text-slate-500 sm:inline">•</span>
+                  <span className="hidden text-slate-600 sm:inline">•</span>
 
                   <span className="hidden text-slate-400 sm:inline">
                     {entry.liveTeams} alive
-                  </span>
-
-                  <span className="hidden text-slate-500 sm:inline">•</span>
-
-                  <span className="hidden text-slate-400 sm:inline">
-                    {entry.draftedTeams} drafted
                   </span>
                 </div>
               </div>
