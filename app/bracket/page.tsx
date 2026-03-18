@@ -823,7 +823,7 @@ export default async function BracketPage() {
 
       <div className="space-y-8 sm:space-y-10">
         {playInGames.length > 0 ? (
-          <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-6">
+          <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
             <div className="mb-5">
               <h3 className="text-2xl font-bold text-white">First Four / Play-In Games</h3>
               <p className="mt-1 text-sm text-slate-300">
@@ -851,7 +851,7 @@ export default async function BracketPage() {
         {regionBrackets.map((region) => (
           <section
             key={region.region}
-            className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-6"
+            className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5"
           >
             <h3 className="mb-5 text-2xl font-bold text-white">{region.region} Region</h3>
 
@@ -900,7 +900,7 @@ export default async function BracketPage() {
           </section>
         ))}
 
-        <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-6">
+        <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
           <h3 className="mb-5 text-2xl font-bold text-white">Final Four & Championship</h3>
 
           <div className="overflow-x-auto">
