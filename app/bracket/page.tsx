@@ -269,6 +269,11 @@ function isLiveGame(game: ExternalGameSync | null) {
   );
 }
 
+function isStartedGame(game: ExternalGameSync | null) {
+  if (!game) return false;
+  return game.espn_status !== "STATUS_SCHEDULED";
+}
+
 function isFinalGame(game: ExternalGameSync | null) {
   return game?.espn_status === "STATUS_FINAL";
 }
@@ -405,6 +410,38 @@ function resolvePlayInWinnerForPlaceholder(
   if (!winnerId) return placeholderTeam;
 
   return teamById.get(winnerId) ?? placeholderTeam;
+}
+
+function hasRealTeam(team: MatchupTeam) {
+  return team.name !== "TBD";
+}
+
+function roundHasPopulatedMatchup(matchups: Matchup[]) {
+  return matchups.some(
+    (matchup) => hasRealTeam(matchup.top) || hasRealTeam(matchup.bottom)
+  );
+}
+
+function roundIsComplete(matchups: Matchup[]) {
+  if (matchups.length === 0) return false;
+  return matchups.every((matchup) => matchup.winnerId !== null);
+}
+
+function roundHasStarted(
+  matchups: Matchup[],
+  externalGames: ExternalGameSync[]
+) {
+  return matchups.some((matchup) => {
+    if (matchup.winnerId !== null) return true;
+
+    const externalGame = findExternalGameForTeams(
+      externalGames,
+      matchup.top.id,
+      matchup.bottom.id
+    );
+
+    return isStartedGame(externalGame);
+  });
 }
 
 function buildRegionBracket(
@@ -766,6 +803,39 @@ function MobileCollapsibleSection({
   );
 }
 
+function MobileRoundSection({
+  title,
+  defaultOpen,
+  toneClasses,
+  pillClasses,
+  children,
+}: {
+  title: string;
+  defaultOpen: boolean;
+  toneClasses: string;
+  pillClasses: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details
+      className={`group rounded-2xl border p-3 shadow-[0_10px_24px_rgba(0,0,0,0.16)] ${toneClasses}`}
+      open={defaultOpen}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+        <div className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${pillClasses}`}>
+          {title}
+        </div>
+
+        <div className="shrink-0 text-slate-300 transition-transform duration-200 group-open:rotate-180">
+          ▼
+        </div>
+      </summary>
+
+      <div className="mt-3">{children}</div>
+    </details>
+  );
+}
+
 export default async function BracketPage() {
   const supabase = await createClient();
 
@@ -1009,109 +1079,132 @@ export default async function BracketPage() {
         ) : null}
 
         <div className="space-y-4 lg:hidden">
-          {regionBrackets.map((region, index) => (
-            <MobileCollapsibleSection
-              key={region.region}
-              id={getRegionAnchor(region.region) ?? undefined}
-              title={`${region.region} Region`}
-              subtitle="Tap to collapse or expand this region."
-              defaultOpen={index === 0}
-            >
-              <div className="space-y-5">
-                <div>
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Round of 64
-                  </h4>
-                  <div className="space-y-3">
-                    {region.round64.map((matchup, matchupIndex) => {
-                      const externalGame = findExternalGameForTeams(
-                        typedExternalGames,
-                        matchup.top.id,
-                        matchup.bottom.id
-                      );
+          {regionBrackets.map((region, index) => {
+            const round64DefaultOpen =
+              !(roundIsComplete(region.round64) && roundHasStarted(region.round32, typedExternalGames));
 
-                      return (
-                        <MatchupCard
-                          key={`${region.region}-r64-${matchupIndex}`}
-                          matchup={matchup}
-                          externalGame={externalGame}
-                        />
-                      );
-                    })}
-                  </div>
+            const round32DefaultOpen =
+              roundHasPopulatedMatchup(region.round32) &&
+              !(roundIsComplete(region.round32) && roundHasStarted(region.sweet16, typedExternalGames));
+
+            const sweet16DefaultOpen =
+              roundHasPopulatedMatchup(region.sweet16) &&
+              !(roundIsComplete(region.sweet16) && roundHasStarted(region.elite8, typedExternalGames));
+
+            const elite8DefaultOpen = roundHasPopulatedMatchup(region.elite8);
+
+            return (
+              <MobileCollapsibleSection
+                key={region.region}
+                id={getRegionAnchor(region.region) ?? undefined}
+                title={`${region.region} Region`}
+                subtitle="Tap to collapse or expand this region."
+                defaultOpen={index === 0}
+              >
+                <div className="space-y-4">
+                  <MobileRoundSection
+                    title="Round of 64"
+                    defaultOpen={round64DefaultOpen}
+                    toneClasses="border-blue-900/40 bg-[#0f1b33]"
+                    pillClasses="border-blue-700/50 bg-blue-500/10 text-blue-200"
+                  >
+                    <div className="space-y-3">
+                      {region.round64.map((matchup, matchupIndex) => {
+                        const externalGame = findExternalGameForTeams(
+                          typedExternalGames,
+                          matchup.top.id,
+                          matchup.bottom.id
+                        );
+
+                        return (
+                          <MatchupCard
+                            key={`${region.region}-r64-${matchupIndex}`}
+                            matchup={matchup}
+                            externalGame={externalGame}
+                          />
+                        );
+                      })}
+                    </div>
+                  </MobileRoundSection>
+
+                  <MobileRoundSection
+                    title="Round of 32"
+                    defaultOpen={round32DefaultOpen}
+                    toneClasses="border-indigo-900/40 bg-[#141b38]"
+                    pillClasses="border-indigo-700/50 bg-indigo-500/10 text-indigo-200"
+                  >
+                    <div className="space-y-3">
+                      {region.round32.map((matchup, matchupIndex) => {
+                        const externalGame = findExternalGameForTeams(
+                          typedExternalGames,
+                          matchup.top.id,
+                          matchup.bottom.id
+                        );
+
+                        return (
+                          <MatchupCard
+                            key={`${region.region}-r32-${matchupIndex}`}
+                            matchup={matchup}
+                            externalGame={externalGame}
+                          />
+                        );
+                      })}
+                    </div>
+                  </MobileRoundSection>
+
+                  <MobileRoundSection
+                    title="Sweet 16"
+                    defaultOpen={sweet16DefaultOpen}
+                    toneClasses="border-violet-900/40 bg-[#1a1733]"
+                    pillClasses="border-violet-700/50 bg-violet-500/10 text-violet-200"
+                  >
+                    <div className="space-y-3">
+                      {region.sweet16.map((matchup, matchupIndex) => {
+                        const externalGame = findExternalGameForTeams(
+                          typedExternalGames,
+                          matchup.top.id,
+                          matchup.bottom.id
+                        );
+
+                        return (
+                          <MatchupCard
+                            key={`${region.region}-s16-${matchupIndex}`}
+                            matchup={matchup}
+                            externalGame={externalGame}
+                          />
+                        );
+                      })}
+                    </div>
+                  </MobileRoundSection>
+
+                  <MobileRoundSection
+                    title="Elite Eight"
+                    defaultOpen={elite8DefaultOpen}
+                    toneClasses="border-amber-900/30 bg-[#241a2b]"
+                    pillClasses="border-amber-700/40 bg-amber-500/10 text-amber-200"
+                  >
+                    <div className="space-y-3">
+                      {region.elite8.map((matchup, matchupIndex) => {
+                        const externalGame = findExternalGameForTeams(
+                          typedExternalGames,
+                          matchup.top.id,
+                          matchup.bottom.id
+                        );
+
+                        return (
+                          <MatchupCard
+                            key={`${region.region}-e8-${matchupIndex}`}
+                            matchup={matchup}
+                            externalGame={externalGame}
+                          />
+                        );
+                      })}
+                    </div>
+                  </MobileRoundSection>
                 </div>
-
-                <div>
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Round of 32
-                  </h4>
-                  <div className="space-y-3">
-                    {region.round32.map((matchup, matchupIndex) => {
-                      const externalGame = findExternalGameForTeams(
-                        typedExternalGames,
-                        matchup.top.id,
-                        matchup.bottom.id
-                      );
-
-                      return (
-                        <MatchupCard
-                          key={`${region.region}-r32-${matchupIndex}`}
-                          matchup={matchup}
-                          externalGame={externalGame}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Sweet 16
-                  </h4>
-                  <div className="space-y-3">
-                    {region.sweet16.map((matchup, matchupIndex) => {
-                      const externalGame = findExternalGameForTeams(
-                        typedExternalGames,
-                        matchup.top.id,
-                        matchup.bottom.id
-                      );
-
-                      return (
-                        <MatchupCard
-                          key={`${region.region}-s16-${matchupIndex}`}
-                          matchup={matchup}
-                          externalGame={externalGame}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Elite Eight
-                  </h4>
-                  <div className="space-y-3">
-                    {region.elite8.map((matchup, matchupIndex) => {
-                      const externalGame = findExternalGameForTeams(
-                        typedExternalGames,
-                        matchup.top.id,
-                        matchup.bottom.id
-                      );
-
-                      return (
-                        <MatchupCard
-                          key={`${region.region}-e8-${matchupIndex}`}
-                          matchup={matchup}
-                          externalGame={externalGame}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </MobileCollapsibleSection>
-          ))}
+              </MobileCollapsibleSection>
+            );
+          })}
         </div>
 
         <div className="hidden space-y-6 sm:space-y-8 lg:block">
