@@ -31,6 +31,7 @@ type Team = {
   conference_record: string | null;
   off_efficiency: number | null;
   def_efficiency: number | null;
+  is_play_in_actual?: boolean;
 };
 
 type Pick = {
@@ -116,6 +117,38 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function SectionCard({
+  title,
+  children,
+  className = "",
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-6 ${className}`}>
+      <h3 className="text-xl font-semibold text-white">{title}</h3>
+      <div className="mt-4">{children}</div>
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+      <div className="text-sm text-slate-400">{label}</div>
+      <div className="mt-1 text-2xl font-bold text-white">{value}</div>
+    </div>
+  );
+}
+
 function BestAvailableList({
   title,
   subtitle,
@@ -128,36 +161,36 @@ function BestAvailableList({
   valueFormatter: (team: Team) => string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-      <h3 className="text-xl font-semibold">{title}</h3>
-      <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+    <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-6">
+      <h3 className="text-xl font-semibold text-white">{title}</h3>
+      <p className="mt-1 text-sm text-slate-300">{subtitle}</p>
 
       <div className="mt-4 space-y-3">
         {teams.length === 0 ? (
-          <div className="rounded-xl border p-4 text-sm text-slate-600">
+          <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4 text-sm text-slate-400">
             No teams available.
           </div>
         ) : (
           teams.map((team, index) => (
-            <div key={team.id} className="rounded-xl border p-4">
+            <div key={team.id} className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <TeamLogo teamName={team.school_name} size={28} />
                   <div>
-                    <div className="font-semibold">
+                    <div className="font-semibold text-white">
                       #{index + 1} {team.school_name}
                     </div>
-                    <div className="mt-1 text-sm text-slate-600">
+                    <div className="mt-1 text-sm text-slate-400">
                       {team.seed} Seed • {team.region} • Record {team.record ?? "—"}
                     </div>
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                  <div className="text-xs uppercase tracking-wide text-slate-400">
                     Metric
                   </div>
-                  <div className="mt-1 text-sm font-semibold text-slate-900">
+                  <div className="mt-1 text-sm font-semibold text-white">
                     {valueFormatter(team)}
                   </div>
                 </div>
@@ -212,6 +245,7 @@ export default function DraftPage() {
         )
         .eq("is_play_in_actual", false)
         .order("seed", { ascending: true })
+        .order("region", { ascending: true })
         .order("school_name", { ascending: true }),
       supabase
         .from("picks")
@@ -265,49 +299,25 @@ export default function DraftPage() {
   }));
 
   const draftedTeamIds = new Set(picks.map((pick) => pick.team_id));
+  const availableTeams = normalizedTeams.filter((team) => !draftedTeamIds.has(team.id));
 
-  const availableTeams = useMemo(() => {
-    return normalizedTeams
-      .filter((team) => !draftedTeamIds.has(team.id))
-      .sort((a, b) => {
-        if (a.seed !== b.seed) return a.seed - b.seed;
-
-        const aComposite = getCompositeRank(a);
-        const bComposite = getCompositeRank(b);
-
-        if (aComposite !== null && bComposite !== null && aComposite !== bComposite) {
-          return aComposite - bComposite;
-        }
-
-        if (aComposite !== null && bComposite === null) return -1;
-        if (aComposite === null && bComposite !== null) return 1;
-
-        return a.school_name.localeCompare(b.school_name);
-      });
-  }, [normalizedTeams, draftedTeamIds]);
-
-  const filteredAvailableTeams = useMemo(() => {
+  const filteredAvailableTeams = availableTeams.filter((team) => {
     const query = teamSearch.trim().toLowerCase();
+    if (!query) return true;
 
-    const filtered = availableTeams.filter((team) => {
-      if (!query) return true;
+    const searchable = [
+      ...getTeamSearchTerms(team.school_name),
+      team.region,
+      String(team.seed),
+      team.record ?? "",
+      team.conference_record ?? "",
+      team.kenpom_rank ? `kenpom ${team.kenpom_rank}` : "",
+      team.bpi_rank ? `bpi ${team.bpi_rank}` : "",
+      team.net_rank ? `net ${team.net_rank}` : "",
+    ].map((value) => value.toLowerCase());
 
-      const searchable = [
-        ...getTeamSearchTerms(team.school_name),
-        team.region,
-        String(team.seed),
-        team.record ?? "",
-        team.conference_record ?? "",
-        team.kenpom_rank ? `kenpom ${team.kenpom_rank}` : "",
-        team.bpi_rank ? `bpi ${team.bpi_rank}` : "",
-        team.net_rank ? `net ${team.net_rank}` : "",
-      ].map((value) => value.toLowerCase());
-
-      return searchable.some((value) => value.includes(query));
-    });
-
-    return filtered.slice(0, 30);
-  }, [availableTeams, teamSearch]);
+    return searchable.some((value) => value.includes(query));
+  });
 
   const memberMap = new Map(members.map((m) => [m.id, m.display_name]));
   const teamMap = new Map(normalizedTeams.map((t) => [t.id, t]));
@@ -556,22 +566,22 @@ export default function DraftPage() {
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
       <section className="mb-5 sm:mb-6">
-        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
           Draft
         </div>
-        <h2 className="mt-1 text-3xl font-bold">Draft Room</h2>
-        <p className="mt-2 text-gray-600">
+        <h2 className="mt-1 text-3xl font-bold text-white">Draft Room</h2>
+        <p className="mt-2 text-slate-300">
           Live draft room with role-based pick controls and real-time draft tracking.
         </p>
       </section>
 
-      <section className="mb-6 rounded-2xl border bg-white p-4 shadow-sm sm:mb-8 sm:p-5">
+      <section className="mb-6 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:mb-8 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
               Draft Status
             </div>
-            <div className="mt-1 text-sm text-slate-700">
+            <div className="mt-1 text-sm text-slate-300">
               {authLoaded
                 ? signedInMember
                   ? `Signed in as ${signedInMember.display_name} • ${signedInMember.role ?? "manager"}`
@@ -582,11 +592,11 @@ export default function DraftPage() {
             </div>
           </div>
 
-          <div className="text-sm text-slate-600">
+          <div className="text-sm text-slate-300">
             {!authUser ? (
               <span>Use the menu to sign in before making picks.</span>
             ) : canAccessAdmin ? (
-              <a href="/admin" className="font-medium text-slate-900 underline underline-offset-4">
+              <a href="/admin" className="font-medium text-white underline underline-offset-4">
                 Commissioner access available
               </a>
             ) : (
@@ -596,7 +606,7 @@ export default function DraftPage() {
         </div>
 
         {authUser && !signedInMember ? (
-          <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          <div className="mt-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
             Your signed-in account is not mapped to a league member yet, so you can view the board but cannot make picks.
           </div>
         ) : null}
@@ -614,21 +624,21 @@ export default function DraftPage() {
         </div>
       ) : null}
 
-      <section className="mb-6 rounded-2xl border bg-white p-5 shadow-sm sm:mb-8 sm:p-6">
+      <section className="mb-6 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:mb-8 sm:p-6">
         {currentPick && currentMember ? (
           <div className="flex flex-col gap-4">
             <div>
-              <div className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+              <div className="text-sm font-semibold uppercase tracking-wide text-slate-400">
                 On the Clock
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 <ManagerBadge name={currentMember.display_name} />
-                <span className="text-2xl font-bold">{currentMember.display_name}</span>
+                <span className="text-2xl font-bold text-white">{currentMember.display_name}</span>
               </div>
-              <div className="mt-2 text-sm text-gray-600">
+              <div className="mt-2 text-sm text-slate-300">
                 Pick #{currentPick.overallPick} • Round {currentPick.round}
               </div>
-              <div className="mt-2 text-sm font-medium text-slate-700">
+              <div className="mt-2 text-sm font-medium text-slate-200">
                 {canMakeCurrentPick
                   ? "It is your turn. You can make this pick."
                   : signedInMember
@@ -638,45 +648,34 @@ export default function DraftPage() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border p-4">
-                <div className="text-sm text-gray-500">Completed Picks</div>
-                <div className="mt-1 text-2xl font-bold">{picks.length}</div>
-              </div>
-              <div className="rounded-xl border p-4">
-                <div className="text-sm text-gray-500">Taken Teams</div>
-                <div className="mt-1 text-2xl font-bold">{draftedTeamIds.size}</div>
-              </div>
-              <div className="rounded-xl border p-4">
-                <div className="text-sm text-gray-500">Remaining Teams</div>
-                <div className="mt-1 text-2xl font-bold">{availableTeams.length}</div>
-              </div>
+              <MetricCard label="Completed Picks" value={picks.length} />
+              <MetricCard label="Taken Teams" value={draftedTeamIds.size} />
+              <MetricCard label="Remaining Teams" value={availableTeams.length} />
             </div>
           </div>
         ) : (
           <div>
-            <div className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+            <div className="text-sm font-semibold uppercase tracking-wide text-slate-400">
               Draft Status
             </div>
-            <div className="mt-2 text-2xl font-bold">Draft Complete</div>
+            <div className="mt-2 text-2xl font-bold text-white">Draft Complete</div>
           </div>
         )}
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
         <div className="space-y-6">
-          <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-            <h3 className="text-xl font-semibold">Make Current Pick</h3>
-
+          <SectionCard title="Make Current Pick">
             {currentPick && currentMember ? (
               <>
-                <div className="mt-4 rounded-xl border border-slate-300 bg-slate-50 p-4">
-                  <div className="text-sm text-gray-500">Current Pick</div>
-                  <div className="mt-1 text-lg font-semibold">
+                <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+                  <div className="text-sm text-slate-400">Current Pick</div>
+                  <div className="mt-1 text-lg font-semibold text-white">
                     Pick #{currentPick.overallPick}
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <ManagerBadge name={currentMember.display_name} />
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-slate-300">
                       {currentMember.display_name} is selecting now
                     </span>
                   </div>
@@ -684,164 +683,113 @@ export default function DraftPage() {
 
                 <form onSubmit={handleDraftPick} className="mt-6 space-y-4">
                   <div>
-                    <label className="mb-2 block text-sm font-medium">Search Teams</label>
+                    <label className="mb-2 block text-sm font-medium text-slate-300">Search Teams</label>
                     <input
                       type="text"
                       value={teamSearch}
                       onChange={(e) => setTeamSearch(e.target.value)}
                       placeholder="Search by school, alias, region, seed, or ranking"
-                      className="w-full rounded-xl border px-3 py-2"
+                      className="w-full rounded-2xl border border-slate-600 bg-[#172033] px-3 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       disabled={!canMakeCurrentPick}
                     />
-                    <div className="mt-2 text-xs text-slate-500">
-                      Sorted from highest seeds to lowest seeds. Drafted teams are automatically removed.
-                    </div>
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm font-medium">Available Teams</label>
-
-                    <div className="max-h-[420px] overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-2">
-                      {filteredAvailableTeams.length === 0 ? (
-                        <div className="rounded-xl bg-white p-4 text-sm text-slate-600">
-                          No teams match your search.
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {filteredAvailableTeams.map((team) => {
-                            const isSelected = selectedTeamId === team.id;
-                            const composite = getCompositeRank(team);
-
-                            return (
-                              <button
-                                key={team.id}
-                                type="button"
-                                onClick={() => setSelectedTeamId(team.id)}
-                                disabled={!canMakeCurrentPick}
-                                className={`w-full rounded-xl border px-4 py-3 text-left transition ${
-                                  isSelected
-                                    ? "border-slate-900 bg-slate-900 text-white"
-                                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-100"
-                                } disabled:cursor-not-allowed disabled:opacity-60`}
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="flex min-w-0 items-start gap-3">
-                                    <TeamLogo teamName={team.school_name} size={26} />
-                                    <div className="min-w-0">
-                                      <div className="font-semibold">
-                                        {team.school_name}
-                                      </div>
-                                      <div
-                                        className={`mt-1 text-sm ${
-                                          isSelected ? "text-slate-200" : "text-slate-600"
-                                        }`}
-                                      >
-                                        {team.seed} Seed • {team.region} • {team.record ?? "—"}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="shrink-0 text-right">
-                                    <div
-                                      className={`text-xs uppercase tracking-wide ${
-                                        isSelected ? "text-slate-300" : "text-slate-500"
-                                      }`}
-                                    >
-                                      Composite
-                                    </div>
-                                    <div className="mt-1 text-sm font-semibold">
-                                      {formatComposite(composite)}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div
-                                  className={`mt-2 text-xs ${
-                                    isSelected ? "text-slate-300" : "text-slate-500"
-                                  }`}
-                                >
-                                  KP {team.kenpom_rank ?? "—"} • BPI {team.bpi_rank ?? "—"} • NET {team.net_rank ?? "—"}
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
+                    <label className="mb-2 block text-sm font-medium text-slate-300">Select Team</label>
+                    <select
+                      className="w-full rounded-2xl border border-slate-600 bg-[#172033] px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      value={selectedTeamId}
+                      onChange={(e) => setSelectedTeamId(e.target.value)}
+                      required
+                      disabled={!canMakeCurrentPick}
+                    >
+                      <option value="">Choose a team</option>
+                      {filteredAvailableTeams.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.school_name} • {team.seed} Seed • {team.region} • KP {team.kenpom_rank ?? "—"} • BPI {team.bpi_rank ?? "—"} • NET {team.net_rank ?? "—"} • {team.record ?? "No Record"}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {selectedTeam ? (
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="rounded-3xl border border-slate-700/80 bg-[#172033] p-4">
                       <div className="flex items-start gap-3">
                         <TeamLogo teamName={selectedTeam.school_name} size={34} />
                         <div>
-                          <div className="text-lg font-semibold">{selectedTeam.school_name}</div>
-                          <div className="mt-1 text-sm text-slate-600">
+                          <div className="text-lg font-semibold text-white">{selectedTeam.school_name}</div>
+                          <div className="mt-1 text-sm text-slate-300">
                             {selectedTeam.seed} Seed • {selectedTeam.region}
                           </div>
                         </div>
                       </div>
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-4">
-                        <div className="rounded-xl border bg-white p-3">
-                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        <div className="rounded-2xl border border-slate-700/80 bg-[#111827] p-3">
+                          <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
                             Rankings
                           </div>
-                          <div className="mt-2 text-sm text-slate-700">
-                            KenPom: <span className="font-semibold">{selectedTeam.kenpom_rank ?? "—"}</span>
+                          <div className="mt-2 text-sm text-slate-300">
+                            KenPom: <span className="font-semibold text-white">{selectedTeam.kenpom_rank ?? "—"}</span>
                           </div>
-                          <div className="mt-1 text-sm text-slate-700">
-                            BPI: <span className="font-semibold">{selectedTeam.bpi_rank ?? "—"}</span>
+                          <div className="mt-1 text-sm text-slate-300">
+                            BPI: <span className="font-semibold text-white">{selectedTeam.bpi_rank ?? "—"}</span>
                           </div>
-                          <div className="mt-1 text-sm text-slate-700">
-                            NET: <span className="font-semibold">{selectedTeam.net_rank ?? "—"}</span>
+                          <div className="mt-1 text-sm text-slate-300">
+                            NET: <span className="font-semibold text-white">{selectedTeam.net_rank ?? "—"}</span>
                           </div>
                         </div>
 
-                        <div className="rounded-xl border bg-white p-3">
-                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        <div className="rounded-2xl border border-slate-700/80 bg-[#111827] p-3">
+                          <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
                             Record
                           </div>
-                          <div className="mt-2 text-sm text-slate-700">
-                            Overall: <span className="font-semibold">{selectedTeam.record ?? "—"}</span>
+                          <div className="mt-2 text-sm text-slate-300">
+                            Overall: <span className="font-semibold text-white">{selectedTeam.record ?? "—"}</span>
                           </div>
-                          <div className="mt-1 text-sm text-slate-700">
-                            Conference: <span className="font-semibold">{selectedTeam.conference_record ?? "—"}</span>
+                          <div className="mt-1 text-sm text-slate-300">
+                            Conference: <span className="font-semibold text-white">{selectedTeam.conference_record ?? "—"}</span>
                           </div>
                         </div>
 
-                        <div className="rounded-xl border bg-white p-3">
-                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        <div className="rounded-2xl border border-slate-700/80 bg-[#111827] p-3">
+                          <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
                             Efficiency
                           </div>
-                          <div className="mt-2 text-sm text-slate-700">
-                            Off: <span className="font-semibold">{formatMetric(selectedTeam.off_efficiency)}</span>
+                          <div className="mt-2 text-sm text-slate-300">
+                            Off: <span className="font-semibold text-white">{formatMetric(selectedTeam.off_efficiency)}</span>
                           </div>
-                          <div className="mt-1 text-sm text-slate-700">
-                            Def: <span className="font-semibold">{formatMetric(selectedTeam.def_efficiency)}</span>
+                          <div className="mt-1 text-sm text-slate-300">
+                            Def: <span className="font-semibold text-white">{formatMetric(selectedTeam.def_efficiency)}</span>
                           </div>
                         </div>
 
-                        <div className="rounded-xl border bg-white p-3">
-                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        <div className="rounded-2xl border border-slate-700/80 bg-[#111827] p-3">
+                          <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
                             Draft Signal
                           </div>
-                          <div className="mt-2 text-sm text-slate-700">
-                            Composite: <span className="font-semibold">{formatComposite(getCompositeRank(selectedTeam))}</span>
+                          <div className="mt-2 text-sm text-slate-300">
+                            Composite: <span className="font-semibold text-white">{formatComposite(getCompositeRank(selectedTeam))}</span>
                           </div>
-                          <div className="mt-1 text-sm text-slate-700">
-                            Value Score: <span className="font-semibold">{formatComposite(getValueScore(selectedTeam))}</span>
+                          <div className="mt-1 text-sm text-slate-300">
+                            Value Score: <span className="font-semibold text-white">{formatComposite(getValueScore(selectedTeam))}</span>
                           </div>
                         </div>
                       </div>
                     </div>
                   ) : null}
 
+                  {teamSearch && filteredAvailableTeams.length === 0 ? (
+                    <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-3 text-sm text-slate-400">
+                      No teams match your search.
+                    </div>
+                  ) : null}
+
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <button
                       type="submit"
-                      disabled={!canMakeCurrentPick || !selectedTeamId}
-                      className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                      disabled={!canMakeCurrentPick}
+                      className="w-full rounded-2xl bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                     >
                       Draft Team
                     </button>
@@ -850,22 +798,22 @@ export default function DraftPage() {
                       <button
                         type="button"
                         onClick={undoLastPick}
-                        className="w-full rounded-xl border border-red-300 px-4 py-2 text-red-600 hover:bg-red-50 sm:w-auto"
+                        className="w-full rounded-2xl border border-red-500/40 px-4 py-2 text-red-200 transition hover:bg-red-500/10 sm:w-auto"
                       >
                         Undo Last Pick
                       </button>
                     ) : null}
                   </div>
 
-                  {message ? <p className="text-sm text-gray-600">{message}</p> : null}
+                  {message ? <p className="text-sm text-slate-300">{message}</p> : null}
                 </form>
               </>
             ) : (
-              <div className="mt-4 rounded-xl border p-4 text-sm text-gray-600">
+              <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4 text-sm text-slate-400">
                 No further picks are needed.
               </div>
             )}
-          </div>
+          </SectionCard>
 
           <div className="grid gap-6 2xl:grid-cols-2">
             <BestAvailableList
@@ -897,26 +845,26 @@ export default function DraftPage() {
             />
           </div>
 
-          <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-            <h3 className="text-xl font-semibold">Upcoming Picks</h3>
-
-            <div className="mt-4 space-y-3">
+          <SectionCard title="Upcoming Picks">
+            <div className="space-y-3">
               {upcomingPicks.length === 0 ? (
-                <div className="rounded-xl border p-4 text-sm text-gray-600">
+                <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4 text-sm text-slate-400">
                   No upcoming picks remaining.
                 </div>
               ) : (
                 upcomingPicks.map((pick, index) => (
                   <div
                     key={pick.overallPick}
-                    className={`rounded-xl border p-4 ${
-                      index === 0 ? "border-slate-900 bg-slate-100" : ""
+                    className={`rounded-2xl border p-4 ${
+                      index === 0
+                        ? "border-blue-500/50 bg-blue-500/10"
+                        : "border-slate-700/80 bg-[#172033]"
                     }`}
                   >
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <div className="font-semibold">Pick #{pick.overallPick}</div>
-                        <div className="mt-1 text-sm text-gray-600">
+                        <div className="font-semibold text-white">Pick #{pick.overallPick}</div>
+                        <div className="mt-1 text-sm text-slate-400">
                           Round {pick.round}
                         </div>
                       </div>
@@ -928,57 +876,55 @@ export default function DraftPage() {
                 ))
               )}
             </div>
-          </div>
+          </SectionCard>
 
           <DraftBoardGrid picks={draftBoardPicks} />
 
-          <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-            <h3 className="text-xl font-semibold">Draft Recap</h3>
-
-            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-xl border bg-slate-50 p-4">
-                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          <SectionCard title="Draft Recap">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
                   Picks Made
                 </div>
-                <div className="mt-2 text-2xl font-bold">{picks.length}</div>
+                <div className="mt-2 text-2xl font-bold text-white">{picks.length}</div>
               </div>
 
-              <div className="rounded-xl border bg-slate-50 p-4">
-                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
                   Best Pick Drafted
                 </div>
-                <div className="mt-2 text-sm font-semibold text-slate-900">
+                <div className="mt-2 text-sm font-semibold text-white">
                   {bestDraftedPick ? bestDraftedPick.teamName : "—"}
                 </div>
-                <div className="mt-1 text-sm text-slate-600">
+                <div className="mt-1 text-sm text-slate-300">
                   {bestDraftedPick
                     ? `Composite ${formatComposite(bestDraftedPick.compositeRank)}`
                     : "No picks yet"}
                 </div>
               </div>
 
-              <div className="rounded-xl border bg-slate-50 p-4">
-                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
                   Best Value Drafted
                 </div>
-                <div className="mt-2 text-sm font-semibold text-slate-900">
+                <div className="mt-2 text-sm font-semibold text-white">
                   {bestValueDraftedPick ? bestValueDraftedPick.teamName : "—"}
                 </div>
-                <div className="mt-1 text-sm text-slate-600">
+                <div className="mt-1 text-sm text-slate-300">
                   {bestValueDraftedPick
                     ? `Value ${formatComposite(bestValueDraftedPick.valueScore)}`
                     : "No picks yet"}
                 </div>
               </div>
 
-              <div className="rounded-xl border bg-slate-50 p-4">
-                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
                   Best Remaining Team
                 </div>
-                <div className="mt-2 text-sm font-semibold text-slate-900">
+                <div className="mt-2 text-sm font-semibold text-white">
                   {bestRemainingTeam ? bestRemainingTeam.school_name : "—"}
                 </div>
-                <div className="mt-1 text-sm text-slate-600">
+                <div className="mt-1 text-sm text-slate-300">
                   {bestRemainingTeam
                     ? `Composite ${formatComposite(getCompositeRank(bestRemainingTeam))}`
                     : "Draft complete"}
@@ -987,8 +933,8 @@ export default function DraftPage() {
             </div>
 
             <div className="mt-6 grid gap-4 xl:grid-cols-2">
-              <div className="rounded-xl border p-4">
-                <div className="text-sm font-semibold text-slate-900">
+              <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+                <div className="text-sm font-semibold text-white">
                   Biggest Reach So Far
                 </div>
                 {biggestReachPick ? (
@@ -996,22 +942,22 @@ export default function DraftPage() {
                     <div className="flex items-center gap-3">
                       <TeamLogo teamName={biggestReachPick.teamName} size={30} />
                       <div>
-                        <div className="font-semibold">
+                        <div className="font-semibold text-white">
                           Pick #{biggestReachPick.overall_pick} • {biggestReachPick.teamName}
                         </div>
-                        <div className="text-sm text-slate-600">
+                        <div className="text-sm text-slate-300">
                           {biggestReachPick.owner} • Value {formatComposite(biggestReachPick.valueScore)}
                         </div>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3 text-sm text-slate-600">No picks yet.</div>
+                  <div className="mt-3 text-sm text-slate-400">No picks yet.</div>
                 )}
               </div>
 
-              <div className="rounded-xl border p-4">
-                <div className="text-sm font-semibold text-slate-900">
+              <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+                <div className="text-sm font-semibold text-white">
                   Strongest Analytic Pick So Far
                 </div>
                 {bestDraftedPick ? (
@@ -1019,59 +965,59 @@ export default function DraftPage() {
                     <div className="flex items-center gap-3">
                       <TeamLogo teamName={bestDraftedPick.teamName} size={30} />
                       <div>
-                        <div className="font-semibold">
+                        <div className="font-semibold text-white">
                           Pick #{bestDraftedPick.overall_pick} • {bestDraftedPick.teamName}
                         </div>
-                        <div className="text-sm text-slate-600">
+                        <div className="text-sm text-slate-300">
                           {bestDraftedPick.owner} • Composite {formatComposite(bestDraftedPick.compositeRank)}
                         </div>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3 text-sm text-slate-600">No picks yet.</div>
+                  <div className="mt-3 text-sm text-slate-400">No picks yet.</div>
                 )}
               </div>
             </div>
 
             <div className="mt-6 space-y-3">
               {managerRecap.map((manager) => (
-                <div key={manager.id} className="rounded-xl border p-4">
+                <div key={manager.id} className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex items-center gap-3">
                       <ManagerBadge name={manager.name} />
                       <div>
-                        <div className="font-semibold text-slate-900">{manager.name}</div>
-                        <div className="text-sm text-slate-600">
+                        <div className="font-semibold text-white">{manager.name}</div>
+                        <div className="text-sm text-slate-400">
                           {manager.totalPicks} picks made
                         </div>
                       </div>
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[520px]">
-                      <div className="rounded-lg bg-slate-50 p-3">
-                        <div className="text-xs uppercase tracking-wide text-slate-500">
+                      <div className="rounded-xl bg-[#111827] p-3">
+                        <div className="text-xs uppercase tracking-wide text-slate-400">
                           Avg Composite
                         </div>
-                        <div className="mt-1 font-semibold text-slate-900">
+                        <div className="mt-1 font-semibold text-white">
                           {formatComposite(manager.avgComposite)}
                         </div>
                       </div>
 
-                      <div className="rounded-lg bg-slate-50 p-3">
-                        <div className="text-xs uppercase tracking-wide text-slate-500">
+                      <div className="rounded-xl bg-[#111827] p-3">
+                        <div className="text-xs uppercase tracking-wide text-slate-400">
                           Avg Seed
                         </div>
-                        <div className="mt-1 font-semibold text-slate-900">
+                        <div className="mt-1 font-semibold text-white">
                           {manager.avgSeed === null ? "—" : manager.avgSeed.toFixed(2)}
                         </div>
                       </div>
 
-                      <div className="rounded-lg bg-slate-50 p-3">
-                        <div className="text-xs uppercase tracking-wide text-slate-500">
+                      <div className="rounded-xl bg-[#111827] p-3">
+                        <div className="text-xs uppercase tracking-wide text-slate-400">
                           Best Team Drafted
                         </div>
-                        <div className="mt-1 font-semibold text-slate-900">
+                        <div className="mt-1 font-semibold text-white">
                           {manager.bestPick ? manager.bestPick.teamName : "—"}
                         </div>
                       </div>
@@ -1080,33 +1026,31 @@ export default function DraftPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </SectionCard>
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-            <h3 className="text-xl font-semibold">Recently Completed Picks</h3>
-
-            <div className="mt-4 space-y-3">
+          <SectionCard title="Recently Completed Picks">
+            <div className="space-y-3">
               {recentlyCompleted.length === 0 ? (
-                <div className="rounded-xl border p-4 text-sm text-gray-600">
+                <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4 text-sm text-slate-400">
                   No picks made yet.
                 </div>
               ) : (
                 recentlyCompleted.map((pick) => (
-                  <div key={pick.id} className="rounded-xl border p-4">
+                  <div key={pick.id} className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex items-start gap-3">
                         <TeamLogo teamName={pick.teamName} size={30} />
                         <div>
-                          <div className="font-semibold">
+                          <div className="font-semibold text-white">
                             Pick #{pick.overall_pick} • {pick.teamName}
                           </div>
-                          <div className="mt-1 text-sm text-gray-600">
+                          <div className="mt-1 text-sm text-slate-400">
                             {pick.seed ? `${pick.seed} Seed • ` : ""}
                             {pick.region}
                           </div>
-                          <div className="mt-1 text-sm text-slate-500">
+                          <div className="mt-1 text-sm text-slate-300">
                             Composite {formatComposite(pick.compositeRank)} • Value {formatComposite(pick.valueScore)}
                           </div>
                         </div>
@@ -1119,7 +1063,7 @@ export default function DraftPage() {
                 ))
               )}
             </div>
-          </div>
+          </SectionCard>
         </div>
       </section>
 

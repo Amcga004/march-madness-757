@@ -51,18 +51,18 @@ function RoundProgressCard({
   const percent = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="text-sm font-medium text-slate-500">{round}</div>
+    <div className="rounded-3xl border border-slate-700/80 bg-[#172033] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <div className="text-sm font-medium text-slate-400">{round}</div>
       <div className="mt-2 flex items-end justify-between gap-3">
-        <div className="text-2xl font-extrabold tracking-tight text-slate-950">
+        <div className="text-2xl font-extrabold tracking-tight text-white">
           {completed}/{total}
         </div>
-        <div className="text-sm font-medium text-slate-600">{percent}%</div>
+        <div className="text-sm font-medium text-slate-300">{percent}%</div>
       </div>
 
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
         <div
-          className="h-full rounded-full bg-slate-900 transition-all"
+          className="h-full rounded-full bg-blue-500 transition-all"
           style={{ width: `${percent}%` }}
         />
       </div>
@@ -134,18 +134,18 @@ export default function ResultsPage() {
       <section className="mb-5 sm:mb-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
               Results
             </div>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-              Live Tournament Results
+            <h1 className="mt-1 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+              Results History
             </h1>
-            <p className="mt-2 text-sm text-slate-600 sm:text-base">
-              Track completed games, round progress, and the latest tournament updates.
+            <p className="mt-2 text-sm text-slate-300 sm:text-base">
+              Every recorded game result entered into the app.
             </p>
           </div>
 
-          <div className="text-sm text-slate-500">
+          <div className="text-sm text-slate-400">
             {latestUpdated
               ? `Last updated: ${new Date(latestUpdated).toLocaleString()}`
               : "No results entered yet"}
@@ -154,38 +154,38 @@ export default function ResultsPage() {
       </section>
 
       {message ? (
-        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-6 rounded-3xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
           {message}
         </div>
       ) : null}
 
       <section className="mb-6 grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="text-sm font-medium text-slate-500">Results Recorded</div>
-          <div className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950">
+        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
+          <div className="text-sm font-medium text-slate-400">Results Recorded</div>
+          <div className="mt-2 text-3xl font-extrabold tracking-tight text-white">
             {totalGamesRecorded}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="text-sm font-medium text-slate-500">Latest Round Updated</div>
-          <div className="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">
+        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
+          <div className="text-sm font-medium text-slate-400">Latest Round Updated</div>
+          <div className="mt-2 text-2xl font-extrabold tracking-tight text-white">
             {latestRoundUpdated}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="text-sm font-medium text-slate-500">Rounds Active</div>
-          <div className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950">
+        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
+          <div className="text-sm font-medium text-slate-400">Rounds Active</div>
+          <div className="mt-2 text-3xl font-extrabold tracking-tight text-white">
             {roundProgress.filter((round) => round.completed > 0).length}
           </div>
         </div>
       </section>
 
-      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mb-8 sm:p-6">
+      <section className="mb-6 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:mb-8 sm:p-6">
         <div className="mb-4">
-          <h2 className="text-xl font-semibold text-slate-950">Round Progress</h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <h2 className="text-xl font-semibold text-white">Round Progress</h2>
+          <p className="mt-1 text-sm text-slate-300">
             Progress tracker for each tournament round based on recorded results.
           </p>
         </div>
@@ -202,21 +202,21 @@ export default function ResultsPage() {
         </div>
       </section>
 
-      <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+      <section className="mb-4 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-slate-950">Completed Games</h2>
-            <p className="mt-1 text-sm text-slate-600">
+            <h2 className="text-xl font-semibold text-white">Completed Games</h2>
+            <p className="mt-1 text-sm text-slate-300">
               Filter results by round or view the full live feed.
             </p>
           </div>
 
           <div className="w-full sm:w-[240px]">
-            <label className="mb-2 block text-sm font-medium text-slate-700">
+            <label className="mb-2 block text-sm font-medium text-slate-300">
               Filter by Round
             </label>
             <select
-              className="w-full rounded-xl border border-slate-300 px-3 py-2"
+              className="w-full rounded-2xl border border-slate-600 bg-[#172033] px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               value={selectedRound}
               onChange={(e) => setSelectedRound(e.target.value)}
             >
@@ -232,7 +232,7 @@ export default function ResultsPage() {
 
       <section className="space-y-4">
         {filteredGames.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-500 shadow-sm">
+          <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 text-slate-400 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
             No game results recorded for this view yet.
           </div>
         ) : (
@@ -246,16 +246,16 @@ export default function ResultsPage() {
             return (
               <div
                 key={game.id}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.28)]"
               >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm font-medium text-slate-500">{game.round_name}</div>
-                  <div className="text-sm text-slate-500">
+                  <div className="text-sm font-medium text-slate-400">{game.round_name}</div>
+                  <div className="text-sm text-slate-400">
                     {new Date(game.created_at).toLocaleString()}
                   </div>
                 </div>
 
-                <div className="mt-3 flex flex-col gap-3 text-base font-semibold sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="mt-3 flex flex-col gap-3 text-base font-semibold text-white sm:flex-row sm:flex-wrap sm:items-center">
                   <div className="flex items-center gap-2">
                     <TeamLogo teamName={winnerName} size={26} />
                     <span>
@@ -264,7 +264,7 @@ export default function ResultsPage() {
                     </span>
                   </div>
 
-                  <span className="text-slate-400">defeated</span>
+                  <span className="text-slate-500">defeated</span>
 
                   <div className="flex items-center gap-2">
                     <TeamLogo teamName={loserName} size={26} />
@@ -275,7 +275,7 @@ export default function ResultsPage() {
                   </div>
                 </div>
 
-                <div className="mt-3 text-sm text-slate-600">
+                <div className="mt-3 text-sm text-slate-300">
                   Status: {game.status ?? "complete"}
                 </div>
               </div>
