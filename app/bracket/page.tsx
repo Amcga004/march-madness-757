@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import AutoRefreshClient from "../components/AutoRefreshClient";
-import MobileBracketSections from "../components/bracket/MobileBracketSections";
 
 type Team = {
   id: string;
@@ -619,7 +618,7 @@ function MatchupCard({
   );
 }
 
-function PlayInMatchupCard({
+function ExternalMatchupCard({
   externalGame,
   teamById,
   managerByTeamId,
@@ -666,14 +665,6 @@ function PlayInMatchupCard({
       </div>
     </div>
   );
-}
-
-function renderMatchupCard(
-  matchup: Matchup,
-  externalGame: ExternalGameSync | null,
-  key: string
-) {
-  return <MatchupCard key={key} matchup={matchup} externalGame={externalGame} />;
 }
 
 function ConnectorColumn({
@@ -771,6 +762,16 @@ export default async function BracketPage() {
     isPlayInExternalGame(game, playInTeamIds)
   );
 
+  const allPlayInGamesComplete =
+    playInGames.length >= 4 && playInGames.every((game) => isFinalGame(game));
+
+  const activePlayInGames = allPlayInGamesComplete ? [] : playInGames;
+  const archivedPlayInGames = allPlayInGamesComplete ? playInGames : [];
+
+  const liveGames = typedExternalGames.filter(
+    (game) => isLiveGame(game) && !isPlayInExternalGame(game, playInTeamIds)
+  );
+
   const regionBrackets = REGIONS.map((region) => {
     const teamsForRegion = typedTeams.filter(
       (team) => team.region === region && !team.is_play_in_actual
@@ -848,22 +849,22 @@ export default async function BracketPage() {
       </section>
 
       <div className="space-y-6 sm:space-y-8">
-        {playInGames.length > 0 ? (
-          <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
+        {liveGames.length > 0 ? (
+          <section className="rounded-3xl border border-red-500/40 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
             <div className="mb-5">
-              <h3 className="text-2xl font-bold text-white">First Four / Play-In Games</h3>
+              <h3 className="text-2xl font-bold text-white">Live Games Right Now</h3>
               <p className="mt-1 text-sm text-slate-300">
-                Live and final play-in matchups from the ESPN sync feed.
+                Active tournament games pulled to the top for quick tracking.
               </p>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {playInGames.map((game) => (
+              {liveGames.map((game) => (
                 <div key={game.id} className="min-w-0">
-                  <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    {game.round_name ?? "Play-In"}
+                  <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-red-300">
+                    {game.round_name ?? "Live"}
                   </div>
-                  <PlayInMatchupCard
+                  <ExternalMatchupCard
                     externalGame={game}
                     teamById={teamById}
                     managerByTeamId={managerByTeamId}
@@ -874,68 +875,83 @@ export default async function BracketPage() {
           </section>
         ) : null}
 
-        <div className="lg:hidden">
-          <MobileBracketSections
-            regions={regionBrackets}
-            renderMatchupCard={renderMatchupCard}
-            findExternalGameForTeams={findExternalGameForTeams}
-            externalGames={typedExternalGames}
-          />
-        </div>
+        {activePlayInGames.length > 0 ? (
+          <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
+            <div className="mb-5">
+              <h3 className="text-2xl font-bold text-white">First Four / Play-In Games</h3>
+              <p className="mt-1 text-sm text-slate-300">
+                Live and final play-in matchups from the ESPN sync feed.
+              </p>
+            </div>
 
-        <div className="hidden space-y-6 sm:space-y-8 lg:block">
-          {regionBrackets.map((region) => (
-            <section
-              key={region.region}
-              className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5"
-            >
-              <h3 className="mb-5 text-2xl font-bold text-white">{region.region} Region</h3>
-
-              <div className="overflow-x-auto">
-                <div className="flex min-w-max gap-6 pb-4 sm:gap-10">
-                  <ConnectorColumn
-                    title="Round of 64"
-                    matchups={region.round64}
-                    externalGames={typedExternalGames}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {activePlayInGames.map((game) => (
+                <div key={game.id} className="min-w-0">
+                  <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    {game.round_name ?? "Play-In"}
+                  </div>
+                  <ExternalMatchupCard
+                    externalGame={game}
+                    teamById={teamById}
+                    managerByTeamId={managerByTeamId}
                   />
-                  <ConnectorColumn
-                    title="Round of 32"
-                    matchups={region.round32}
-                    externalGames={typedExternalGames}
-                  />
-                  <ConnectorColumn
-                    title="Sweet 16"
-                    matchups={region.sweet16}
-                    externalGames={typedExternalGames}
-                  />
-                  <div className="min-w-[240px] sm:min-w-[260px]">
-                    <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
-                      Elite Eight
-                    </h4>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
-                    <div className="space-y-3 sm:space-y-5">
-                      {region.elite8.map((matchup, index) => {
-                        const externalGame = findExternalGameForTeams(
-                          typedExternalGames,
-                          matchup.top.id,
-                          matchup.bottom.id
-                        );
+        {regionBrackets.map((region) => (
+          <section
+            key={region.region}
+            className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5"
+          >
+            <h3 className="mb-5 text-2xl font-bold text-white">{region.region} Region</h3>
 
-                        return (
-                          <MatchupCard
-                            key={`elite-${region.region}-${index}`}
-                            matchup={matchup}
-                            externalGame={externalGame}
-                          />
-                        );
-                      })}
-                    </div>
+            <div className="overflow-x-auto">
+              <div className="flex min-w-max gap-6 pb-4 sm:gap-10">
+                <ConnectorColumn
+                  title="Round of 64"
+                  matchups={region.round64}
+                  externalGames={typedExternalGames}
+                />
+                <ConnectorColumn
+                  title="Round of 32"
+                  matchups={region.round32}
+                  externalGames={typedExternalGames}
+                />
+                <ConnectorColumn
+                  title="Sweet 16"
+                  matchups={region.sweet16}
+                  externalGames={typedExternalGames}
+                />
+                <div className="min-w-[240px] sm:min-w-[260px]">
+                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+                    Elite Eight
+                  </h4>
+
+                  <div className="space-y-3 sm:space-y-5">
+                    {region.elite8.map((matchup, index) => {
+                      const externalGame = findExternalGameForTeams(
+                        typedExternalGames,
+                        matchup.top.id,
+                        matchup.bottom.id
+                      );
+
+                      return (
+                        <MatchupCard
+                          key={`elite-${region.region}-${index}`}
+                          matchup={matchup}
+                          externalGame={externalGame}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
               </div>
-            </section>
-          ))}
-        </div>
+            </div>
+          </section>
+        ))}
 
         <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
           <h3 className="mb-5 text-2xl font-bold text-white">Final Four & Championship</h3>
@@ -986,6 +1002,42 @@ export default async function BracketPage() {
             </div>
           </div>
         </section>
+
+        {archivedPlayInGames.length > 0 ? (
+          <details className="rounded-3xl border border-slate-700/80 bg-[#0b1220]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] sm:p-5">
+            <summary className="cursor-pointer list-none select-none">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-bold text-white">
+                    Archived First Four / Play-In Games
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Completed play-in games moved out of the main view once all four are final.
+                  </p>
+                </div>
+
+                <div className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-300">
+                  Show
+                </div>
+              </div>
+            </summary>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {archivedPlayInGames.map((game) => (
+                <div key={game.id} className="min-w-0">
+                  <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {game.round_name ?? "Play-In"}
+                  </div>
+                  <ExternalMatchupCard
+                    externalGame={game}
+                    teamById={teamById}
+                    managerByTeamId={managerByTeamId}
+                  />
+                </div>
+              ))}
+            </div>
+          </details>
+        ) : null}
       </div>
     </div>
   );
