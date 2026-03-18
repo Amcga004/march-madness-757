@@ -37,6 +37,8 @@ type Game = {
   winning_team_id: string | null;
   losing_team_id: string | null;
   created_at: string;
+  external_game_id: string | null;
+  status?: string | null;
 };
 
 type Team = {
@@ -44,6 +46,17 @@ type Team = {
   school_name: string;
   seed: number;
   region: string;
+};
+
+type ExternalGameSync = {
+  external_game_id: string;
+  home_score: number | null;
+  away_score: number | null;
+  espn_status: string | null;
+  home_team_name: string | null;
+  away_team_name: string | null;
+  mapped_home_team_id: string | null;
+  mapped_away_team_id: string | null;
 };
 
 function MiniStat({
@@ -63,25 +76,51 @@ function MiniStat({
   );
 }
 
+function getDisplayStatus(status: string | null | undefined) {
+  if (!status) return "Final";
+  if (status === "STATUS_FINAL" || status === "complete") return "Final";
+  return status.replace("STATUS_", "").replaceAll("_", " ").trim();
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const [{ data: members }, { data: picks }, { data: teamResults }, { data: games }, { data: teams }] =
-    await Promise.all([
-      supabase.from("league_members").select("*").order("draft_slot", { ascending: true }),
-      supabase.from("picks").select("*").order("overall_pick", { ascending: true }),
-      supabase.from("team_results").select("*"),
-      supabase.from("games").select("*").order("created_at", { ascending: false }).limit(12),
-      supabase.from("teams").select("id, school_name, seed, region"),
-    ]);
+  const [
+    { data: members },
+    { data: picks },
+    { data: teamResults },
+    { data: games },
+    { data: teams },
+    { data: externalGames },
+  ] = await Promise.all([
+    supabase.from("league_members").select("*").order("draft_slot", { ascending: true }),
+    supabase.from("picks").select("*").order("overall_pick", { ascending: true }),
+    supabase.from("team_results").select("*"),
+    supabase
+      .from("games")
+      .select("id, round_name, winning_team_id, losing_team_id, created_at, external_game_id, status")
+      .order("created_at", { ascending: false })
+      .limit(12),
+    supabase.from("teams").select("id, school_name, seed, region"),
+    supabase
+      .from("external_game_sync")
+      .select(
+        "external_game_id, home_score, away_score, espn_status, home_team_name, away_team_name, mapped_home_team_id, mapped_away_team_id"
+      ),
+  ]);
 
   const typedMembers = (members ?? []) as Member[];
   const typedPicks = (picks ?? []) as Pick[];
   const typedResults = (teamResults ?? []) as TeamResult[];
   const typedGames = (games ?? []) as Game[];
   const typedTeams = (teams ?? []) as Team[];
+  const typedExternalGames = (externalGames ?? []) as ExternalGameSync[];
 
   const teamMap = new Map<string, string>(typedTeams.map((team) => [team.id, team.school_name]));
+  const externalGameMap = new Map<string, ExternalGameSync>(
+    typedExternalGames.map((game) => [game.external_game_id, game])
+  );
+
   const latestUpdated = typedGames[0]?.created_at ?? null;
 
   const forecasts: ManagerForecast[] = computeLeagueForecasts({
@@ -123,8 +162,8 @@ export default async function DashboardPage() {
     completed: typedGames.filter((game) => game.round_name === round).length,
   }));
 
-  const mobileRecentResults = typedGames.slice(0, 3);
-  const desktopRecentResults = typedGames.slice(0, 5);
+  const mobileRecentResults = typedGames.slice(0, 4);
+  const desktopRecentResults = typedGames.slice(0, 6);
 
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
@@ -242,45 +281,142 @@ export default async function DashboardPage() {
           </div>
         ) : (
           <>
-            <div className="space-y-3 sm:hidden">
-              {mobileRecentResults.map((game) => (
-                <div key={game.id} className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
-                  <div className="text-xs font-medium text-slate-400">{game.round_name}</div>
-                  <div className="mt-2 flex flex-col gap-2 text-sm font-semibold text-white">
-                    <div className="flex items-center gap-2">
-                      <TeamLogo teamName={teamMap.get(game.winning_team_id ?? "") ?? "TBD"} size={22} />
-                      <span>{teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner"}</span>
+            <div className="grid gap-2 sm:hidden">
+              {mobileRecentResults.map((game) => {
+                const externalGame =
+                  game.external_game_id ? externalGameMap.get(game.external_game_id) ?? null : null;
+
+                const homeName =
+                  externalGame?.mapped_home_team_id
+                    ? teamMap.get(externalGame.mapped_home_team_id) ??
+                      externalGame.home_team_name ??
+                      "Home"
+                    : externalGame?.home_team_name ??
+                      teamMap.get(game.winning_team_id ?? "") ??
+                      "Home";
+
+                const awayName =
+                  externalGame?.mapped_away_team_id
+                    ? teamMap.get(externalGame.mapped_away_team_id) ??
+                      externalGame.away_team_name ??
+                      "Away"
+                    : externalGame?.away_team_name ??
+                      teamMap.get(game.losing_team_id ?? "") ??
+                      "Away";
+
+                const homeScore = externalGame?.home_score ?? null;
+                const awayScore = externalGame?.away_score ?? null;
+                const statusLabel = getDisplayStatus(externalGame?.espn_status ?? game.status);
+
+                return (
+                  <div
+                    key={game.id}
+                    className="rounded-2xl border border-slate-700/80 bg-[#172033] px-3 py-2"
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                        {game.round_name}
+                      </div>
+                      <div className="text-[11px] text-slate-500">{statusLabel}</div>
                     </div>
-                    <div className="text-slate-500">defeated</div>
-                    <div className="flex items-center gap-2">
-                      <TeamLogo teamName={teamMap.get(game.losing_team_id ?? "") ?? "TBD"} size={22} />
-                      <span>{teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser"}</span>
+
+                    <div className="grid gap-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <TeamLogo teamName={homeName} size={18} />
+                          <span className="truncate text-sm font-semibold text-white">
+                            {homeName}
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-white">
+                          {homeScore ?? "—"}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <TeamLogo teamName={awayName} size={18} />
+                          <span className="truncate text-sm font-semibold text-white">
+                            {awayName}
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-white">
+                          {awayScore ?? "—"}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            <div className="hidden space-y-3 sm:block">
-              {desktopRecentResults.map((game) => (
-                <div key={game.id} className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
-                  <div className="text-sm font-medium text-slate-400">{game.round_name}</div>
-                  <div className="mt-2 flex flex-col gap-2 text-base font-semibold text-white sm:flex-row sm:flex-wrap sm:items-center">
-                    <div className="flex items-center gap-2">
-                      <TeamLogo teamName={teamMap.get(game.winning_team_id ?? "") ?? "TBD"} size={24} />
-                      <span>{teamMap.get(game.winning_team_id ?? "") ?? "Unknown winner"}</span>
+            <div className="hidden grid-cols-2 gap-3 sm:grid lg:grid-cols-3">
+              {desktopRecentResults.map((game) => {
+                const externalGame =
+                  game.external_game_id ? externalGameMap.get(game.external_game_id) ?? null : null;
+
+                const homeName =
+                  externalGame?.mapped_home_team_id
+                    ? teamMap.get(externalGame.mapped_home_team_id) ??
+                      externalGame.home_team_name ??
+                      "Home"
+                    : externalGame?.home_team_name ??
+                      teamMap.get(game.winning_team_id ?? "") ??
+                      "Home";
+
+                const awayName =
+                  externalGame?.mapped_away_team_id
+                    ? teamMap.get(externalGame.mapped_away_team_id) ??
+                      externalGame.away_team_name ??
+                      "Away"
+                    : externalGame?.away_team_name ??
+                      teamMap.get(game.losing_team_id ?? "") ??
+                      "Away";
+
+                const homeScore = externalGame?.home_score ?? null;
+                const awayScore = externalGame?.away_score ?? null;
+                const statusLabel = getDisplayStatus(externalGame?.espn_status ?? game.status);
+
+                return (
+                  <div
+                    key={game.id}
+                    className="rounded-2xl border border-slate-700/80 bg-[#172033] px-3 py-3"
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                        {game.round_name}
+                      </div>
+                      <div className="text-[11px] text-slate-500">{statusLabel}</div>
                     </div>
-                    <span className="text-slate-500">defeated</span>
-                    <div className="flex items-center gap-2">
-                      <TeamLogo teamName={teamMap.get(game.losing_team_id ?? "") ?? "TBD"} size={24} />
-                      <span>{teamMap.get(game.losing_team_id ?? "") ?? "Unknown loser"}</span>
+
+                    <div className="grid gap-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <TeamLogo teamName={homeName} size={18} />
+                          <span className="truncate text-sm font-semibold text-white">
+                            {homeName}
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-white">
+                          {homeScore ?? "—"}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <TeamLogo teamName={awayName} size={18} />
+                          <span className="truncate text-sm font-semibold text-white">
+                            {awayName}
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-white">
+                          {awayScore ?? "—"}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="mt-2 text-sm text-slate-400">
-                    {new Date(game.created_at).toLocaleString()}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
