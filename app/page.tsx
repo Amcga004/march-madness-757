@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import ManagerBadge from "./components/ManagerBadge";
 import TeamLogo from "./components/TeamLogo";
+import AutoRefreshClient from "./components/AutoRefreshClient";
 import {
   computeLeagueForecasts,
   type ForecastGame,
@@ -49,26 +50,20 @@ type Team = {
 };
 
 type ExternalGameSync = {
+  id?: string;
   external_game_id: string;
   home_score: number | null;
   away_score: number | null;
   espn_status: string | null;
+  espn_period: number | null;
+  espn_clock: string | null;
+  start_time: string | null;
+  round_name: string | null;
   home_team_name: string | null;
   away_team_name: string | null;
   mapped_home_team_id: string | null;
   mapped_away_team_id: string | null;
 };
-
-function formatEasternDateTime(value: string) {
-  return new Date(value).toLocaleString([], {
-    timeZone: "America/New_York",
-    month: "numeric",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 function MiniStat({
   label,
@@ -87,96 +82,161 @@ function MiniStat({
   );
 }
 
-function getDisplayStatus(status: string | null | undefined) {
-  if (!status) return "Final";
-  if (status === "STATUS_FINAL" || status === "complete") return "Final";
+function formatEasternDateTime(value: string) {
+  return new Date(value).toLocaleString([], {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatEasternTime(value: string) {
+  return new Date(value).toLocaleString([], {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function isLiveStatus(status: string | null | undefined) {
+  if (!status) return false;
+
+  return (
+    status === "STATUS_IN_PROGRESS" ||
+    status === "STATUS_END_PERIOD" ||
+    status === "STATUS_HALFTIME" ||
+    status.includes("HALFTIME")
+  );
+}
+
+function isFinalStatus(status: string | null | undefined) {
+  return status === "STATUS_FINAL" || status === "complete";
+}
+
+function isScheduledStatus(status: string | null | undefined) {
+  return !status || status === "STATUS_SCHEDULED";
+}
+
+function getDisplayStatus(game: ExternalGameSync | null, fallbackStatus?: string | null) {
+  const status = game?.espn_status ?? fallbackStatus ?? null;
+
+  if (!status) return "Scheduled";
+
+  if (status === "STATUS_FINAL" || status === "complete") {
+    return "Final";
+  }
+
+  if (status.includes("HALFTIME")) {
+    return "Halftime";
+  }
+
+  if (
+    status === "STATUS_IN_PROGRESS" ||
+    status === "STATUS_END_PERIOD" ||
+    status === "STATUS_HALFTIME"
+  ) {
+    const clock = game?.espn_clock && game.espn_clock !== "0:00" ? game.espn_clock : "";
+    const period = game?.espn_period && game.espn_period > 0 ? `${game.espn_period}H` : "";
+    const pieces = [clock, period].filter(Boolean);
+
+    return pieces.length > 0 ? `Live • ${pieces.join(" ")}` : "Live";
+  }
+
+  if (status === "STATUS_SCHEDULED" && game?.start_time) {
+    return formatEasternTime(game.start_time);
+  }
+
   return status.replace("STATUS_", "").replaceAll("_", " ").trim();
 }
 
-function getWinnerLoserRows(args: {
-  homeName: string;
-  awayName: string;
-  homeScore: number | null;
-  awayScore: number | null;
-  statusLabel: string;
-}) {
-  const { homeName, awayName, homeScore, awayScore, statusLabel } = args;
+function getGameTeams(
+  game: ExternalGameSync,
+  teamMap: Map<string, string>
+) {
+  const homeName =
+    game.mapped_home_team_id
+      ? teamMap.get(game.mapped_home_team_id) ?? game.home_team_name ?? "Home"
+      : game.home_team_name ?? "Home";
 
-  const isFinal = statusLabel.toLowerCase() === "final";
-  const hasScores = homeScore !== null && awayScore !== null;
-
-  if (!isFinal || !hasScores) {
-    return {
-      top: {
-        name: homeName,
-        score: homeScore,
-        winner: false,
-        loser: false,
-      },
-      bottom: {
-        name: awayName,
-        score: awayScore,
-        winner: false,
-        loser: false,
-      },
-    };
-  }
-
-  const homeWon = (homeScore ?? 0) > (awayScore ?? 0);
+  const awayName =
+    game.mapped_away_team_id
+      ? teamMap.get(game.mapped_away_team_id) ?? game.away_team_name ?? "Away"
+      : game.away_team_name ?? "Away";
 
   return {
-    top: {
-      name: homeName,
-      score: homeScore,
-      winner: homeWon,
-      loser: !homeWon,
-    },
-    bottom: {
-      name: awayName,
-      score: awayScore,
-      winner: !homeWon,
-      loser: homeWon,
-    },
+    homeName,
+    awayName,
   };
 }
 
-function ResultTeamRow({
-  teamName,
-  score,
-  winner,
-  loser,
-  size = 18,
+function SlateGameCard({
+  game,
+  teamMap,
+  compact = false,
 }: {
-  teamName: string;
-  score: number | null;
-  winner: boolean;
-  loser: boolean;
-  size?: number;
+  game: ExternalGameSync;
+  teamMap: Map<string, string>;
+  compact?: boolean;
 }) {
-  const winnerClasses = winner
-    ? "border-green-500/60 bg-green-500/12 text-green-200"
-    : "";
-  const loserClasses = loser
-    ? "border-red-500/60 bg-red-500/12 text-red-200"
-    : "";
-  const neutralClasses =
-    !winner && !loser ? "border-slate-700/80 bg-[#172033] text-white" : "";
+  const { homeName, awayName } = getGameTeams(game, teamMap);
+  const isLive = isLiveStatus(game.espn_status);
+  const isFinal = isFinalStatus(game.espn_status);
+  const statusLabel = getDisplayStatus(game);
+
+  const cardClasses = isLive
+    ? "border-red-500/60 bg-[#1a1220] shadow-[0_0_0_1px_rgba(239,68,68,0.14),0_0_18px_rgba(239,68,68,0.10)]"
+    : isFinal
+    ? "border-slate-700/80 bg-[#172033]"
+    : "border-slate-700/80 bg-[#172033]";
+
+  const statusClasses = isLive ? "text-red-300" : "text-slate-400";
 
   return (
-    <div
-      className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${winnerClasses} ${loserClasses} ${neutralClasses}`}
-    >
-      <div className="flex min-w-0 items-center gap-2">
-        <TeamLogo teamName={teamName} size={size} />
-        <span
-          className={`truncate text-sm font-semibold ${
-            loser ? "line-through opacity-90" : ""
+    <div className={`rounded-2xl border ${cardClasses} ${compact ? "px-3 py-2" : "px-3 py-3"}`}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+          {game.round_name ?? "Tournament Game"}
+        </div>
+        <div className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${statusClasses}`}>
+          {statusLabel}
+        </div>
+      </div>
+
+      <div className="grid gap-2">
+        <div
+          className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+            isFinal && game.away_score !== null && game.home_score !== null && game.away_score > game.home_score
+              ? "border-green-500/60 bg-green-500/10 text-green-200"
+              : isFinal && game.away_score !== null && game.home_score !== null && game.away_score < game.home_score
+              ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+              : "border-slate-700/80 bg-[#0f172a] text-white"
           }`}
         >
-          {teamName}
-        </span>
+          <div className="flex min-w-0 items-center gap-2">
+            <TeamLogo teamName={awayName} size={18} />
+            <span className="truncate text-sm font-semibold">{awayName}</span>
+          </div>
+          <div className="text-sm font-bold">{game.away_score ?? "—"}</div>
+        </div>
+
+        <div
+          className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+            isFinal && game.home_score !== null && game.away_score !== null && game.home_score > game.away_score
+              ? "border-green-500/60 bg-green-500/10 text-green-200"
+              : isFinal && game.home_score !== null && game.away_score !== null && game.home_score < game.away_score
+              ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+              : "border-slate-700/80 bg-[#0f172a] text-white"
+          }`}
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <TeamLogo teamName={homeName} size={18} />
+            <span className="truncate text-sm font-semibold">{homeName}</span>
+          </div>
+          <div className="text-sm font-bold">{game.home_score ?? "—"}</div>
+        </div>
       </div>
-      <div className="text-sm font-bold">{score ?? "—"}</div>
     </div>
   );
 }
@@ -204,8 +264,9 @@ export default async function DashboardPage() {
     supabase
       .from("external_game_sync")
       .select(
-        "external_game_id, home_score, away_score, espn_status, home_team_name, away_team_name, mapped_home_team_id, mapped_away_team_id"
-      ),
+        "id, external_game_id, home_score, away_score, espn_status, espn_period, espn_clock, start_time, round_name, home_team_name, away_team_name, mapped_home_team_id, mapped_away_team_id"
+      )
+      .order("start_time", { ascending: true }),
   ]);
 
   const typedMembers = (members ?? []) as Member[];
@@ -220,7 +281,7 @@ export default async function DashboardPage() {
     typedExternalGames.map((game) => [game.external_game_id, game])
   );
 
-  const latestRecordedResultAt = typedGames[0]?.created_at ?? null;
+  const latestUpdated = typedGames[0]?.created_at ?? null;
 
   const forecasts: ManagerForecast[] = computeLeagueForecasts({
     members: typedMembers as ForecastMember[],
@@ -264,8 +325,50 @@ export default async function DashboardPage() {
   const mobileRecentResults = typedGames.slice(0, 4);
   const desktopRecentResults = typedGames.slice(0, 6);
 
+  const liveGames = typedExternalGames.filter((game) => isLiveStatus(game.espn_status));
+  const nextGame =
+    typedExternalGames.find(
+      (game) =>
+        isScheduledStatus(game.espn_status) &&
+        !!game.start_time &&
+        new Date(game.start_time).getTime() >= Date.now()
+    ) ?? null;
+
+  const todaysGames = typedExternalGames.filter((game) => {
+    if (!game.start_time) return false;
+
+    const gameDate = new Date(game.start_time).toLocaleDateString("en-US", {
+      timeZone: "America/New_York",
+    });
+
+    const todayDate = new Date().toLocaleDateString("en-US", {
+      timeZone: "America/New_York",
+    });
+
+    return gameDate === todayDate;
+  });
+
+  const todaysLiveGames = todaysGames.filter((game) => isLiveStatus(game.espn_status));
+  const todaysUpcomingGames = todaysGames.filter((game) => isScheduledStatus(game.espn_status));
+  const todaysFinalGames = todaysGames.filter((game) => isFinalStatus(game.espn_status));
+
+  const leader = forecasts[0] ?? null;
+  const mostLiveTeams = forecasts.reduce<ManagerForecast | null>((best, current) => {
+    if (!best) return current;
+    if (current.liveTeams > best.liveTeams) return current;
+    if (current.liveTeams === best.liveTeams && current.currentPoints > best.currentPoints) {
+      return current;
+    }
+    return best;
+  }, null);
+
+  const closestRaceDiff =
+    forecasts.length >= 2 ? Math.abs(forecasts[0].currentPoints - forecasts[1].currentPoints) : 0;
+
   return (
     <div className="mx-auto max-w-7xl p-4 sm:p-6">
+      <AutoRefreshClient intervalMs={15000} hiddenIntervalMs={60000} />
+
       <section className="mb-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -276,19 +379,143 @@ export default async function DashboardPage() {
               League Pulse
             </h2>
             <p className="mt-1 text-sm text-slate-300">
-              Fast view of standings, upside, and latest movement.
+              Fast view of standings, live action, and what matters next.
             </p>
           </div>
 
           <div className="text-sm text-slate-400">
-            {latestRecordedResultAt
-              ? `Last result recorded: ${formatEasternDateTime(latestRecordedResultAt)}`
-              : "No results recorded yet"}
+            {latestUpdated
+              ? `Updated ${formatEasternDateTime(latestUpdated)}`
+              : "No results entered yet"}
           </div>
         </div>
       </section>
 
-      <section className="mb-5 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur sm:p-5">
+      {liveGames.length > 0 ? (
+        <section className="mb-5 rounded-3xl border border-red-500/40 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-white">Live Now</h3>
+              <p className="mt-1 text-sm text-slate-300">
+                Active tournament games happening right now.
+              </p>
+            </div>
+            <div className="rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-red-300">
+              Live
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {liveGames.map((game) => (
+              <SlateGameCard
+                key={game.external_game_id}
+                game={game}
+                teamMap={teamMap}
+              />
+            ))}
+          </div>
+        </section>
+      ) : (
+        <section className="mb-5 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-white">No Games Live Right Now</h3>
+              <p className="mt-1 text-sm text-slate-300">
+                {nextGame
+                  ? "No active games at the moment. Next tip is queued below."
+                  : "No active games in the current feed window."}
+              </p>
+            </div>
+
+            {nextGame ? (
+              <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-200">
+                Next Tip • {nextGame.start_time ? formatEasternDateTime(nextGame.start_time) : "Scheduled"}
+              </div>
+            ) : null}
+          </div>
+        </section>
+      )}
+
+      {nextGame ? (
+        <section className="mb-5 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
+          <div className="mb-3">
+            <h3 className="text-lg font-semibold text-white">Next Tip</h3>
+            <p className="mt-1 text-sm text-slate-300">
+              Next scheduled tournament game on deck.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4">
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              {nextGame.round_name ?? "Tournament Game"}
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <TeamLogo teamName={getGameTeams(nextGame, teamMap).awayName} size={22} />
+                  <span className="text-sm font-semibold text-white">
+                    {getGameTeams(nextGame, teamMap).awayName}
+                  </span>
+                </div>
+                <span className="text-slate-500">vs</span>
+                <div className="flex items-center gap-2">
+                  <TeamLogo teamName={getGameTeams(nextGame, teamMap).homeName} size={22} />
+                  <span className="text-sm font-semibold text-white">
+                    {getGameTeams(nextGame, teamMap).homeName}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-sm font-semibold text-slate-300">
+                {nextGame.start_time ? formatEasternDateTime(nextGame.start_time) : "Scheduled"}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Leader</div>
+          <div className="mt-2 text-xl font-bold text-white">
+            {leader ? leader.displayName : "—"}
+          </div>
+          <div className="mt-1 text-sm text-slate-300">
+            {leader ? `${leader.currentPoints} points` : "No standings yet"}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Most Live Teams</div>
+          <div className="mt-2 text-xl font-bold text-white">
+            {mostLiveTeams ? mostLiveTeams.displayName : "—"}
+          </div>
+          <div className="mt-1 text-sm text-slate-300">
+            {mostLiveTeams ? `${mostLiveTeams.liveTeams} still alive` : "No active teams"}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Closest Race</div>
+          <div className="mt-2 text-xl font-bold text-white">
+            {forecasts.length >= 2 ? `${closestRaceDiff} pts` : "—"}
+          </div>
+          <div className="mt-1 text-sm text-slate-300">
+            {forecasts.length >= 2 ? `${forecasts[0].displayName} vs ${forecasts[1].displayName}` : "Need two managers"}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Today’s Games</div>
+          <div className="mt-2 text-xl font-bold text-white">{todaysGames.length}</div>
+          <div className="mt-1 text-sm text-slate-300">
+            {todaysLiveGames.length} live • {todaysUpcomingGames.length} upcoming • {todaysFinalGames.length} final
+          </div>
+        </div>
+      </section>
+
+      <section className="mb-5 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-white">League at a Glance</h3>
           <div className="text-xs text-slate-400">10-second read</div>
@@ -374,10 +601,81 @@ export default async function DashboardPage() {
         </div>
       </section>
 
+      <section className="mb-5 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-white">Today’s Slate</h3>
+          <div className="text-xs text-slate-400">
+            {todaysGames.length > 0 ? `${todaysGames.length} games` : "No games today"}
+          </div>
+        </div>
+
+        {todaysGames.length === 0 ? (
+          <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4 text-sm text-slate-400">
+            No tournament games are scheduled in today’s feed window.
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {todaysLiveGames.length > 0 ? (
+              <div>
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-red-300">
+                  Live
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {todaysLiveGames.map((game) => (
+                    <SlateGameCard
+                      key={`live-${game.external_game_id}`}
+                      game={game}
+                      teamMap={teamMap}
+                      compact
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {todaysUpcomingGames.length > 0 ? (
+              <div>
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-300">
+                  Upcoming
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {todaysUpcomingGames.map((game) => (
+                    <SlateGameCard
+                      key={`upcoming-${game.external_game_id}`}
+                      game={game}
+                      teamMap={teamMap}
+                      compact
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {todaysFinalGames.length > 0 ? (
+              <div>
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Final
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {todaysFinalGames.map((game) => (
+                    <SlateGameCard
+                      key={`final-${game.external_game_id}`}
+                      game={game}
+                      teamMap={teamMap}
+                      compact
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </section>
+
       <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-white">Latest Results</h3>
-          <div className="text-xs text-slate-400">Most recent games</div>
+          <div className="text-xs text-slate-400">Most recent official games</div>
         </div>
 
         {typedGames.length === 0 ? (
@@ -411,15 +709,12 @@ export default async function DashboardPage() {
 
                 const homeScore = externalGame?.home_score ?? null;
                 const awayScore = externalGame?.away_score ?? null;
-                const statusLabel = getDisplayStatus(externalGame?.espn_status ?? game.status);
+                const statusLabel = getDisplayStatus(externalGame, game.status);
 
-                const rows = getWinnerLoserRows({
-                  homeName,
-                  awayName,
-                  homeScore,
-                  awayScore,
-                  statusLabel,
-                });
+                const awayWon =
+                  homeScore !== null && awayScore !== null ? awayScore > homeScore : false;
+                const homeWon =
+                  homeScore !== null && awayScore !== null ? homeScore > awayScore : false;
 
                 return (
                   <div
@@ -434,20 +729,37 @@ export default async function DashboardPage() {
                     </div>
 
                     <div className="grid gap-1.5">
-                      <ResultTeamRow
-                        teamName={rows.top.name}
-                        score={rows.top.score}
-                        winner={rows.top.winner}
-                        loser={rows.top.loser}
-                        size={18}
-                      />
-                      <ResultTeamRow
-                        teamName={rows.bottom.name}
-                        score={rows.bottom.score}
-                        winner={rows.bottom.winner}
-                        loser={rows.bottom.loser}
-                        size={18}
-                      />
+                      <div
+                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                          awayWon
+                            ? "border-green-500/60 bg-green-500/10 text-green-200"
+                            : homeWon
+                            ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+                            : "border-slate-700/80 bg-[#0f172a] text-white"
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <TeamLogo teamName={awayName} size={18} />
+                          <span className="truncate text-sm font-semibold">{awayName}</span>
+                        </div>
+                        <div className="text-sm font-bold">{awayScore ?? "—"}</div>
+                      </div>
+
+                      <div
+                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                          homeWon
+                            ? "border-green-500/60 bg-green-500/10 text-green-200"
+                            : awayWon
+                            ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+                            : "border-slate-700/80 bg-[#0f172a] text-white"
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <TeamLogo teamName={homeName} size={18} />
+                          <span className="truncate text-sm font-semibold">{homeName}</span>
+                        </div>
+                        <div className="text-sm font-bold">{homeScore ?? "—"}</div>
+                      </div>
                     </div>
                   </div>
                 );
@@ -479,15 +791,12 @@ export default async function DashboardPage() {
 
                 const homeScore = externalGame?.home_score ?? null;
                 const awayScore = externalGame?.away_score ?? null;
-                const statusLabel = getDisplayStatus(externalGame?.espn_status ?? game.status);
+                const statusLabel = getDisplayStatus(externalGame, game.status);
 
-                const rows = getWinnerLoserRows({
-                  homeName,
-                  awayName,
-                  homeScore,
-                  awayScore,
-                  statusLabel,
-                });
+                const awayWon =
+                  homeScore !== null && awayScore !== null ? awayScore > homeScore : false;
+                const homeWon =
+                  homeScore !== null && awayScore !== null ? homeScore > awayScore : false;
 
                 return (
                   <div
@@ -502,20 +811,37 @@ export default async function DashboardPage() {
                     </div>
 
                     <div className="grid gap-2">
-                      <ResultTeamRow
-                        teamName={rows.top.name}
-                        score={rows.top.score}
-                        winner={rows.top.winner}
-                        loser={rows.top.loser}
-                        size={18}
-                      />
-                      <ResultTeamRow
-                        teamName={rows.bottom.name}
-                        score={rows.bottom.score}
-                        winner={rows.bottom.winner}
-                        loser={rows.bottom.loser}
-                        size={18}
-                      />
+                      <div
+                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                          awayWon
+                            ? "border-green-500/60 bg-green-500/10 text-green-200"
+                            : homeWon
+                            ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+                            : "border-slate-700/80 bg-[#0f172a] text-white"
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <TeamLogo teamName={awayName} size={18} />
+                          <span className="truncate text-sm font-semibold">{awayName}</span>
+                        </div>
+                        <div className="text-sm font-bold">{awayScore ?? "—"}</div>
+                      </div>
+
+                      <div
+                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                          homeWon
+                            ? "border-green-500/60 bg-green-500/10 text-green-200"
+                            : awayWon
+                            ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+                            : "border-slate-700/80 bg-[#0f172a] text-white"
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <TeamLogo teamName={homeName} size={18} />
+                          <span className="truncate text-sm font-semibold">{homeName}</span>
+                        </div>
+                        <div className="text-sm font-bold">{homeScore ?? "—"}</div>
+                      </div>
                     </div>
                   </div>
                 );
