@@ -47,6 +47,17 @@ type Game = {
   created_at: string;
 };
 
+function formatEasternDateTime(value: string) {
+  return new Date(value).toLocaleString([], {
+    timeZone: "America/New_York",
+    month: "numeric",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function StatTile({
   label,
   value,
@@ -91,7 +102,7 @@ export default async function RostersPage() {
   const typedResults = (teamResults ?? []) as TeamResult[];
   const typedGames = (games ?? []) as Game[];
 
-  const latestUpdated = typedGames[0]?.created_at ?? null;
+  const latestRecordedResultAt = typedGames[0]?.created_at ?? null;
 
   const forecasts: ManagerForecast[] = computeLeagueForecasts({
     members: typedMembers as ForecastMember[],
@@ -120,9 +131,9 @@ export default async function RostersPage() {
           </div>
 
           <div className="text-sm text-slate-400">
-            {latestUpdated
-              ? `Last updated: ${new Date(latestUpdated).toLocaleString()}`
-              : "No results entered yet"}
+            {latestRecordedResultAt
+              ? `Last result recorded: ${formatEasternDateTime(latestRecordedResultAt)}`
+              : "No results recorded yet"}
           </div>
         </div>
       </section>

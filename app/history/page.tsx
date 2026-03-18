@@ -27,6 +27,17 @@ type ExternalGameSync = {
   mapped_away_team_id: string | null;
 };
 
+function formatEasternDateTime(value: string) {
+  return new Date(value).toLocaleString([], {
+    timeZone: "America/New_York",
+    month: "numeric",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function getDisplayStatus(status: string | null) {
   if (!status) return "Final";
   if (status === "STATUS_FINAL") return "Final";
@@ -68,7 +79,7 @@ export default async function HistoryPage() {
   const typedTeams = (teams ?? []) as Team[];
   const typedExternalGames = (externalGames ?? []) as ExternalGameSync[];
 
-  const latestUpdated = typedGames[0]?.created_at ?? null;
+  const latestRecordedResultAt = typedGames[0]?.created_at ?? null;
 
   const teamMap = new Map<string, string>(
     typedTeams.map((team) => [team.id, team.school_name])
@@ -92,8 +103,8 @@ export default async function HistoryPage() {
         </div>
 
         <div className="text-sm text-slate-400">
-          {latestUpdated
-            ? `Last updated: ${new Date(latestUpdated).toLocaleString()}`
+          {latestRecordedResultAt
+            ? `Last result recorded: ${formatEasternDateTime(latestRecordedResultAt)}`
             : "No game results recorded yet"}
         </div>
       </div>
@@ -136,7 +147,7 @@ export default async function HistoryPage() {
                     {game.round_name}
                   </div>
                   <div className="text-xs text-slate-400">
-                    {new Date(game.created_at).toLocaleString()}
+                    {formatEasternDateTime(game.created_at)}
                   </div>
                 </div>
 
