@@ -20,6 +20,56 @@ type TeamResult = {
   eliminated: boolean;
 };
 
+type LeaderboardEntry = {
+  name: string;
+  points: number;
+  liveTeams: number;
+  draftedTeams: number;
+};
+
+function getStatusLabel(
+  entry: LeaderboardEntry,
+  index: number,
+  leaderPoints: number
+) {
+  if (index === 0) return "Leader";
+  if (entry.liveTeams === 0) return "At Risk";
+  if (leaderPoints - entry.points <= 10) return "Chasing";
+  return "Alive";
+}
+
+function getPillClasses(index: number, statusLabel: string) {
+  if (index === 0) {
+    return "border-amber-400/40 bg-amber-500/10 text-amber-100 shadow-[0_0_0_1px_rgba(251,191,36,0.10),0_0_18px_rgba(251,191,36,0.10)]";
+  }
+
+  if (statusLabel === "Chasing") {
+    return "border-blue-500/30 bg-blue-500/10 text-slate-100";
+  }
+
+  if (statusLabel === "At Risk") {
+    return "border-red-500/30 bg-red-500/10 text-slate-100";
+  }
+
+  return "border-slate-700/80 bg-slate-900 text-slate-100";
+}
+
+function getStatusBadgeClasses(index: number, statusLabel: string) {
+  if (index === 0) {
+    return "border-amber-400/40 bg-amber-500/10 text-amber-200";
+  }
+
+  if (statusLabel === "Chasing") {
+    return "border-blue-500/30 bg-blue-500/10 text-blue-200";
+  }
+
+  if (statusLabel === "At Risk") {
+    return "border-red-500/30 bg-red-500/10 text-red-200";
+  }
+
+  return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
+}
+
 export default async function LeaderboardBar() {
   const supabase = await createClient();
 
@@ -66,43 +116,61 @@ export default async function LeaderboardBar() {
       return b.draftedTeams - a.draftedTeams;
     });
 
+  const leaderPoints = leaderboard[0]?.points ?? 0;
+
   return (
-    <div className="border-b border-slate-800 bg-slate-950 text-white">
+    <div className="border-b border-slate-800/80 bg-[#020817]/95 text-white">
       <AutoRefreshLeaderboard />
 
-      <div className="mx-auto max-w-7xl px-4 py-2 sm:px-6">
-        <div className="flex items-center gap-3">
-          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+      <div className="mx-auto max-w-7xl px-4 py-2.5 sm:px-6">
+        <div className="flex items-start gap-3">
+          <span className="shrink-0 pt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
             Live Leaderboard
           </span>
 
           <div className="-mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1 pb-1">
-            {leaderboard.map((entry, index) => (
-              <div
-                key={entry.name}
-                className="shrink-0 rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs sm:text-sm"
-              >
-                <div className="flex items-center gap-2 whitespace-nowrap">
-                  <span className="font-semibold text-white">
-                    #{index + 1} {entry.name}
-                  </span>
+            {leaderboard.map((entry, index) => {
+              const statusLabel = getStatusLabel(entry, index, leaderPoints);
 
-                  <span className="text-slate-400">{entry.points} pts</span>
+              return (
+                <div
+                  key={entry.name}
+                  className={`shrink-0 rounded-2xl border px-3 py-2 ${getPillClasses(
+                    index,
+                    statusLabel
+                  )}`}
+                >
+                  <div className="flex items-center gap-2 whitespace-nowrap">
+                    <span className="text-sm font-extrabold">
+                      #{index + 1} {entry.name}
+                    </span>
 
-                  <span className="hidden text-slate-500 sm:inline">•</span>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${getStatusBadgeClasses(
+                        index,
+                        statusLabel
+                      )}`}
+                    >
+                      {statusLabel}
+                    </span>
+                  </div>
 
-                  <span className="hidden text-slate-400 sm:inline">
-                    {entry.liveTeams} alive
-                  </span>
+                  <div className="mt-1.5 flex items-center gap-2 whitespace-nowrap text-xs sm:text-sm">
+                    <span className="font-semibold text-white">{entry.points} pts</span>
 
-                  <span className="hidden text-slate-500 sm:inline">•</span>
+                    <span className="text-slate-500">•</span>
 
-                  <span className="hidden text-slate-400 sm:inline">
-                    {entry.draftedTeams} drafted
-                  </span>
+                    <span className="text-slate-300">{entry.liveTeams} alive</span>
+
+                    <span className="hidden text-slate-500 sm:inline">•</span>
+
+                    <span className="hidden text-slate-400 sm:inline">
+                      {entry.draftedTeams} drafted
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
