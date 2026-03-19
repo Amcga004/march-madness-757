@@ -1033,81 +1033,109 @@ export default async function BracketPage() {
         </div>
       </section>
 
-      <section className="mb-3 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] sm:p-4">
-        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Live Impact
-        </div>
-
-        {liveGames.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {liveGames.map((game) => {
-              const href = getLiveGameHref(game, teamById, playInTeamIds);
-
-              return (
-                <CompactLiveChip
-                  key={game.id}
-                  game={game}
-                  href={href}
-                />
-              );
-            })}
-            <Link
-              href="/scores"
-              className="inline-flex items-center rounded-full border border-slate-700/80 bg-[#172033] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:-translate-y-0.5 hover:bg-[#1c2940]"
-            >
-              Open Scores
-            </Link>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-200">
-              No Live Games
-            </span>
-            <Link
-              href="/scores"
-              className="inline-flex items-center rounded-full border border-slate-700/80 bg-[#172033] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:-translate-y-0.5 hover:bg-[#1c2940]"
-            >
-              Open Scores
-            </Link>
-          </div>
-        )}
-      </section>
-
       <section className="mb-4 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] sm:p-4">
-        <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Quick Jump
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {activePlayInGames.length > 0 ? <JumpChip href="#active-playin" label="Play-In" /> : null}
-          <JumpChip href="#east-region" label="East" />
-          <JumpChip href="#west-region" label="West" />
-          <JumpChip href="#south-region" label="South" />
-          <JumpChip href="#midwest-region" label="Midwest" />
-          <JumpChip href="#finals-section" label="Finals" />
-        </div>
-      </section>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Bracket Tools
+            </div>
+            <div className="mt-1 text-sm text-slate-300">
+              Jump fast and track live impact without blocking the bracket.
+            </div>
+          </div>
 
-      <section className="mb-5 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] sm:p-4">
-        <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Legend
+          <div className="text-[10px] text-slate-400">
+            {liveGames.length > 0 ? `${liveGames.length} live` : "No live games"}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <LegendPill
-            label="Live"
-            classes="border-red-500/40 bg-red-500/10 text-red-200"
-          />
-          <LegendPill
-            label="Winner"
-            classes="border-green-500/40 bg-green-500/10 text-green-200"
-          />
-          <LegendPill
-            label="Eliminated"
-            classes="border-red-500/40 bg-red-500/10 text-red-200"
-          />
-          <LegendPill
-            label="Owned Team"
-            classes="border-blue-500/30 bg-blue-500/10 text-blue-200"
-          />
+
+        <div className="mt-3 space-y-3">
+          <div>
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Live Impact
+            </div>
+
+            {liveGames.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {liveGames.map((game) => {
+                  const href = getLiveGameHref(game, teamById, playInTeamIds);
+
+                  return (
+                    <CompactLiveChip
+                      key={game.id}
+                      game={game}
+                      href={href}
+                    />
+                  );
+                })}
+
+                <Link
+                  href="/scores"
+                  className="inline-flex items-center rounded-full border border-slate-700/80 bg-[#172033] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:-translate-y-0.5 hover:bg-[#1c2940]"
+                >
+                  Open Scores
+                </Link>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <span className="inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-200">
+                  No Live Games
+                </span>
+
+                <Link
+                  href="/scores"
+                  className="inline-flex items-center rounded-full border border-slate-700/80 bg-[#172033] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:-translate-y-0.5 hover:bg-[#1c2940]"
+                >
+                  Open Scores
+                </Link>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Quick Jump
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {activePlayInGames.length > 0 ? <JumpChip href="#active-playin" label="Play-In" /> : null}
+              <JumpChip href="#east-region" label="East" />
+              <JumpChip href="#west-region" label="West" />
+              <JumpChip href="#south-region" label="South" />
+              <JumpChip href="#midwest-region" label="Midwest" />
+              <JumpChip href="#finals-section" label="Finals" />
+            </div>
+          </div>
+
+          <details className="group rounded-2xl border border-slate-700/80 bg-[#0f172a]/80 p-3">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Legend
+              </div>
+              <div className="shrink-0 text-slate-300 transition-transform duration-200 group-open:rotate-180">
+                ▼
+              </div>
+            </summary>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <LegendPill
+                label="Live"
+                classes="border-red-500/40 bg-red-500/10 text-red-200"
+              />
+              <LegendPill
+                label="Winner"
+                classes="border-green-500/40 bg-green-500/10 text-green-200"
+              />
+              <LegendPill
+                label="Eliminated"
+                classes="border-red-500/40 bg-red-500/10 text-red-200"
+              />
+              <LegendPill
+                label="Owned Team"
+                classes="border-blue-500/30 bg-blue-500/10 text-blue-200"
+              />
+            </div>
+          </details>
         </div>
       </section>
 
