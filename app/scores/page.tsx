@@ -24,6 +24,16 @@ type ExternalGameSync = {
   away_score: number | null;
   mapped_home_team_id: string | null;
   mapped_away_team_id: string | null;
+  raw_payload: unknown;
+};
+
+type TeamStats = {
+  fgPct: string;
+  threePtPct: string;
+  ftPct: string;
+  rebounds: string;
+  assists: string;
+  turnovers: string;
 };
 
 function formatEasternDateTime(value: string) {
@@ -207,6 +217,117 @@ function StatusPill({
   );
 }
 
+function parseRawPayload(rawPayload: unknown): any | null {
+  if (!rawPayload) return null;
+
+  if (typeof rawPayload === "string") {
+    try {
+      return JSON.parse(rawPayload);
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof rawPayload === "object") {
+    return rawPayload;
+  }
+
+  return null;
+}
+
+function getCompetitorsFromPayload(rawPayload: unknown): any[] {
+  const parsed = parseRawPayload(rawPayload);
+  return parsed?.competitions?.[0]?.competitors ?? [];
+}
+
+function findCompetitorBySide(rawPayload: unknown, side: "home" | "away") {
+  const competitors = getCompetitorsFromPayload(rawPayload);
+  return competitors.find((competitor: any) => competitor?.homeAway === side) ?? null;
+}
+
+function getStatDisplayValue(competitor: any, statName: string) {
+  const stats = competitor?.statistics ?? [];
+  const match = stats.find((stat: any) => stat?.name === statName);
+  return match?.displayValue ?? "—";
+}
+
+function getTeamStats(rawPayload: unknown, side: "home" | "away"): TeamStats | null {
+  const competitor = findCompetitorBySide(rawPayload, side);
+  if (!competitor) return null;
+
+  return {
+    fgPct: getStatDisplayValue(competitor, "fieldGoalPct"),
+    threePtPct: getStatDisplayValue(competitor, "threePointFieldGoalPct"),
+    ftPct: getStatDisplayValue(competitor, "freeThrowPct"),
+    rebounds: getStatDisplayValue(competitor, "rebounds"),
+    assists: getStatDisplayValue(competitor, "assists"),
+    turnovers: getStatDisplayValue(competitor, "turnovers"),
+  };
+}
+
+function StatRow({
+  label,
+  awayValue,
+  homeValue,
+}: {
+  label: string;
+  awayValue: string;
+  homeValue: string;
+}) {
+  return (
+    <div className="grid grid-cols-[56px_1fr_1fr] items-center gap-2 rounded-xl border border-slate-700/80 bg-[#0f172a] px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+        {label}
+      </div>
+      <div className="text-center text-xs font-semibold text-white">{awayValue}</div>
+      <div className="text-center text-xs font-semibold text-white">{homeValue}</div>
+    </div>
+  );
+}
+
+function TeamStatsBlock({
+  awayName,
+  homeName,
+  awayStats,
+  homeStats,
+}: {
+  awayName: string;
+  homeName: string;
+  awayStats: TeamStats | null;
+  homeStats: TeamStats | null;
+}) {
+  if (!awayStats || !homeStats) {
+    return (
+      <div className="rounded-xl border border-slate-700/80 bg-[#0f172a] px-3 py-3 text-xs text-slate-400">
+        Team stats not available yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2.5">
+      <div className="mb-2 grid grid-cols-[56px_1fr_1fr] items-center gap-2 px-1">
+        <div />
+        <div className="truncate text-center text-[11px] font-semibold text-slate-300">
+          {awayName}
+        </div>
+        <div className="truncate text-center text-[11px] font-semibold text-slate-300">
+          {homeName}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <StatRow label="FG%" awayValue={awayStats.fgPct} homeValue={homeStats.fgPct} />
+        <StatRow label="3P%" awayValue={awayStats.threePtPct} homeValue={homeStats.threePtPct} />
+        <StatRow label="FT%" awayValue={awayStats.ftPct} homeValue={homeStats.ftPct} />
+        <StatRow label="REB" awayValue={awayStats.rebounds} homeValue={homeStats.rebounds} />
+        <StatRow label="AST" awayValue={awayStats.assists} homeValue={homeStats.assists} />
+        <StatRow label="TO" awayValue={awayStats.turnovers} homeValue={homeStats.turnovers} />
+      </div>
+    </div>
+  );
+}
+
 function ScoreGameCard({
   game,
   teamMap,
@@ -236,6 +357,10 @@ function ScoreGameCard({
     : "border-slate-700/80 bg-[#172033]";
 
   const statusClasses = isLive ? "text-red-300" : "text-slate-400";
+
+  const awayStats = getTeamStats(game.raw_payload, "away");
+  const homeStats = getTeamStats(game.raw_payload, "home");
+  const showStats = isLive || isFinal;
 
   return (
     <div className={`rounded-2xl border px-3 py-3 ${cardClasses}`}>
@@ -300,6 +425,26 @@ function ScoreGameCard({
           Bracket
         </Link>
       </div>
+
+      {showStats ? (
+        <details className="group mt-2 rounded-2xl border border-slate-700/80 bg-[#111827]/70 p-3">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+              Team Stats
+            </div>
+            <div className="shrink-0 text-slate-300 transition-transform duration-200 group-open:rotate-180">
+              ▼
+            </div>
+          </summary>
+
+          <TeamStatsBlock
+            awayName={awayName}
+            homeName={homeName}
+            awayStats={awayStats}
+            homeStats={homeStats}
+          />
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -311,7 +456,7 @@ export default async function ScoresPage() {
     supabase
       .from("external_game_sync")
       .select(
-        "id, external_game_id, espn_event_name, espn_status, espn_period, espn_clock, start_time, round_name, home_team_name, away_team_name, home_score, away_score, mapped_home_team_id, mapped_away_team_id"
+        "id, external_game_id, espn_event_name, espn_status, espn_period, espn_clock, start_time, round_name, home_team_name, away_team_name, home_score, away_score, mapped_home_team_id, mapped_away_team_id, raw_payload"
       )
       .order("start_time", { ascending: true }),
     supabase.from("teams").select("id, school_name, seed, region"),
@@ -382,7 +527,7 @@ export default async function ScoresPage() {
           {liveGames.length === 0 ? (
             <EmptyStateCard
               title="No games are live right now"
-              body="When games tip, they’ll show here first with live scores and bracket links."
+              body="When games tip, they’ll show here first with live scores, bracket links, and team stats."
             />
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
