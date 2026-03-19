@@ -1,0 +1,450 @@
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import AutoRefreshClient from "../components/AutoRefreshClient";
+import TeamLogo from "../components/TeamLogo";
+
+type Team = {
+  id: string;
+  school_name: string;
+  seed: number;
+  region: string;
+};
+
+type ExternalGameSync = {
+  id: string;
+  external_game_id: string;
+  espn_event_name: string | null;
+  espn_status: string | null;
+  espn_period: number | null;
+  espn_clock: string | null;
+  start_time: string | null;
+  round_name: string | null;
+  home_team_name: string | null;
+  away_team_name: string | null;
+  home_score: number | null;
+  away_score: number | null;
+  mapped_home_team_id: string | null;
+  mapped_away_team_id: string | null;
+};
+
+function formatEasternDateTime(value: string) {
+  return new Date(value).toLocaleString([], {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatEasternTime(value: string) {
+  return new Date(value).toLocaleString([], {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function normalizeRoundLabel(value: string | null | undefined) {
+  if (!value) return "Tournament Game";
+  return value;
+}
+
+function isLiveStatus(status: string | null | undefined) {
+  if (!status) return false;
+
+  return (
+    status === "STATUS_IN_PROGRESS" ||
+    status === "STATUS_END_PERIOD" ||
+    status === "STATUS_HALFTIME" ||
+    status.includes("HALFTIME")
+  );
+}
+
+function isFinalStatus(status: string | null | undefined) {
+  return status === "STATUS_FINAL" || status === "complete";
+}
+
+function isScheduledStatus(status: string | null | undefined) {
+  return !status || status === "STATUS_SCHEDULED";
+}
+
+function getDisplayStatus(game: ExternalGameSync) {
+  const status = game.espn_status ?? null;
+
+  if (!status) return "Scheduled";
+
+  if (status === "STATUS_FINAL" || status === "complete") {
+    return "Final";
+  }
+
+  if (status.includes("HALFTIME")) {
+    return "Halftime";
+  }
+
+  if (
+    status === "STATUS_IN_PROGRESS" ||
+    status === "STATUS_END_PERIOD" ||
+    status === "STATUS_HALFTIME"
+  ) {
+    const clock = game.espn_clock && game.espn_clock !== "0:00" ? game.espn_clock : "";
+    const period = game.espn_period && game.espn_period > 0 ? `${game.espn_period}H` : "";
+    const pieces = [clock, period].filter(Boolean);
+
+    return pieces.length > 0 ? `Live • ${pieces.join(" ")}` : "Live";
+  }
+
+  if (status === "STATUS_SCHEDULED" && game.start_time) {
+    return formatEasternTime(game.start_time);
+  }
+
+  return status.replace("STATUS_", "").replaceAll("_", " ").trim();
+}
+
+function getGameTeams(
+  game: ExternalGameSync,
+  teamMap: Map<string, Team>
+) {
+  const homeTeam = game.mapped_home_team_id
+    ? teamMap.get(game.mapped_home_team_id) ?? null
+    : null;
+
+  const awayTeam = game.mapped_away_team_id
+    ? teamMap.get(game.mapped_away_team_id) ?? null
+    : null;
+
+  return {
+    homeName: homeTeam?.school_name ?? game.home_team_name ?? "Home",
+    awayName: awayTeam?.school_name ?? game.away_team_name ?? "Away",
+    homeSeed: homeTeam?.seed ?? null,
+    awaySeed: awayTeam?.seed ?? null,
+    homeRegion: homeTeam?.region ?? null,
+    awayRegion: awayTeam?.region ?? null,
+  };
+}
+
+function getRegionAnchor(region: string | null | undefined) {
+  if (!region) return "finals-section";
+  return `${region.toLowerCase()}-region`;
+}
+
+function getBracketHref(game: ExternalGameSync, teamMap: Map<string, Team>) {
+  const homeRegion = game.mapped_home_team_id
+    ? teamMap.get(game.mapped_home_team_id)?.region ?? null
+    : null;
+
+  const awayRegion = game.mapped_away_team_id
+    ? teamMap.get(game.mapped_away_team_id)?.region ?? null
+    : null;
+
+  const roundName = game.round_name ?? "";
+
+  if (roundName === "Final Four" || roundName === "Championship") {
+    return "/bracket#finals-section";
+  }
+
+  const region = homeRegion ?? awayRegion;
+  return `/bracket#${getRegionAnchor(region)}`;
+}
+
+function SectionShell({
+  title,
+  subtitle,
+  rightLabel,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  rightLabel?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-4">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-white">{title}</h3>
+          {subtitle ? <p className="mt-1 text-xs text-slate-300 sm:text-sm">{subtitle}</p> : null}
+        </div>
+        {rightLabel ? <div className="text-[10px] text-slate-400 sm:text-xs">{rightLabel}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function EmptyStateCard({
+  title,
+  body,
+}: {
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-700 bg-[#0f172a] px-4 py-6 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+      <div className="text-sm font-semibold text-white">{title}</div>
+      <div className="mt-2 text-xs text-slate-400 sm:text-sm">{body}</div>
+    </div>
+  );
+}
+
+function ScoreGameCard({
+  game,
+  teamMap,
+}: {
+  game: ExternalGameSync;
+  teamMap: Map<string, Team>;
+}) {
+  const isLive = isLiveStatus(game.espn_status);
+  const isFinal = isFinalStatus(game.espn_status);
+  const statusLabel = getDisplayStatus(game);
+  const { homeName, awayName, homeSeed, awaySeed } = getGameTeams(game, teamMap);
+
+  const awayWon =
+    isFinal &&
+    game.away_score !== null &&
+    game.home_score !== null &&
+    game.away_score > game.home_score;
+
+  const homeWon =
+    isFinal &&
+    game.home_score !== null &&
+    game.away_score !== null &&
+    game.home_score > game.away_score;
+
+  const cardClasses = isLive
+    ? "border-red-500/60 bg-[#1a1220] shadow-[0_0_0_1px_rgba(239,68,68,0.14),0_0_18px_rgba(239,68,68,0.10)]"
+    : "border-slate-700/80 bg-[#172033]";
+
+  const statusClasses = isLive ? "text-red-300" : "text-slate-400";
+
+  return (
+    <div className={`rounded-2xl border px-3 py-3 ${cardClasses}`}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+          {normalizeRoundLabel(game.round_name)}
+        </div>
+        <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${statusClasses}`}>
+          {statusLabel}
+        </div>
+      </div>
+
+      <div className="grid gap-2">
+        <div
+          className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+            awayWon
+              ? "border-green-500/60 bg-green-500/10 text-green-200"
+              : homeWon
+              ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+              : "border-slate-700/80 bg-[#0f172a] text-white"
+          }`}
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <TeamLogo teamName={awayName} size={16} />
+            <span className="truncate text-sm font-semibold">
+              {awaySeed ? `${awaySeed}. ` : ""}
+              {awayName}
+            </span>
+          </div>
+          <div className="text-sm font-bold">{game.away_score ?? "—"}</div>
+        </div>
+
+        <div
+          className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+            homeWon
+              ? "border-green-500/60 bg-green-500/10 text-green-200"
+              : awayWon
+              ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+              : "border-slate-700/80 bg-[#0f172a] text-white"
+          }`}
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <TeamLogo teamName={homeName} size={16} />
+            <span className="truncate text-sm font-semibold">
+              {homeSeed ? `${homeSeed}. ` : ""}
+              {homeName}
+            </span>
+          </div>
+          <div className="text-sm font-bold">{game.home_score ?? "—"}</div>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <div className="text-[11px] text-slate-400">
+          {game.start_time ? formatEasternDateTime(game.start_time) : "Tip time pending"}
+        </div>
+
+        <Link
+          href={getBracketHref(game, teamMap)}
+          className="inline-flex items-center rounded-full border border-slate-700/80 bg-[#0f172a] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:bg-[#162033]"
+        >
+          View in Bracket
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export default async function ScoresPage() {
+  const supabase = await createClient();
+
+  const [{ data: externalGames }, { data: teams }] = await Promise.all([
+    supabase
+      .from("external_game_sync")
+      .select(
+        "id, external_game_id, espn_event_name, espn_status, espn_period, espn_clock, start_time, round_name, home_team_name, away_team_name, home_score, away_score, mapped_home_team_id, mapped_away_team_id"
+      )
+      .order("start_time", { ascending: true }),
+    supabase.from("teams").select("id, school_name, seed, region"),
+  ]);
+
+  const typedExternalGames = (externalGames ?? []) as ExternalGameSync[];
+  const typedTeams = (teams ?? []) as Team[];
+
+  const teamMap = new Map<string, Team>(typedTeams.map((team) => [team.id, team]));
+
+  const liveGames = typedExternalGames.filter((game) => isLiveStatus(game.espn_status));
+
+  const todayGames = typedExternalGames.filter((game) => {
+    if (!game.start_time) return false;
+
+    const gameDate = new Date(game.start_time).toLocaleDateString("en-US", {
+      timeZone: "America/New_York",
+    });
+
+    const todayDate = new Date().toLocaleDateString("en-US", {
+      timeZone: "America/New_York",
+    });
+
+    return gameDate === todayDate;
+  });
+
+  const todayUpcomingGames = todayGames.filter((game) => isScheduledStatus(game.espn_status));
+  const todayFinalGames = todayGames.filter((game) => isFinalStatus(game.espn_status));
+
+  const nextGames = typedExternalGames
+    .filter(
+      (game) =>
+        isScheduledStatus(game.espn_status) &&
+        !!game.start_time &&
+        new Date(game.start_time).getTime() >= Date.now()
+    )
+    .slice(0, 6);
+
+  return (
+    <div className="mx-auto max-w-7xl p-3 sm:p-4 md:p-6">
+      <AutoRefreshClient intervalMs={15000} hiddenIntervalMs={60000} />
+
+      <section className="mb-4">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Scores
+              </div>
+              <h2 className="mt-1 text-2xl font-bold text-white sm:text-3xl">
+                Game Center
+              </h2>
+            </div>
+
+            <div className="text-right text-[10px] text-slate-400 sm:text-xs">
+              Auto-refreshing live slate
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <span className="inline-flex items-center rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-red-200">
+              {liveGames.length} Live
+            </span>
+            <span className="inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-200">
+              {todayUpcomingGames.length} Upcoming
+            </span>
+            <span className="inline-flex items-center rounded-full border border-slate-700/80 bg-[#172033] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200">
+              {todayFinalGames.length} Final
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <div className="space-y-4">
+        <SectionShell
+          title="Live Now"
+          subtitle="Fastest way to track active games."
+          rightLabel={liveGames.length > 0 ? `${liveGames.length} live` : "No live games"}
+        >
+          {liveGames.length === 0 ? (
+            <EmptyStateCard
+              title="No games are live right now"
+              body="When games tip, they’ll show here first with live scores and bracket links."
+            />
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {liveGames.map((game) => (
+                <ScoreGameCard
+                  key={game.external_game_id}
+                  game={game}
+                  teamMap={teamMap}
+                />
+              ))}
+            </div>
+          )}
+        </SectionShell>
+
+        <SectionShell
+          title="Up Next"
+          subtitle="Next games on the slate."
+          rightLabel={nextGames.length > 0 ? `${nextGames.length} queued` : "No upcoming games"}
+        >
+          {nextGames.length === 0 ? (
+            <EmptyStateCard
+              title="No upcoming games in feed"
+              body="Scheduled tournament games will appear here as they get closer."
+            />
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {nextGames.map((game) => (
+                <ScoreGameCard
+                  key={game.external_game_id}
+                  game={game}
+                  teamMap={teamMap}
+                />
+              ))}
+            </div>
+          )}
+        </SectionShell>
+
+        <details className="group rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-base font-semibold text-white">Finals Today</div>
+              <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-400">
+                {todayFinalGames.length > 0 ? `${todayFinalGames.length} completed` : "No finals yet"}
+              </div>
+            </div>
+            <div className="shrink-0 text-slate-300 transition-transform duration-200 group-open:rotate-180">
+              ▼
+            </div>
+          </summary>
+
+          <div className="mt-3">
+            {todayFinalGames.length === 0 ? (
+              <EmptyStateCard
+                title="No completed games today"
+                body="Final scores will stack here once today’s games finish."
+              />
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {todayFinalGames.map((game) => (
+                  <ScoreGameCard
+                    key={game.external_game_id}
+                    game={game}
+                    teamMap={teamMap}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </details>
+      </div>
+    </div>
+  );
+}
