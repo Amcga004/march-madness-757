@@ -61,6 +61,11 @@ type OfficialGameRow = {
   losing_team_id: string;
 };
 
+type TeamRow = {
+  id: string;
+  is_play_in_actual: boolean | null;
+};
+
 export async function promoteResults() {
   const supabase = await createClient();
 
@@ -76,18 +81,28 @@ export async function promoteResults() {
 
   const leagueId = league.id;
 
-  const { data: finalGames, error: finalGamesError } = await supabase
-    .from("external_game_sync")
-    .select(
-      "id, external_game_id, round_name, mapped_home_team_id, mapped_away_team_id, home_score, away_score, promoted_to_results"
-    )
-    .eq("espn_status", "STATUS_FINAL");
+  const [{ data: finalGames, error: finalGamesError }, { data: teams, error: teamsError }] =
+    await Promise.all([
+      supabase
+        .from("external_game_sync")
+        .select(
+          "id, external_game_id, round_name, mapped_home_team_id, mapped_away_team_id, home_score, away_score, promoted_to_results"
+        )
+        .eq("espn_status", "STATUS_FINAL"),
+      supabase.from("teams").select("id, is_play_in_actual"),
+    ]);
 
   if (finalGamesError) {
     throw new Error(finalGamesError.message);
   }
 
+  if (teamsError) {
+    throw new Error(teamsError.message);
+  }
+
   const typedFinalGames = (finalGames ?? []) as ExternalFinalGame[];
+  const typedTeams = (teams ?? []) as TeamRow[];
+  const teamMap = new Map<string, TeamRow>(typedTeams.map((team) => [team.id, team]));
 
   let promoted = 0;
 
@@ -114,9 +129,14 @@ export async function promoteResults() {
       continue;
     }
 
-    const normalizedRound = normalizeRound(game.round_name);
+    const homeTeam = teamMap.get(game.mapped_home_team_id);
+    const awayTeam = teamMap.get(game.mapped_away_team_id);
 
-    // Look up by external_game_id regardless of league_id so we can fix old bad rows.
+    const effectiveRoundName =
+      homeTeam?.is_play_in_actual === true && awayTeam?.is_play_in_actual === true
+        ? "First Four"
+        : normalizeRound(game.round_name);
+
     const { data: existingGame, error: existingGameError } = await supabase
       .from("games")
       .select("id, league_id")
@@ -132,7 +152,7 @@ export async function promoteResults() {
         .from("games")
         .update({
           league_id: leagueId,
-          round_name: normalizedRound,
+          round_name: effectiveRoundName,
           winning_team_id: winningTeamId,
           losing_team_id: losingTeamId,
           status: "complete",
@@ -149,7 +169,7 @@ export async function promoteResults() {
         winning_team_id: winningTeamId,
         losing_team_id: losingTeamId,
         status: "complete",
-        round_name: normalizedRound,
+        round_name: effectiveRoundName,
       });
 
       if (insertError) {
@@ -207,7 +227,7 @@ export async function promoteResults() {
     const losses = typedOfficialGames.filter((game) => game.losing_team_id === teamId);
 
     const totalPoints = wins.reduce((sum, game) => {
-      return sum + (SCORING[normalizeRound(game.round_name)] ?? 0);
+      return sum + (SCORING[game.round_name] ?? 0);
     }, 0);
 
     return {
