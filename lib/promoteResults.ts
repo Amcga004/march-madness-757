@@ -1,329 +1,235 @@
 import { createClient } from "@/lib/supabase/server";
 
-type ExternalGameSyncRow = {
+const SCORING: Record<string, number> = {
+  "First Four": 0,
+  "Round of 64": 2,
+  "Round of 32": 4,
+  "Sweet 16": 7,
+  "Elite Eight": 13,
+  "Final Four": 20,
+  Championship: 37,
+};
+
+function normalizeRound(round: string | null | undefined): string {
+  const key = String(round ?? "")
+    .toLowerCase()
+    .trim();
+
+  const map: Record<string, string> = {
+    "first four": "First Four",
+    "first-four": "First Four",
+    "play-in": "First Four",
+    "play in": "First Four",
+    "round of 64": "Round of 64",
+    "round-64": "Round of 64",
+    "first round": "Round of 64",
+    "round of 32": "Round of 32",
+    "round-32": "Round of 32",
+    "second round": "Round of 32",
+    "sweet 16": "Sweet 16",
+    "sweet-16": "Sweet 16",
+    "elite 8": "Elite Eight",
+    "elite eight": "Elite Eight",
+    "elite-8": "Elite Eight",
+    "final 4": "Final Four",
+    "final four": "Final Four",
+    "final-4": "Final Four",
+    championship: "Championship",
+    title: "Championship",
+  };
+
+  return map[key] ?? "Round of 64";
+}
+
+type ExternalFinalGame = {
   id: string;
   external_game_id: string;
-  espn_event_name: string | null;
-  espn_status: string | null;
   round_name: string | null;
-  home_score: number | null;
-  away_score: number | null;
   mapped_home_team_id: string | null;
   mapped_away_team_id: string | null;
+  home_score: number | null;
+  away_score: number | null;
   promoted_to_results: boolean | null;
 };
 
-type TeamRow = {
+type OfficialGameRow = {
   id: string;
-  school_name: string;
-  is_play_in_actual: boolean | null;
-  is_play_in_placeholder: boolean | null;
-};
-
-type GameRow = {
-  id: string;
+  league_id: string;
   external_game_id: string | null;
   round_name: string;
+  winning_team_id: string;
+  losing_team_id: string;
 };
-
-function normalizeTeamName(value: string | null | undefined) {
-  if (!value) return "";
-  return value
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[.'’]/g, "")
-    .replace(/[()]/g, " ")
-    .replace(/\//g, " ")
-    .replace(/-/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function getPlayInParticipantsFromPlaceholder(placeholderName: string) {
-  const normalizedLabel = placeholderName
-    .replace(/^play[\s-]?in:/i, "")
-    .trim();
-
-  return normalizedLabel
-    .split("/")
-    .map((value) => normalizeTeamName(value))
-    .filter(Boolean);
-}
-
-function isPlayInGame(
-  game: ExternalGameSyncRow,
-  playInActualTeamIds: Set<string>
-) {
-  const roundName = (game.round_name ?? "").toLowerCase();
-  const eventName = (game.espn_event_name ?? "").toLowerCase();
-
-  if (
-    roundName.includes("first four") ||
-    roundName.includes("play-in") ||
-    roundName.includes("play in") ||
-    eventName.includes("first four") ||
-    eventName.includes("play-in") ||
-    eventName.includes("play in")
-  ) {
-    return true;
-  }
-
-  const homeIsPlayIn =
-    !!game.mapped_home_team_id && playInActualTeamIds.has(game.mapped_home_team_id);
-  const awayIsPlayIn =
-    !!game.mapped_away_team_id && playInActualTeamIds.has(game.mapped_away_team_id);
-
-  return homeIsPlayIn && awayIsPlayIn;
-}
-
-function getNormalizedOfficialRoundName(
-  game: ExternalGameSyncRow,
-  playInActualTeamIds: Set<string>
-) {
-  if (isPlayInGame(game, playInActualTeamIds)) {
-    return "First Four";
-  }
-
-  return game.round_name?.trim() || "Round of 64";
-}
-
-function getWinnerAndLoser(game: ExternalGameSyncRow) {
-  if (
-    !game.mapped_home_team_id ||
-    !game.mapped_away_team_id ||
-    game.home_score == null ||
-    game.away_score == null
-  ) {
-    return null;
-  }
-
-  if (game.home_score > game.away_score) {
-    return {
-      winningTeamId: game.mapped_home_team_id,
-      losingTeamId: game.mapped_away_team_id,
-    };
-  }
-
-  if (game.away_score > game.home_score) {
-    return {
-      winningTeamId: game.mapped_away_team_id,
-      losingTeamId: game.mapped_home_team_id,
-    };
-  }
-
-  return null;
-}
-
-function findMatchingPlaceholderTeam(
-  teams: TeamRow[],
-  actualHomeTeamId: string,
-  actualAwayTeamId: string
-) {
-  const actualTeamIds = new Set([actualHomeTeamId, actualAwayTeamId]);
-
-  const actualTeams = teams.filter((team) => actualTeamIds.has(team.id));
-  if (actualTeams.length !== 2) return null;
-
-  const actualNames = actualTeams.map((team) => normalizeTeamName(team.school_name));
-
-  return (
-    teams.find((team) => {
-      if (!team.is_play_in_placeholder) return false;
-
-      const participants = getPlayInParticipantsFromPlaceholder(team.school_name);
-      if (participants.length !== 2) return false;
-
-      return actualNames.every((name) => participants.includes(name));
-    }) ?? null
-  );
-}
-
-async function upsertOfficialGame(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  existingGameByExternalId: Map<string, GameRow>,
-  externalGame: ExternalGameSyncRow,
-  winningTeamId: string,
-  losingTeamId: string,
-  normalizedRoundName: string
-) {
-  const existingGame = existingGameByExternalId.get(externalGame.external_game_id);
-
-  if (existingGame) {
-    const { error } = await supabase
-      .from("games")
-      .update({
-        winning_team_id: winningTeamId,
-        losing_team_id: losingTeamId,
-        status: "FINAL",
-        round_name: normalizedRoundName,
-      })
-      .eq("id", existingGame.id);
-
-    if (error) throw new Error(error.message);
-
-    existingGameByExternalId.set(externalGame.external_game_id, {
-      ...existingGame,
-      round_name: normalizedRoundName,
-    });
-
-    return;
-  }
-
-  const { data: insertedRows, error } = await supabase
-    .from("games")
-    .insert({
-      external_game_id: externalGame.external_game_id,
-      winning_team_id: winningTeamId,
-      losing_team_id: losingTeamId,
-      status: "FINAL",
-      round_name: normalizedRoundName,
-    })
-    .select("id, external_game_id, round_name")
-    .limit(1);
-
-  if (error) throw new Error(error.message);
-
-  const inserted = insertedRows?.[0];
-  if (inserted?.external_game_id) {
-    existingGameByExternalId.set(inserted.external_game_id, inserted as GameRow);
-  }
-}
-
-async function migratePlayInPlaceholderPickIfNeeded(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  teams: TeamRow[],
-  externalGame: ExternalGameSyncRow,
-  winningTeamId: string
-) {
-  if (!externalGame.mapped_home_team_id || !externalGame.mapped_away_team_id) {
-    return false;
-  }
-
-  const placeholderTeam = findMatchingPlaceholderTeam(
-    teams,
-    externalGame.mapped_home_team_id,
-    externalGame.mapped_away_team_id
-  );
-
-  if (!placeholderTeam) return false;
-
-  const { data: picksToUpdate, error: picksError } = await supabase
-    .from("picks")
-    .select("id, team_id")
-    .eq("team_id", placeholderTeam.id);
-
-  if (picksError) throw new Error(picksError.message);
-
-  if (!picksToUpdate || picksToUpdate.length === 0) {
-    return false;
-  }
-
-  const { error: updateError } = await supabase
-    .from("picks")
-    .update({ team_id: winningTeamId })
-    .eq("team_id", placeholderTeam.id);
-
-  if (updateError) throw new Error(updateError.message);
-
-  return true;
-}
 
 export async function promoteResults() {
   const supabase = await createClient();
 
-  const [
-    { data: finalExternalGames, error: externalGamesError },
-    { data: teams, error: teamsError },
-    { data: existingGames, error: existingGamesError },
-  ] = await Promise.all([
-    supabase
-      .from("external_game_sync")
-      .select(
-        "id, external_game_id, espn_event_name, espn_status, round_name, home_score, away_score, mapped_home_team_id, mapped_away_team_id, promoted_to_results"
-      )
-      .eq("espn_status", "STATUS_FINAL"),
-    supabase
-      .from("teams")
-      .select("id, school_name, is_play_in_actual, is_play_in_placeholder"),
-    supabase
-      .from("games")
-      .select("id, external_game_id, round_name"),
-  ]);
+  const { data: league, error: leagueError } = await supabase
+    .from("leagues")
+    .select("id")
+    .eq("public_slug", "2026-757-march-madness-draft")
+    .single();
 
-  if (externalGamesError) throw new Error(externalGamesError.message);
-  if (teamsError) throw new Error(teamsError.message);
-  if (existingGamesError) throw new Error(existingGamesError.message);
+  if (leagueError || !league) {
+    throw new Error("League not found");
+  }
 
-  const typedExternalGames = (finalExternalGames ?? []) as ExternalGameSyncRow[];
-  const typedTeams = (teams ?? []) as TeamRow[];
-  const typedExistingGames = (existingGames ?? []) as GameRow[];
+  const leagueId = league.id;
 
-  const existingGameByExternalId = new Map<string, GameRow>(
-    typedExistingGames
-      .filter((game) => !!game.external_game_id)
-      .map((game) => [game.external_game_id as string, game])
-  );
+  // Pull every final ESPN game so we can safely backfill anything that was
+  // previously promoted without team_results being rebuilt.
+  const { data: finalGames, error: finalGamesError } = await supabase
+    .from("external_game_sync")
+    .select(
+      "id, external_game_id, round_name, mapped_home_team_id, mapped_away_team_id, home_score, away_score, promoted_to_results"
+    )
+    .eq("espn_status", "STATUS_FINAL");
 
-  const playInActualTeamIds = new Set(
-    typedTeams
-      .filter((team) => team.is_play_in_actual)
-      .map((team) => team.id)
-  );
+  if (finalGamesError) {
+    throw new Error(finalGamesError.message);
+  }
+
+  const typedFinalGames = (finalGames ?? []) as ExternalFinalGame[];
 
   let promoted = 0;
-  let correctedRounds = 0;
-  let migratedPlaceholderPicks = 0;
 
-  for (const game of typedExternalGames) {
-    const outcome = getWinnerAndLoser(game);
-    if (!outcome) continue;
-
-    const normalizedRoundName = getNormalizedOfficialRoundName(game, playInActualTeamIds);
-
-    const existingOfficialGame = existingGameByExternalId.get(game.external_game_id);
-    const existingRoundName = existingOfficialGame?.round_name ?? null;
-
-    await upsertOfficialGame(
-      supabase,
-      existingGameByExternalId,
-      game,
-      outcome.winningTeamId,
-      outcome.losingTeamId,
-      normalizedRoundName
-    );
-
-    if (existingOfficialGame && existingRoundName !== normalizedRoundName) {
-      correctedRounds += 1;
+  for (const game of typedFinalGames) {
+    if (
+      !game.mapped_home_team_id ||
+      !game.mapped_away_team_id ||
+      game.home_score == null ||
+      game.away_score == null
+    ) {
+      continue;
     }
 
-    if (isPlayInGame(game, playInActualTeamIds)) {
-      const migrated = await migratePlayInPlaceholderPickIfNeeded(
-        supabase,
-        typedTeams,
-        game,
-        outcome.winningTeamId
-      );
+    let winningTeamId: string | null = null;
+    let losingTeamId: string | null = null;
 
-      if (migrated) {
-        migratedPlaceholderPicks += 1;
+    if (game.home_score > game.away_score) {
+      winningTeamId = game.mapped_home_team_id;
+      losingTeamId = game.mapped_away_team_id;
+    } else if (game.away_score > game.home_score) {
+      winningTeamId = game.mapped_away_team_id;
+      losingTeamId = game.mapped_home_team_id;
+    } else {
+      continue;
+    }
+
+    const normalizedRound = normalizeRound(game.round_name);
+
+    // Prevent duplicate official game inserts by external_game_id first.
+    const { data: existingByExternalId, error: existingByExternalIdError } = await supabase
+      .from("games")
+      .select("id")
+      .eq("league_id", leagueId)
+      .eq("external_game_id", game.external_game_id)
+      .maybeSingle();
+
+    if (existingByExternalIdError) {
+      throw new Error(existingByExternalIdError.message);
+    }
+
+    if (!existingByExternalId) {
+      const { error: insertError } = await supabase.from("games").insert({
+        league_id: leagueId,
+        external_game_id: game.external_game_id,
+        winning_team_id: winningTeamId,
+        losing_team_id: losingTeamId,
+        status: "complete",
+        round_name: normalizedRound,
+      });
+
+      if (insertError) {
+        throw new Error(insertError.message);
       }
+
+      promoted += 1;
     }
 
+    // Mark promoted so your sync feed stays clean.
     if (!game.promoted_to_results) {
       const { error: updateError } = await supabase
         .from("external_game_sync")
         .update({ promoted_to_results: true })
         .eq("id", game.id);
 
-      if (updateError) throw new Error(updateError.message);
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+    }
+  }
 
-      promoted += 1;
+  // Rebuild team_results from scratch so standings always match official games.
+  const [{ data: officialGames, error: officialGamesError }, { data: picks, error: picksError }] =
+    await Promise.all([
+      supabase
+        .from("games")
+        .select("id, league_id, external_game_id, round_name, winning_team_id, losing_team_id")
+        .eq("league_id", leagueId),
+      supabase.from("picks").select("team_id"),
+    ]);
+
+  if (officialGamesError) {
+    throw new Error(officialGamesError.message);
+  }
+
+  if (picksError) {
+    throw new Error(picksError.message);
+  }
+
+  const typedOfficialGames = (officialGames ?? []) as OfficialGameRow[];
+  const pickedTeamIds = new Set((picks ?? []).map((pick) => pick.team_id as string));
+
+  const relevantTeamIds = new Set<string>();
+
+  for (const game of typedOfficialGames) {
+    relevantTeamIds.add(game.winning_team_id);
+    relevantTeamIds.add(game.losing_team_id);
+  }
+
+  for (const teamId of pickedTeamIds) {
+    relevantTeamIds.add(teamId);
+  }
+
+  const rebuiltTeamResults = Array.from(relevantTeamIds).map((teamId) => {
+    const wins = typedOfficialGames.filter((game) => game.winning_team_id === teamId);
+    const losses = typedOfficialGames.filter((game) => game.losing_team_id === teamId);
+
+    const totalPoints = wins.reduce((sum, game) => {
+      return sum + (SCORING[normalizeRound(game.round_name)] ?? 0);
+    }, 0);
+
+    return {
+      league_id: leagueId,
+      team_id: teamId,
+      total_points: totalPoints,
+      eliminated: losses.length > 0,
+    };
+  });
+
+  // Full rebuild prevents stale / partial scoring state.
+  const { error: deleteTeamResultsError } = await supabase
+    .from("team_results")
+    .delete()
+    .eq("league_id", leagueId);
+
+  if (deleteTeamResultsError) {
+    throw new Error(deleteTeamResultsError.message);
+  }
+
+  if (rebuiltTeamResults.length > 0) {
+    const { error: upsertTeamResultsError } = await supabase
+      .from("team_results")
+      .insert(rebuiltTeamResults);
+
+    if (upsertTeamResultsError) {
+      throw new Error(upsertTeamResultsError.message);
     }
   }
 
   return {
     promotedGames: promoted,
-    correctedRounds,
-    migratedPlaceholderPicks,
+    rebuiltTeamResults: rebuiltTeamResults.length,
   };
 }
