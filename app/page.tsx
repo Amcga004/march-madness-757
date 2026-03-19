@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import ManagerBadge from "./components/ManagerBadge";
 import TeamLogo from "./components/TeamLogo";
-import AutoRefreshClient from "./components/AutoRefreshClient";
 import {
   computeLeagueForecasts,
   type ForecastGame,
@@ -63,6 +62,16 @@ type ExternalGameSync = {
   away_team_name: string | null;
   mapped_home_team_id: string | null;
   mapped_away_team_id: string | null;
+  raw_payload: unknown;
+};
+
+type TeamStats = {
+  fgPct: string;
+  threePtPct: string;
+  ftPct: string;
+  rebounds: string;
+  assists: string;
+  turnovers: string;
 };
 
 function MiniStat({
@@ -231,13 +240,15 @@ function getDisplayStatus(game: ExternalGameSync | null, fallbackStatus?: string
 }
 
 function getGameTeams(game: ExternalGameSync, teamMap: Map<string, string>) {
-  const homeName = game.mapped_home_team_id
-    ? teamMap.get(game.mapped_home_team_id) ?? game.home_team_name ?? "Home"
-    : game.home_team_name ?? "Home";
+  const homeName =
+    game.mapped_home_team_id
+      ? teamMap.get(game.mapped_home_team_id) ?? game.home_team_name ?? "Home"
+      : game.home_team_name ?? "Home";
 
-  const awayName = game.mapped_away_team_id
-    ? teamMap.get(game.mapped_away_team_id) ?? game.away_team_name ?? "Away"
-    : game.away_team_name ?? "Away";
+  const awayName =
+    game.mapped_away_team_id
+      ? teamMap.get(game.mapped_away_team_id) ?? game.away_team_name ?? "Away"
+      : game.away_team_name ?? "Away";
 
   return {
     homeName,
@@ -245,7 +256,118 @@ function getGameTeams(game: ExternalGameSync, teamMap: Map<string, string>) {
   };
 }
 
-function SlateGameCard({
+function parseRawPayload(rawPayload: unknown): any | null {
+  if (!rawPayload) return null;
+
+  if (typeof rawPayload === "string") {
+    try {
+      return JSON.parse(rawPayload);
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof rawPayload === "object") {
+    return rawPayload;
+  }
+
+  return null;
+}
+
+function getCompetitorsFromPayload(rawPayload: unknown): any[] {
+  const parsed = parseRawPayload(rawPayload);
+  return parsed?.competitions?.[0]?.competitors ?? [];
+}
+
+function findCompetitorBySide(rawPayload: unknown, side: "home" | "away") {
+  const competitors = getCompetitorsFromPayload(rawPayload);
+  return competitors.find((competitor: any) => competitor?.homeAway === side) ?? null;
+}
+
+function getStatDisplayValue(competitor: any, statName: string) {
+  const stats = competitor?.statistics ?? [];
+  const match = stats.find((stat: any) => stat?.name === statName);
+  return match?.displayValue ?? "—";
+}
+
+function getTeamStats(rawPayload: unknown, side: "home" | "away"): TeamStats | null {
+  const competitor = findCompetitorBySide(rawPayload, side);
+  if (!competitor) return null;
+
+  return {
+    fgPct: getStatDisplayValue(competitor, "fieldGoalPct"),
+    threePtPct: getStatDisplayValue(competitor, "threePointFieldGoalPct"),
+    ftPct: getStatDisplayValue(competitor, "freeThrowPct"),
+    rebounds: getStatDisplayValue(competitor, "rebounds"),
+    assists: getStatDisplayValue(competitor, "assists"),
+    turnovers: getStatDisplayValue(competitor, "turnovers"),
+  };
+}
+
+function StatRow({
+  label,
+  awayValue,
+  homeValue,
+}: {
+  label: string;
+  awayValue: string;
+  homeValue: string;
+}) {
+  return (
+    <div className="grid grid-cols-[52px_1fr_1fr] items-center gap-2 rounded-xl border border-slate-700/80 bg-[#0f172a] px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+        {label}
+      </div>
+      <div className="text-center text-xs font-semibold text-white">{awayValue}</div>
+      <div className="text-center text-xs font-semibold text-white">{homeValue}</div>
+    </div>
+  );
+}
+
+function TeamStatsBlock({
+  awayName,
+  homeName,
+  awayStats,
+  homeStats,
+}: {
+  awayName: string;
+  homeName: string;
+  awayStats: TeamStats | null;
+  homeStats: TeamStats | null;
+}) {
+  if (!awayStats || !homeStats) {
+    return (
+      <div className="rounded-xl border border-slate-700/80 bg-[#0f172a] px-3 py-3 text-xs text-slate-400">
+        Team stats not available yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2">
+      <div className="mb-2 grid grid-cols-[52px_1fr_1fr] items-center gap-2 px-1">
+        <div />
+        <div className="truncate text-center text-[11px] font-semibold text-slate-300">
+          {awayName}
+        </div>
+        <div className="truncate text-center text-[11px] font-semibold text-slate-300">
+          {homeName}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <StatRow label="FG%" awayValue={awayStats.fgPct} homeValue={homeStats.fgPct} />
+        <StatRow label="3P%" awayValue={awayStats.threePtPct} homeValue={homeStats.threePtPct} />
+        <StatRow label="FT%" awayValue={awayStats.ftPct} homeValue={homeStats.ftPct} />
+        <StatRow label="REB" awayValue={awayStats.rebounds} homeValue={homeStats.rebounds} />
+        <StatRow label="AST" awayValue={awayStats.assists} homeValue={homeStats.assists} />
+        <StatRow label="TO" awayValue={awayStats.turnovers} homeValue={homeStats.turnovers} />
+      </div>
+    </div>
+  );
+}
+
+function ExpandableSlateGameCard({
   game,
   teamMap,
   compact = false,
@@ -259,6 +381,10 @@ function SlateGameCard({
   const isFinal = isFinalStatus(game.espn_status);
   const statusLabel = getDisplayStatus(game);
 
+  const awayStats = getTeamStats(game.raw_payload, "away");
+  const homeStats = getTeamStats(game.raw_payload, "home");
+  const showStats = isLive || isFinal;
+
   const cardClasses = isLive
     ? "border-red-500/60 bg-[#1a1220] shadow-[0_0_0_1px_rgba(239,68,68,0.14),0_0_18px_rgba(239,68,68,0.10)]"
     : "border-slate-700/80 bg-[#172033]";
@@ -266,50 +392,70 @@ function SlateGameCard({
   const statusClasses = isLive ? "text-red-300" : "text-slate-400";
 
   return (
-    <div className={`rounded-2xl border ${cardClasses} ${compact ? "px-2.5 py-2" : "px-3 py-2.5"}`}>
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-          {game.round_name ?? "Tournament Game"}
-        </div>
-        <div className={`text-[9px] font-semibold uppercase tracking-[0.14em] ${statusClasses}`}>
-          {statusLabel}
-        </div>
-      </div>
-
-      <div className="grid gap-1.5">
-        <div
-          className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 ${
-            isFinal && game.away_score !== null && game.home_score !== null && game.away_score > game.home_score
-              ? "border-green-500/60 bg-green-500/10 text-green-200"
-              : isFinal && game.away_score !== null && game.home_score !== null && game.away_score < game.home_score
-              ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
-              : "border-slate-700/80 bg-[#0f172a] text-white"
-          }`}
-        >
-          <div className="flex min-w-0 items-center gap-2">
-            <TeamLogo teamName={awayName} size={15} />
-            <span className="truncate text-[13px] font-semibold">{awayName}</span>
+    <details className={`group rounded-2xl border ${cardClasses}`}>
+      <summary className={`cursor-pointer list-none ${compact ? "px-2.5 py-2" : "px-3 py-2.5"}`}>
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+            {game.round_name ?? "Tournament Game"}
           </div>
-          <div className="text-[13px] font-bold">{game.away_score ?? "—"}</div>
+          <div className="flex items-center gap-2">
+            <div className={`text-[9px] font-semibold uppercase tracking-[0.14em] ${statusClasses}`}>
+              {statusLabel}
+            </div>
+            {(showStats && (awayStats || homeStats)) ? (
+              <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-300 transition-transform duration-200 group-open:rotate-180">
+                ▼
+              </div>
+            ) : null}
+          </div>
         </div>
 
-        <div
-          className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 ${
-            isFinal && game.home_score !== null && game.away_score !== null && game.home_score > game.away_score
-              ? "border-green-500/60 bg-green-500/10 text-green-200"
-              : isFinal && game.home_score !== null && game.away_score !== null && game.home_score < game.away_score
-              ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
-              : "border-slate-700/80 bg-[#0f172a] text-white"
-          }`}
-        >
-          <div className="flex min-w-0 items-center gap-2">
-            <TeamLogo teamName={homeName} size={15} />
-            <span className="truncate text-[13px] font-semibold">{homeName}</span>
+        <div className="grid gap-1.5">
+          <div
+            className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 ${
+              isFinal && game.away_score !== null && game.home_score !== null && game.away_score > game.home_score
+                ? "border-green-500/60 bg-green-500/10 text-green-200"
+                : isFinal && game.away_score !== null && game.home_score !== null && game.away_score < game.home_score
+                ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+                : "border-slate-700/80 bg-[#0f172a] text-white"
+            }`}
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <TeamLogo teamName={awayName} size={15} />
+              <span className="truncate text-[13px] font-semibold">{awayName}</span>
+            </div>
+            <div className="text-[13px] font-bold">{game.away_score ?? "—"}</div>
           </div>
-          <div className="text-[13px] font-bold">{game.home_score ?? "—"}</div>
+
+          <div
+            className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 ${
+              isFinal && game.home_score !== null && game.away_score !== null && game.home_score > game.away_score
+                ? "border-green-500/60 bg-green-500/10 text-green-200"
+                : isFinal && game.home_score !== null && game.away_score !== null && game.home_score < game.away_score
+                ? "border-red-500/60 bg-red-500/10 text-red-200 line-through"
+                : "border-slate-700/80 bg-[#0f172a] text-white"
+            }`}
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <TeamLogo teamName={homeName} size={15} />
+              <span className="truncate text-[13px] font-semibold">{homeName}</span>
+            </div>
+            <div className="text-[13px] font-bold">{game.home_score ?? "—"}</div>
+          </div>
         </div>
-      </div>
-    </div>
+      </summary>
+
+      {showStats ? (
+        <div className="border-t border-slate-700/80 px-2.5 pb-2.5 pt-2">
+          <TeamStatsBlock
+            awayName={awayName}
+            homeName={homeName}
+            awayStats={awayStats}
+            homeStats={homeStats}
+          />
+        </div>
+      ) : null}
+    </details>
   );
 }
 
@@ -351,7 +497,7 @@ export default async function DashboardPage() {
     supabase
       .from("external_game_sync")
       .select(
-        "id, external_game_id, home_score, away_score, espn_status, espn_period, espn_clock, start_time, round_name, home_team_name, away_team_name, mapped_home_team_id, mapped_away_team_id"
+        "id, external_game_id, home_score, away_score, espn_status, espn_period, espn_clock, start_time, round_name, home_team_name, away_team_name, mapped_home_team_id, mapped_away_team_id, raw_payload"
       )
       .order("start_time", { ascending: true }),
   ]);
@@ -462,8 +608,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-7xl p-3 sm:p-4 md:p-6">
-      <AutoRefreshClient intervalMs={15000} hiddenIntervalMs={60000} />
-
       <section className="mb-3">
         <div className="flex items-end justify-between gap-3">
           <div>
@@ -516,12 +660,12 @@ export default async function DashboardPage() {
         {liveGames.length > 0 ? (
           <SectionShell
             title="Live Now"
-            subtitle="Games happening right now."
+            subtitle="Tap a game card to expand team stats."
             rightLabel={`${liveGames.length} live`}
           >
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {liveGames.map((game) => (
-                <SlateGameCard
+                <ExpandableSlateGameCard
                   key={game.external_game_id}
                   game={game}
                   teamMap={teamMap}
@@ -533,26 +677,15 @@ export default async function DashboardPage() {
         ) : (
           <SectionShell
             title="Next Up"
-            subtitle={nextGame ? "Next tip on deck." : "No live games in the current feed window."}
+            subtitle={nextGame ? "No games live. Next tip on deck." : "No live games in the current feed window."}
             rightLabel={nextGame?.start_time ? formatEasternDateTime(nextGame.start_time) : undefined}
           >
             {nextGame ? (
-              <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 px-3 py-2.5">
-                <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-blue-200">
-                  {nextGame.round_name ?? "Tournament Game"}
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white">
-                  <div className="flex items-center gap-2">
-                    <TeamLogo teamName={getGameTeams(nextGame, teamMap).awayName} size={16} />
-                    <span>{getGameTeams(nextGame, teamMap).awayName}</span>
-                  </div>
-                  <span className="text-slate-400">vs</span>
-                  <div className="flex items-center gap-2">
-                    <TeamLogo teamName={getGameTeams(nextGame, teamMap).homeName} size={16} />
-                    <span>{getGameTeams(nextGame, teamMap).homeName}</span>
-                  </div>
-                </div>
-              </div>
+              <ExpandableSlateGameCard
+                game={nextGame}
+                teamMap={teamMap}
+                compact
+              />
             ) : (
               <EmptyStateCard
                 title="No active games right now"
@@ -653,7 +786,7 @@ export default async function DashboardPage() {
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                     {section.games.map((game) => (
-                      <SlateGameCard
+                      <ExpandableSlateGameCard
                         key={`${section.key}-${game.external_game_id}`}
                         game={game}
                         teamMap={teamMap}
