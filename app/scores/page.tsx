@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import AutoRefreshClient from "../components/AutoRefreshClient";
 import TeamLogo from "../components/TeamLogo";
 
 type Team = {
@@ -45,9 +44,10 @@ function formatEasternTime(value: string) {
   });
 }
 
-function normalizeRoundLabel(value: string | null | undefined) {
-  if (!value) return "Tournament Game";
-  return value;
+function getTodayEasternDateString() {
+  return new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+  });
 }
 
 function isLiveStatus(status: string | null | undefined) {
@@ -101,10 +101,7 @@ function getDisplayStatus(game: ExternalGameSync) {
   return status.replace("STATUS_", "").replaceAll("_", " ").trim();
 }
 
-function getGameTeams(
-  game: ExternalGameSync,
-  teamMap: Map<string, Team>
-) {
+function getGameTeams(game: ExternalGameSync, teamMap: Map<string, Team>) {
   const homeTeam = game.mapped_home_team_id
     ? teamMap.get(game.mapped_home_team_id) ?? null
     : null;
@@ -147,6 +144,21 @@ function getBracketHref(game: ExternalGameSync, teamMap: Map<string, Team>) {
   return `/bracket#${getRegionAnchor(region)}`;
 }
 
+function EmptyStateCard({
+  title,
+  body,
+}: {
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-700 bg-[#0f172a] px-4 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+      <div className="text-sm font-semibold text-white">{title}</div>
+      <div className="mt-1.5 text-xs text-slate-400 sm:text-sm">{body}</div>
+    </div>
+  );
+}
+
 function SectionShell({
   title,
   subtitle,
@@ -159,31 +171,39 @@ function SectionShell({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-4">
-      <div className="mb-3 flex items-start justify-between gap-3">
+    <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
+      <div className="mb-2.5 flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-white">{title}</h3>
-          {subtitle ? <p className="mt-1 text-xs text-slate-300 sm:text-sm">{subtitle}</p> : null}
+          <h3 className="text-sm font-semibold text-white sm:text-base">{title}</h3>
+          {subtitle ? <p className="mt-0.5 text-[11px] text-slate-300 sm:text-xs">{subtitle}</p> : null}
         </div>
-        {rightLabel ? <div className="text-[10px] text-slate-400 sm:text-xs">{rightLabel}</div> : null}
+        {rightLabel ? <div className="text-[10px] text-slate-400">{rightLabel}</div> : null}
       </div>
       {children}
     </section>
   );
 }
 
-function EmptyStateCard({
-  title,
-  body,
+function StatusPill({
+  label,
+  tone,
 }: {
-  title: string;
-  body: string;
+  label: string;
+  tone: "live" | "upcoming" | "final";
 }) {
+  const classes =
+    tone === "live"
+      ? "border-red-500/40 bg-red-500/10 text-red-200"
+      : tone === "upcoming"
+      ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
+      : "border-slate-700/80 bg-[#172033] text-slate-200";
+
   return (
-    <div className="rounded-2xl border border-dashed border-slate-700 bg-[#0f172a] px-4 py-6 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
-      <div className="text-sm font-semibold text-white">{title}</div>
-      <div className="mt-2 text-xs text-slate-400 sm:text-sm">{body}</div>
-    </div>
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${classes}`}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -220,15 +240,15 @@ function ScoreGameCard({
   return (
     <div className={`rounded-2xl border px-3 py-3 ${cardClasses}`}>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-          {normalizeRoundLabel(game.round_name)}
+        <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+          {game.round_name ?? "Tournament Game"}
         </div>
         <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${statusClasses}`}>
           {statusLabel}
         </div>
       </div>
 
-      <div className="grid gap-2">
+      <div className="grid gap-1.5">
         <div
           className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
             awayWon
@@ -268,16 +288,16 @@ function ScoreGameCard({
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-3">
+      <div className="mt-2.5 flex items-center justify-between gap-3">
         <div className="text-[11px] text-slate-400">
           {game.start_time ? formatEasternDateTime(game.start_time) : "Tip time pending"}
         </div>
 
         <Link
           href={getBracketHref(game, teamMap)}
-          className="inline-flex items-center rounded-full border border-slate-700/80 bg-[#0f172a] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:bg-[#162033]"
+          className="inline-flex items-center rounded-full border border-slate-700/80 bg-[#0f172a] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:bg-[#162033]"
         >
-          View in Bracket
+          Bracket
         </Link>
       </div>
     </div>
@@ -302,6 +322,8 @@ export default async function ScoresPage() {
 
   const teamMap = new Map<string, Team>(typedTeams.map((team) => [team.id, team]));
 
+  const todayEastern = getTodayEasternDateString();
+
   const liveGames = typedExternalGames.filter((game) => isLiveStatus(game.espn_status));
 
   const todayGames = typedExternalGames.filter((game) => {
@@ -311,11 +333,7 @@ export default async function ScoresPage() {
       timeZone: "America/New_York",
     });
 
-    const todayDate = new Date().toLocaleDateString("en-US", {
-      timeZone: "America/New_York",
-    });
-
-    return gameDate === todayDate;
+    return gameDate === todayEastern;
   });
 
   const todayUpcomingGames = todayGames.filter((game) => isScheduledStatus(game.espn_status));
@@ -328,47 +346,37 @@ export default async function ScoresPage() {
         !!game.start_time &&
         new Date(game.start_time).getTime() >= Date.now()
     )
-    .slice(0, 6);
+    .slice(0, 8);
 
   return (
     <div className="mx-auto max-w-7xl p-3 sm:p-4 md:p-6">
-      <AutoRefreshClient intervalMs={15000} hiddenIntervalMs={60000} />
-
-      <section className="mb-4">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                Scores
-              </div>
-              <h2 className="mt-1 text-2xl font-bold text-white sm:text-3xl">
-                Game Center
-              </h2>
+      <section className="mb-3">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Scores
             </div>
-
-            <div className="text-right text-[10px] text-slate-400 sm:text-xs">
-              Auto-refreshing live slate
-            </div>
+            <h2 className="mt-1 text-2xl font-bold leading-tight text-white sm:text-3xl">
+              Game Center
+            </h2>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <span className="inline-flex items-center rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-red-200">
-              {liveGames.length} Live
-            </span>
-            <span className="inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-200">
-              {todayUpcomingGames.length} Upcoming
-            </span>
-            <span className="inline-flex items-center rounded-full border border-slate-700/80 bg-[#172033] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200">
-              {todayFinalGames.length} Final
-            </span>
+          <div className="text-right text-[10px] text-slate-400 sm:text-xs">
+            Auto-refreshing
           </div>
         </div>
       </section>
 
-      <div className="space-y-4">
+      <section className="mb-3 flex flex-wrap gap-2">
+        <StatusPill label={`${liveGames.length} Live`} tone="live" />
+        <StatusPill label={`${todayUpcomingGames.length} Upcoming`} tone="upcoming" />
+        <StatusPill label={`${todayFinalGames.length} Final`} tone="final" />
+      </section>
+
+      <div className="space-y-3">
         <SectionShell
           title="Live Now"
-          subtitle="Fastest way to track active games."
+          subtitle="Fastest view of active games."
           rightLabel={liveGames.length > 0 ? `${liveGames.length} live` : "No live games"}
         >
           {liveGames.length === 0 ? (
@@ -391,7 +399,7 @@ export default async function ScoresPage() {
 
         <SectionShell
           title="Up Next"
-          subtitle="Next games on the slate."
+          subtitle="Scheduled games on deck."
           rightLabel={nextGames.length > 0 ? `${nextGames.length} queued` : "No upcoming games"}
         >
           {nextGames.length === 0 ? (
@@ -415,8 +423,8 @@ export default async function ScoresPage() {
         <details className="group rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-base font-semibold text-white">Finals Today</div>
-              <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-400">
+              <div className="text-sm font-semibold text-white sm:text-base">Finals Today</div>
+              <div className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-slate-400">
                 {todayFinalGames.length > 0 ? `${todayFinalGames.length} completed` : "No finals yet"}
               </div>
             </div>
