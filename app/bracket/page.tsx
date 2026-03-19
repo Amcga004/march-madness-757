@@ -1,5 +1,5 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import AutoRefreshClient from "../components/AutoRefreshClient";
 
 type Team = {
   id: string;
@@ -281,10 +281,6 @@ function isFinalGame(game: ExternalGameSync | null) {
 function getCardClasses(game: ExternalGameSync | null) {
   if (isLiveGame(game)) {
     return "border-red-500/70 bg-[#1a1220] shadow-[0_0_0_1px_rgba(239,68,68,0.18),0_0_20px_rgba(239,68,68,0.14)]";
-  }
-
-  if (isFinalGame(game)) {
-    return "border-slate-700/80 bg-[#111827]";
   }
 
   return "border-slate-700/80 bg-[#111827]";
@@ -873,6 +869,23 @@ function LegendPill({
   );
 }
 
+function CompactLiveChip({
+  game,
+  href,
+}: {
+  game: ExternalGameSync;
+  href: string;
+}) {
+  return (
+    <a
+      href={href}
+      className="inline-flex items-center rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-red-200 transition hover:-translate-y-0.5"
+    >
+      {(game.away_team_name ?? "Away")} vs {(game.home_team_name ?? "Home")} • {getDisplayStatus(game)}
+    </a>
+  );
+}
+
 export default async function BracketPage() {
   const supabase = await createClient();
 
@@ -993,38 +1006,78 @@ export default async function BracketPage() {
 
   return (
     <div className="mx-auto max-w-[1700px] p-3 sm:p-6">
-      <AutoRefreshClient intervalMs={15000} hiddenIntervalMs={60000} />
-
-      <section className="mb-6 sm:mb-8">
+      <section className="mb-4 sm:mb-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-3xl font-bold text-white">Tournament Bracket</h2>
-            <p className="mt-2 text-slate-300">
-              Live bracket view with scheduled tip times, in-game scores, and automatic advancement once results are promoted.
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Bracket
+            </div>
+            <h2 className="text-2xl font-bold text-white sm:text-3xl">Tournament Bracket</h2>
+            <p className="mt-1 text-sm text-slate-300">
+              Follow the structure, ownership, and advancement path.
             </p>
           </div>
 
-          <div className="space-y-1 text-sm text-slate-400 sm:text-right">
+          <div className="space-y-1 text-[10px] text-slate-400 sm:text-right sm:text-xs">
             <div>
               {latestOfficialUpdate
-                ? `Last official result: ${formatEasternFullDateTime(latestOfficialUpdate)}`
+                ? `Official ${formatEasternFullDateTime(latestOfficialUpdate)}`
                 : "No official results entered yet"}
             </div>
             <div>
               {nextScheduledGame
-                ? `Next scheduled game: ${formatEasternFullDateTime(nextScheduledGame)}`
+                ? `Next ${formatEasternFullDateTime(nextScheduledGame)}`
                 : "No upcoming scheduled games in feed window"}
             </div>
           </div>
         </div>
       </section>
 
+      <section className="mb-3 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] sm:p-4">
+        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+          Live Impact
+        </div>
+
+        {liveGames.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {liveGames.map((game) => {
+              const href = getLiveGameHref(game, teamById, playInTeamIds);
+
+              return (
+                <CompactLiveChip
+                  key={game.id}
+                  game={game}
+                  href={href}
+                />
+              );
+            })}
+            <Link
+              href="/scores"
+              className="inline-flex items-center rounded-full border border-slate-700/80 bg-[#172033] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:-translate-y-0.5 hover:bg-[#1c2940]"
+            >
+              Open Scores
+            </Link>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-200">
+              No Live Games
+            </span>
+            <Link
+              href="/scores"
+              className="inline-flex items-center rounded-full border border-slate-700/80 bg-[#172033] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:-translate-y-0.5 hover:bg-[#1c2940]"
+            >
+              Open Scores
+            </Link>
+          </div>
+        )}
+      </section>
+
       <section className="mb-4 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] sm:p-4">
-        <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+        <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
           Quick Jump
         </div>
         <div className="flex flex-wrap gap-2">
-          {liveGames.length > 0 ? <JumpChip href="#live-games" label="Live" live /> : null}
           {activePlayInGames.length > 0 ? <JumpChip href="#active-playin" label="Play-In" /> : null}
           <JumpChip href="#east-region" label="East" />
           <JumpChip href="#west-region" label="West" />
@@ -1034,8 +1087,8 @@ export default async function BracketPage() {
         </div>
       </section>
 
-      <section className="mb-6 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] sm:p-4">
-        <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+      <section className="mb-5 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] sm:p-4">
+        <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
           Legend
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1059,49 +1112,6 @@ export default async function BracketPage() {
       </section>
 
       <div className="space-y-6 sm:space-y-8">
-        {liveGames.length > 0 ? (
-          <section
-            id="live-games"
-            className="rounded-3xl border border-red-500/40 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5"
-          >
-            <div className="mb-5">
-              <h3 className="text-2xl font-bold text-white">Live Games Right Now</h3>
-              <p className="mt-1 text-sm text-slate-300">
-                Active tournament games pulled to the top for quick tracking. Tap a live game to jump to its bracket section.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {liveGames.map((game) => {
-                const href = getLiveGameHref(game, teamById, playInTeamIds);
-
-                return (
-                  <a
-                    key={game.id}
-                    href={href}
-                    className="group min-w-0 rounded-xl transition hover:-translate-y-0.5 hover:opacity-95"
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-3 px-1">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-red-300">
-                        {game.round_name ?? "Live"}
-                      </div>
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 group-hover:text-white">
-                        Jump ↓
-                      </div>
-                    </div>
-
-                    <ExternalMatchupCard
-                      externalGame={game}
-                      teamById={teamById}
-                      managerByTeamId={managerByTeamId}
-                    />
-                  </a>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-
         {activePlayInGames.length > 0 ? (
           <>
             <div className="lg:hidden">
@@ -1109,7 +1119,7 @@ export default async function BracketPage() {
                 id="active-playin"
                 title="First Four / Play-In Games"
                 subtitle="Tap to collapse or expand this section."
-                defaultOpen={true}
+                defaultOpen={false}
               >
                 <div className="grid grid-cols-1 gap-4">
                   {activePlayInGames.map((game) => (
