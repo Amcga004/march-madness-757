@@ -67,12 +67,38 @@ function StatTile({
 }) {
   return (
     <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-3">
-      <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">
+      <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
         {label}
       </div>
-      <div className="mt-1 text-lg font-bold text-white">{value}</div>
+      <div className="mt-1 text-base font-bold text-white">{value}</div>
     </div>
   );
+}
+
+type RosterEntry = {
+  pick: Pick;
+  team: Team | undefined;
+  result: TeamResult | undefined;
+};
+
+function sortRosterEntries(entries: RosterEntry[]) {
+  return [...entries].sort((a, b) => {
+    const aEliminated = a.result?.eliminated ?? false;
+    const bEliminated = b.result?.eliminated ?? false;
+
+    if (aEliminated !== bEliminated) {
+      return aEliminated ? 1 : -1;
+    }
+
+    const aPoints = a.result?.total_points ?? 0;
+    const bPoints = b.result?.total_points ?? 0;
+
+    if (bPoints !== aPoints) {
+      return bPoints - aPoints;
+    }
+
+    return a.pick.overall_pick - b.pick.overall_pick;
+  });
 }
 
 export default async function RostersPage() {
@@ -110,117 +136,145 @@ export default async function RostersPage() {
     teams: typedTeams as ForecastTeam[],
     teamResults: typedResults as ForecastTeamResult[],
     games: typedGames as ForecastGame[],
+  }).sort((a: ManagerForecast, b: ManagerForecast) => {
+    if (b.currentPoints !== a.currentPoints) return b.currentPoints - a.currentPoints;
+    if (b.liveTeams !== a.liveTeams) return b.liveTeams - a.liveTeams;
+    return b.maxFinalPoints - a.maxFinalPoints;
   });
 
   const forecastMap = new Map<string, ManagerForecast>(
     forecasts.map((forecast) => [forecast.memberId, forecast])
   );
 
-  return (
-    <div className="mx-auto max-w-7xl p-4 sm:p-6">
-      <section className="mb-6 sm:mb-8">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Rosters
-            </div>
-            <h2 className="mt-1 text-3xl font-bold text-white">Team Rosters</h2>
-            <p className="mt-2 text-slate-300">
-              Every manager’s drafted teams, current output, and remaining bracket-constrained upside.
-            </p>
-          </div>
+  const rankMap = new Map<string, number>(
+    forecasts.map((forecast, index) => [forecast.memberId, index + 1])
+  );
 
-          <div className="text-sm text-slate-400">
-            {latestRecordedResultAt
-              ? `Last result recorded: ${formatEasternDateTime(latestRecordedResultAt)}`
-              : "No results recorded yet"}
+  return (
+    <div className="mx-auto max-w-7xl p-3 sm:p-4 md:p-6">
+      <section className="mb-4">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Rosters
+              </div>
+              <h2 className="mt-1 text-2xl font-bold text-white sm:text-3xl">
+                League Rosters
+              </h2>
+            </div>
+
+            <div className="text-right text-[10px] text-slate-400 sm:text-xs">
+              {latestRecordedResultAt
+                ? `Updated ${formatEasternDateTime(latestRecordedResultAt)}`
+                : "No results recorded yet"}
+            </div>
           </div>
         </div>
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        {typedMembers.map((member) => {
+      <div className="space-y-3">
+        {typedMembers.map((member, memberIndex) => {
           const memberPicks = typedPicks.filter((pick) => pick.member_id === member.id);
           const forecast = forecastMap.get(member.id);
+          const rank = rankMap.get(member.id);
+
+          const rosterEntries = sortRosterEntries(
+            memberPicks.map((pick) => ({
+              pick,
+              team: typedTeams.find((t) => t.id === pick.team_id),
+              result: typedResults.find((r) => r.team_id === pick.team_id),
+            }))
+          );
+
+          const defaultOpen = memberIndex === 0;
 
           return (
-            <div
+            <details
               key={member.id}
-              className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-6"
+              open={defaultOpen}
+              className="group rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-5"
             >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-2xl font-bold text-white">{member.display_name}</h3>
-                  <p className="mt-1 text-sm text-slate-400">
-                    Draft Slot {member.draft_slot}
-                  </p>
+              <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm font-semibold text-slate-400">
+                      #{rank ?? "—"}
+                    </div>
+                    <ManagerBadge name={member.display_name} />
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-300">
+                    <span>{forecast?.currentPoints ?? 0} pts</span>
+                    <span>{forecast?.liveTeams ?? 0} alive</span>
+                    <span>{forecast?.eliminatedTeams ?? 0} out</span>
+                    <span>Draft Slot {member.draft_slot}</span>
+                  </div>
                 </div>
-                <div className="self-start sm:self-auto">
-                  <ManagerBadge name={member.display_name} />
+
+                <div className="shrink-0 text-slate-300 transition-transform duration-200 group-open:rotate-180">
+                  ▼
                 </div>
-              </div>
+              </summary>
 
               {forecast ? (
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="mt-4 grid gap-2 grid-cols-2 sm:grid-cols-5">
                   <StatTile label="Current" value={forecast.currentPoints} />
-                  <StatTile label="Live Teams" value={forecast.liveTeams} />
-                  <StatTile label="Eliminated" value={forecast.eliminatedTeams} />
+                  <StatTile label="Alive" value={forecast.liveTeams} />
+                  <StatTile label="Out" value={forecast.eliminatedTeams} />
                   <StatTile label="Upside" value={forecast.remainingUpside} />
                   <StatTile label="Max Final" value={forecast.maxFinalPoints} />
                 </div>
               ) : null}
 
-              <div className="mt-5 space-y-3">
-                {memberPicks.length === 0 ? (
+              <div className="mt-4 space-y-2">
+                {rosterEntries.length === 0 ? (
                   <div className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4 text-sm text-slate-400">
                     No teams drafted yet.
                   </div>
                 ) : (
-                  memberPicks.map((pick) => {
-                    const team = typedTeams.find((t) => t.id === pick.team_id);
-                    const result = typedResults.find((r) => r.team_id === pick.team_id);
-
-                    return (
-                      <div
-                        key={pick.id}
-                        className="rounded-2xl border border-slate-700/80 bg-[#172033] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
-                      >
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="flex items-start gap-3">
-                            <TeamLogo teamName={team?.school_name ?? "TBD"} size={32} />
-                            <div className="min-w-0">
-                              <div className="text-sm font-medium text-slate-400">
-                                Pick #{pick.overall_pick}
-                              </div>
-                              <div className="mt-1 text-base font-semibold text-white sm:text-lg">
-                                {team?.school_name}
-                              </div>
-                              <div className="mt-1 text-sm text-slate-400">
-                                {team?.seed ? `${team.seed} Seed` : "—"}
-                                {team?.region ? ` • ${team.region}` : ""}
-                              </div>
+                  rosterEntries.map(({ pick, team, result }) => (
+                    <div
+                      key={pick.id}
+                      className="rounded-2xl border border-slate-700/80 bg-[#172033] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <TeamLogo teamName={team?.school_name ?? "TBD"} size={28} />
+                          <div className="min-w-0">
+                            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
+                              Pick #{pick.overall_pick}
                             </div>
-                          </div>
-
-                          <div className="flex items-center justify-between sm:block sm:text-right">
-                            <div className="text-sm text-slate-400">Points</div>
-                            <div className="mt-1 text-xl font-bold text-white">
-                              {result?.total_points ?? 0}
+                            <div className="mt-1 truncate text-sm font-semibold text-white sm:text-base">
+                              {team?.school_name ?? "TBD"}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-400 sm:text-sm">
+                              {team?.seed ? `${team.seed} Seed` : "—"}
+                              {team?.region ? ` • ${team.region}` : ""}
                             </div>
                           </div>
                         </div>
 
-                        <div className="mt-4">
-                          <TeamStatusBadge
-                            isEliminated={result ? result.eliminated : null}
-                          />
+                        <div className="text-right">
+                          <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">
+                            Points
+                          </div>
+                          <div className="mt-1 text-lg font-bold text-white">
+                            {result?.total_points ?? 0}
+                          </div>
                         </div>
                       </div>
-                    );
-                  })
+
+                      <div className="mt-3">
+                        <TeamStatusBadge
+                          isEliminated={result ? result.eliminated : null}
+                        />
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
-            </div>
+            </details>
           );
         })}
       </div>

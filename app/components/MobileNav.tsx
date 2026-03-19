@@ -15,12 +15,13 @@ export default function MobileNav() {
     { href: "/", label: "Home" },
     { href: "/scores", label: "Scores" },
     { href: "/bracket", label: "Bracket" },
-    { href: "/rosters", label: "League" },
+    { href: "/rosters", label: "Rosters" },
+    { href: "/league", label: "League" },
   ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-800/90 bg-[#020817]/95 backdrop-blur-xl md:hidden">
-      <div className="mx-auto grid max-w-7xl grid-cols-4 px-2 py-3">
+      <div className="mx-auto grid max-w-7xl grid-cols-5 px-2 py-3">
         {tabs.map((tab) => {
           const isActive =
             tab.href === "/"
@@ -31,10 +32,10 @@ export default function MobileNav() {
             <Link
               key={tab.href}
               href={tab.href}
-              className="flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-1.5 transition"
+              className="flex flex-col items-center justify-center gap-1 rounded-2xl px-1 py-1.5 transition"
             >
               <span
-                className={`text-sm font-semibold ${
+                className={`text-xs font-semibold sm:text-sm ${
                   isActive ? "text-white" : "text-slate-500"
                 }`}
               >
@@ -42,7 +43,7 @@ export default function MobileNav() {
               </span>
 
               <span
-                className={`h-1.5 w-10 rounded-full transition ${
+                className={`h-1.5 w-8 rounded-full transition sm:w-10 ${
                   isActive ? "bg-blue-400" : "bg-transparent"
                 }`}
               />
