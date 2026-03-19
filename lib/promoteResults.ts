@@ -76,8 +76,6 @@ export async function promoteResults() {
 
   const leagueId = league.id;
 
-  // Pull every final ESPN game so we can safely backfill anything that was
-  // previously promoted without team_results being rebuilt.
   const { data: finalGames, error: finalGamesError } = await supabase
     .from("external_game_sync")
     .select(
@@ -118,19 +116,33 @@ export async function promoteResults() {
 
     const normalizedRound = normalizeRound(game.round_name);
 
-    // Prevent duplicate official game inserts by external_game_id first.
-    const { data: existingByExternalId, error: existingByExternalIdError } = await supabase
+    // Look up by external_game_id regardless of league_id so we can fix old bad rows.
+    const { data: existingGame, error: existingGameError } = await supabase
       .from("games")
-      .select("id")
-      .eq("league_id", leagueId)
+      .select("id, league_id")
       .eq("external_game_id", game.external_game_id)
       .maybeSingle();
 
-    if (existingByExternalIdError) {
-      throw new Error(existingByExternalIdError.message);
+    if (existingGameError) {
+      throw new Error(existingGameError.message);
     }
 
-    if (!existingByExternalId) {
+    if (existingGame) {
+      const { error: updateExistingError } = await supabase
+        .from("games")
+        .update({
+          league_id: leagueId,
+          round_name: normalizedRound,
+          winning_team_id: winningTeamId,
+          losing_team_id: losingTeamId,
+          status: "complete",
+        })
+        .eq("id", existingGame.id);
+
+      if (updateExistingError) {
+        throw new Error(updateExistingError.message);
+      }
+    } else {
       const { error: insertError } = await supabase.from("games").insert({
         league_id: leagueId,
         external_game_id: game.external_game_id,
@@ -147,7 +159,6 @@ export async function promoteResults() {
       promoted += 1;
     }
 
-    // Mark promoted so your sync feed stays clean.
     if (!game.promoted_to_results) {
       const { error: updateError } = await supabase
         .from("external_game_sync")
@@ -160,7 +171,6 @@ export async function promoteResults() {
     }
   }
 
-  // Rebuild team_results from scratch so standings always match official games.
   const [{ data: officialGames, error: officialGamesError }, { data: picks, error: picksError }] =
     await Promise.all([
       supabase
@@ -208,7 +218,6 @@ export async function promoteResults() {
     };
   });
 
-  // Full rebuild prevents stale / partial scoring state.
   const { error: deleteTeamResultsError } = await supabase
     .from("team_results")
     .delete()
@@ -219,12 +228,12 @@ export async function promoteResults() {
   }
 
   if (rebuiltTeamResults.length > 0) {
-    const { error: upsertTeamResultsError } = await supabase
+    const { error: insertTeamResultsError } = await supabase
       .from("team_results")
       .insert(rebuiltTeamResults);
 
-    if (upsertTeamResultsError) {
-      throw new Error(upsertTeamResultsError.message);
+    if (insertTeamResultsError) {
+      throw new Error(insertTeamResultsError.message);
     }
   }
 
