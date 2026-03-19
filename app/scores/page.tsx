@@ -9,6 +9,17 @@ type Team = {
   region: string;
 };
 
+type Pick = {
+  id: string;
+  member_id: string;
+  team_id: string;
+};
+
+type Member = {
+  id: string;
+  display_name: string;
+};
+
 type ExternalGameSync = {
   id: string;
   external_game_id: string;
@@ -328,17 +339,57 @@ function TeamStatsBlock({
   );
 }
 
+function OwnershipTag({ manager }: { manager: string | null }) {
+  if (!manager) return null;
+
+  return (
+    <div className="mt-0.5 text-[10px] font-medium text-slate-400">
+      {manager}
+    </div>
+  );
+}
+
+function getOwnershipRank(game: ExternalGameSync, managerByTeamId: Map<string, string>) {
+  const awayOwned = !!(game.mapped_away_team_id && managerByTeamId.get(game.mapped_away_team_id));
+  const homeOwned = !!(game.mapped_home_team_id && managerByTeamId.get(game.mapped_home_team_id));
+
+  if (awayOwned && homeOwned) return 2;
+  if (awayOwned || homeOwned) return 1;
+  return 0;
+}
+
+function sortGamesByLeagueRelevance(
+  games: ExternalGameSync[],
+  managerByTeamId: Map<string, string>
+) {
+  return [...games].sort((a, b) => {
+    const ownershipDiff = getOwnershipRank(b, managerByTeamId) - getOwnershipRank(a, managerByTeamId);
+    if (ownershipDiff !== 0) return ownershipDiff;
+
+    const aTime = a.start_time ? new Date(a.start_time).getTime() : 0;
+    const bTime = b.start_time ? new Date(b.start_time).getTime() : 0;
+    return aTime - bTime;
+  });
+}
+
 function ScoreGameCard({
   game,
   teamMap,
+  managerByTeamId,
 }: {
   game: ExternalGameSync;
   teamMap: Map<string, Team>;
+  managerByTeamId: Map<string, string>;
 }) {
   const isLive = isLiveStatus(game.espn_status);
   const isFinal = isFinalStatus(game.espn_status);
   const statusLabel = getDisplayStatus(game);
   const { homeName, awayName, homeSeed, awaySeed } = getGameTeams(game, teamMap);
+
+  const awayManager =
+    game.mapped_away_team_id ? managerByTeamId.get(game.mapped_away_team_id) ?? null : null;
+  const homeManager =
+    game.mapped_home_team_id ? managerByTeamId.get(game.mapped_home_team_id) ?? null : null;
 
   const awayWon =
     isFinal &&
@@ -383,12 +434,15 @@ function ScoreGameCard({
               : "border-slate-700/80 bg-[#0f172a] text-white"
           }`}
         >
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-start gap-2">
             <TeamLogo teamName={awayName} size={16} />
-            <span className="truncate text-sm font-semibold">
-              {awaySeed ? `${awaySeed}. ` : ""}
-              {awayName}
-            </span>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold">
+                {awaySeed ? `${awaySeed}. ` : ""}
+                {awayName}
+              </div>
+              <OwnershipTag manager={awayManager} />
+            </div>
           </div>
           <div className="text-sm font-bold">{game.away_score ?? "—"}</div>
         </div>
@@ -402,12 +456,15 @@ function ScoreGameCard({
               : "border-slate-700/80 bg-[#0f172a] text-white"
           }`}
         >
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-start gap-2">
             <TeamLogo teamName={homeName} size={16} />
-            <span className="truncate text-sm font-semibold">
-              {homeSeed ? `${homeSeed}. ` : ""}
-              {homeName}
-            </span>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold">
+                {homeSeed ? `${homeSeed}. ` : ""}
+                {homeName}
+              </div>
+              <OwnershipTag manager={homeManager} />
+            </div>
           </div>
           <div className="text-sm font-bold">{game.home_score ?? "—"}</div>
         </div>
@@ -452,24 +509,36 @@ function ScoreGameCard({
 export default async function ScoresPage() {
   const supabase = await createClient();
 
-  const [{ data: externalGames }, { data: teams }] = await Promise.all([
-    supabase
-      .from("external_game_sync")
-      .select(
-        "id, external_game_id, espn_event_name, espn_status, espn_period, espn_clock, start_time, round_name, home_team_name, away_team_name, home_score, away_score, mapped_home_team_id, mapped_away_team_id, raw_payload"
-      )
-      .order("start_time", { ascending: true }),
-    supabase.from("teams").select("id, school_name, seed, region"),
-  ]);
+  const [{ data: externalGames }, { data: teams }, { data: picks }, { data: members }] =
+    await Promise.all([
+      supabase
+        .from("external_game_sync")
+        .select(
+          "id, external_game_id, espn_event_name, espn_status, espn_period, espn_clock, start_time, round_name, home_team_name, away_team_name, home_score, away_score, mapped_home_team_id, mapped_away_team_id, raw_payload"
+        )
+        .order("start_time", { ascending: true }),
+      supabase.from("teams").select("id, school_name, seed, region"),
+      supabase.from("picks").select("id, member_id, team_id"),
+      supabase.from("league_members").select("id, display_name"),
+    ]);
 
   const typedExternalGames = (externalGames ?? []) as ExternalGameSync[];
   const typedTeams = (teams ?? []) as Team[];
+  const typedPicks = (picks ?? []) as Pick[];
+  const typedMembers = (members ?? []) as Member[];
 
   const teamMap = new Map<string, Team>(typedTeams.map((team) => [team.id, team]));
+  const memberNameById = new Map(typedMembers.map((member) => [member.id, member.display_name]));
+  const managerByTeamId = new Map(
+    typedPicks.map((pick) => [pick.team_id, memberNameById.get(pick.member_id) ?? "Unknown"])
+  );
 
   const todayEastern = getTodayEasternDateString();
 
-  const liveGames = typedExternalGames.filter((game) => isLiveStatus(game.espn_status));
+  const liveGames = sortGamesByLeagueRelevance(
+    typedExternalGames.filter((game) => isLiveStatus(game.espn_status)),
+    managerByTeamId
+  );
 
   const todayGames = typedExternalGames.filter((game) => {
     if (!game.start_time) return false;
@@ -481,17 +550,27 @@ export default async function ScoresPage() {
     return gameDate === todayEastern;
   });
 
-  const todayUpcomingGames = todayGames.filter((game) => isScheduledStatus(game.espn_status));
-  const todayFinalGames = todayGames.filter((game) => isFinalStatus(game.espn_status));
+  const todayUpcomingGames = sortGamesByLeagueRelevance(
+    todayGames.filter((game) => isScheduledStatus(game.espn_status)),
+    managerByTeamId
+  );
 
-  const nextGames = typedExternalGames
-    .filter(
-      (game) =>
-        isScheduledStatus(game.espn_status) &&
-        !!game.start_time &&
-        new Date(game.start_time).getTime() >= Date.now()
-    )
-    .slice(0, 8);
+  const todayFinalGames = sortGamesByLeagueRelevance(
+    todayGames.filter((game) => isFinalStatus(game.espn_status)),
+    managerByTeamId
+  );
+
+  const nextGames = sortGamesByLeagueRelevance(
+    typedExternalGames
+      .filter(
+        (game) =>
+          isScheduledStatus(game.espn_status) &&
+          !!game.start_time &&
+          new Date(game.start_time).getTime() >= Date.now()
+      )
+      .slice(0, 8),
+    managerByTeamId
+  );
 
   return (
     <div className="mx-auto max-w-7xl p-3 sm:p-4 md:p-6">
@@ -521,13 +600,13 @@ export default async function ScoresPage() {
       <div className="space-y-3">
         <SectionShell
           title="Live Now"
-          subtitle="Fastest view of active games."
+          subtitle="League-owned games float to the top."
           rightLabel={liveGames.length > 0 ? `${liveGames.length} live` : "No live games"}
         >
           {liveGames.length === 0 ? (
             <EmptyStateCard
               title="No games are live right now"
-              body="When games tip, they’ll show here first with live scores, bracket links, and team stats."
+              body="When games tip, they’ll show here first with live scores, ownership, and team stats."
             />
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -536,6 +615,7 @@ export default async function ScoresPage() {
                   key={game.external_game_id}
                   game={game}
                   teamMap={teamMap}
+                  managerByTeamId={managerByTeamId}
                 />
               ))}
             </div>
@@ -559,6 +639,7 @@ export default async function ScoresPage() {
                   key={game.external_game_id}
                   game={game}
                   teamMap={teamMap}
+                  managerByTeamId={managerByTeamId}
                 />
               ))}
             </div>
@@ -591,6 +672,7 @@ export default async function ScoresPage() {
                     key={game.external_game_id}
                     game={game}
                     teamMap={teamMap}
+                    managerByTeamId={managerByTeamId}
                   />
                 ))}
               </div>
