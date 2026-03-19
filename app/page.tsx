@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import ManagerBadge from "./components/ManagerBadge";
 import TeamLogo from "./components/TeamLogo";
@@ -74,11 +73,11 @@ function MiniStat({
   value: number | string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-700/80 bg-[#172033] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+    <div className="rounded-xl border border-slate-700/80 bg-[#172033] px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <div className="text-[9px] uppercase tracking-[0.18em] text-slate-400">
         {label}
       </div>
-      <div className="mt-1 text-sm font-bold text-white">{value}</div>
+      <div className="mt-0.5 text-sm font-bold text-white">{value}</div>
     </div>
   );
 }
@@ -93,12 +92,12 @@ function SummaryTile({
   subtext?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_12px_28px_rgba(0,0,0,0.24)]">
-      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
+    <div className="rounded-2xl border border-slate-700/80 bg-[#111827]/90 p-2.5 shadow-[0_10px_22px_rgba(0,0,0,0.22)]">
+      <div className="text-[9px] uppercase tracking-[0.18em] text-slate-400">
         {label}
       </div>
-      <div className="mt-1 text-lg font-bold text-white">{value}</div>
-      {subtext ? <div className="mt-1 text-xs text-slate-300">{subtext}</div> : null}
+      <div className="mt-1 text-base font-bold leading-tight text-white">{value}</div>
+      {subtext ? <div className="mt-0.5 text-[11px] text-slate-300">{subtext}</div> : null}
     </div>
   );
 }
@@ -115,13 +114,13 @@ function SectionShell({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)] sm:p-4">
-      <div className="mb-3 flex items-start justify-between gap-3">
+    <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
+      <div className="mb-2.5 flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-white">{title}</h3>
-          {subtitle ? <p className="mt-1 text-xs text-slate-300 sm:text-sm">{subtitle}</p> : null}
+          <h3 className="text-sm font-semibold text-white sm:text-base">{title}</h3>
+          {subtitle ? <p className="mt-0.5 text-[11px] text-slate-300 sm:text-xs">{subtitle}</p> : null}
         </div>
-        {rightLabel ? <div className="text-[10px] text-slate-400 sm:text-xs">{rightLabel}</div> : null}
+        {rightLabel ? <div className="text-[10px] text-slate-400">{rightLabel}</div> : null}
       </div>
       {children}
     </section>
@@ -146,8 +145,12 @@ function CompactDetailsSection({
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-base font-semibold text-white">{title}</div>
-          {rightLabel ? <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-400">{rightLabel}</div> : null}
+          <div className="text-sm font-semibold text-white sm:text-base">{title}</div>
+          {rightLabel ? (
+            <div className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-slate-400">
+              {rightLabel}
+            </div>
+          ) : null}
         </div>
         <div className="shrink-0 text-slate-300 transition-transform duration-200 group-open:rotate-180">
           ▼
@@ -155,23 +158,6 @@ function CompactDetailsSection({
       </summary>
       <div className="mt-3">{children}</div>
     </details>
-  );
-}
-
-function QuickActionChip({
-  href,
-  label,
-}: {
-  href: string;
-  label: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center rounded-full border border-slate-700/80 bg-[#172033] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:-translate-y-0.5 hover:bg-[#1c2940]"
-    >
-      {label}
-    </Link>
   );
 }
 
@@ -244,19 +230,14 @@ function getDisplayStatus(game: ExternalGameSync | null, fallbackStatus?: string
   return status.replace("STATUS_", "").replaceAll("_", " ").trim();
 }
 
-function getGameTeams(
-  game: ExternalGameSync,
-  teamMap: Map<string, string>
-) {
-  const homeName =
-    game.mapped_home_team_id
-      ? teamMap.get(game.mapped_home_team_id) ?? game.home_team_name ?? "Home"
-      : game.home_team_name ?? "Home";
+function getGameTeams(game: ExternalGameSync, teamMap: Map<string, string>) {
+  const homeName = game.mapped_home_team_id
+    ? teamMap.get(game.mapped_home_team_id) ?? game.home_team_name ?? "Home"
+    : game.home_team_name ?? "Home";
 
-  const awayName =
-    game.mapped_away_team_id
-      ? teamMap.get(game.mapped_away_team_id) ?? game.away_team_name ?? "Away"
-      : game.away_team_name ?? "Away";
+  const awayName = game.mapped_away_team_id
+    ? teamMap.get(game.mapped_away_team_id) ?? game.away_team_name ?? "Away"
+    : game.away_team_name ?? "Away";
 
   return {
     homeName,
@@ -286,18 +267,18 @@ function SlateGameCard({
 
   return (
     <div className={`rounded-2xl border ${cardClasses} ${compact ? "px-2.5 py-2" : "px-3 py-2.5"}`}>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400">
           {game.round_name ?? "Tournament Game"}
         </div>
-        <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${statusClasses}`}>
+        <div className={`text-[9px] font-semibold uppercase tracking-[0.14em] ${statusClasses}`}>
           {statusLabel}
         </div>
       </div>
 
       <div className="grid gap-1.5">
         <div
-          className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 ${
+          className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 ${
             isFinal && game.away_score !== null && game.home_score !== null && game.away_score > game.home_score
               ? "border-green-500/60 bg-green-500/10 text-green-200"
               : isFinal && game.away_score !== null && game.home_score !== null && game.away_score < game.home_score
@@ -306,14 +287,14 @@ function SlateGameCard({
           }`}
         >
           <div className="flex min-w-0 items-center gap-2">
-            <TeamLogo teamName={awayName} size={16} />
-            <span className="truncate text-sm font-semibold">{awayName}</span>
+            <TeamLogo teamName={awayName} size={15} />
+            <span className="truncate text-[13px] font-semibold">{awayName}</span>
           </div>
-          <div className="text-sm font-bold">{game.away_score ?? "—"}</div>
+          <div className="text-[13px] font-bold">{game.away_score ?? "—"}</div>
         </div>
 
         <div
-          className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 ${
+          className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 ${
             isFinal && game.home_score !== null && game.away_score !== null && game.home_score > game.away_score
               ? "border-green-500/60 bg-green-500/10 text-green-200"
               : isFinal && game.home_score !== null && game.away_score !== null && game.home_score < game.away_score
@@ -322,10 +303,10 @@ function SlateGameCard({
           }`}
         >
           <div className="flex min-w-0 items-center gap-2">
-            <TeamLogo teamName={homeName} size={16} />
-            <span className="truncate text-sm font-semibold">{homeName}</span>
+            <TeamLogo teamName={homeName} size={15} />
+            <span className="truncate text-[13px] font-semibold">{homeName}</span>
           </div>
-          <div className="text-sm font-bold">{game.home_score ?? "—"}</div>
+          <div className="text-[13px] font-bold">{game.home_score ?? "—"}</div>
         </div>
       </div>
     </div>
@@ -340,9 +321,9 @@ function EmptyStateCard({
   body: string;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-slate-700 bg-[#0f172a] px-4 py-6 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+    <div className="rounded-2xl border border-dashed border-slate-700 bg-[#0f172a] px-4 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
       <div className="text-sm font-semibold text-white">{title}</div>
-      <div className="mt-2 text-xs text-slate-400 sm:text-sm">{body}</div>
+      <div className="mt-1.5 text-xs text-slate-400 sm:text-sm">{body}</div>
     </div>
   );
 }
@@ -460,6 +441,7 @@ export default async function DashboardPage() {
   const leader = forecasts[0] ?? null;
   const topThree = forecasts.slice(0, 3);
   const remainingManagers = forecasts.slice(3);
+
   const mostLiveTeams = forecasts.reduce<ManagerForecast | null>((best, current) => {
     if (!best) return current;
     if (current.liveTeams > best.liveTeams) return current;
@@ -482,42 +464,31 @@ export default async function DashboardPage() {
     <div className="mx-auto max-w-7xl p-3 sm:p-4 md:p-6">
       <AutoRefreshClient intervalMs={15000} hiddenIntervalMs={60000} />
 
-      <section className="mb-4">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                Home
-              </div>
-              <h2 className="mt-1 text-2xl font-bold text-white sm:text-3xl">
-                League Pulse
-              </h2>
+      <section className="mb-3">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Home
             </div>
-
-            <div className="text-right text-[10px] text-slate-400 sm:text-xs">
-              {latestUpdated
-                ? `Updated ${formatEasternDateTime(latestUpdated)}`
-                : "No results entered yet"}
-            </div>
+            <h2 className="mt-1 text-2xl font-bold leading-tight text-white sm:text-3xl">
+              League Pulse
+            </h2>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <QuickActionChip href="/scores" label="Scores" />
-            <QuickActionChip href="/bracket" label="Bracket" />
-            <QuickActionChip href="/rosters" label="League" />
-            <QuickActionChip href="/history" label="History" />
+          <div className="text-right text-[10px] text-slate-400 sm:text-xs">
+            {latestUpdated ? `Updated ${formatEasternDateTime(latestUpdated)}` : "No results yet"}
           </div>
         </div>
       </section>
 
-      <section className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-3 grid grid-cols-2 gap-2 xl:grid-cols-4">
         <SummaryTile
           label="Leader"
           value={leader ? leader.displayName : "—"}
           subtext={leader ? `${leader.currentPoints} pts` : "No standings yet"}
         />
         <SummaryTile
-          label="Most Live Teams"
+          label="Most Alive"
           value={mostLiveTeams ? mostLiveTeams.displayName : "—"}
           subtext={mostLiveTeams ? `${mostLiveTeams.liveTeams} alive` : "No active teams"}
         />
@@ -531,7 +502,7 @@ export default async function DashboardPage() {
           }
         />
         <SummaryTile
-          label="Today’s Games"
+          label="Today"
           value={todaysGames.length}
           subtext={
             todaysGames.length > 0
@@ -541,56 +512,56 @@ export default async function DashboardPage() {
         />
       </section>
 
-      {liveGames.length > 0 ? (
-        <SectionShell
-          title="Live Now"
-          subtitle="Games happening right now."
-          rightLabel={`${liveGames.length} live`}
-        >
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {liveGames.map((game) => (
-              <SlateGameCard
-                key={game.external_game_id}
-                game={game}
-                teamMap={teamMap}
-                compact
-              />
-            ))}
-          </div>
-        </SectionShell>
-      ) : (
-        <SectionShell
-          title="Next Up"
-          subtitle={nextGame ? "No games live. Next tip is on deck." : "No live games in the current feed window."}
-          rightLabel={nextGame?.start_time ? formatEasternDateTime(nextGame.start_time) : undefined}
-        >
-          {nextGame ? (
-            <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 px-3 py-3">
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-200">
-                {nextGame.round_name ?? "Tournament Game"}
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white">
-                <div className="flex items-center gap-2">
-                  <TeamLogo teamName={getGameTeams(nextGame, teamMap).awayName} size={18} />
-                  <span>{getGameTeams(nextGame, teamMap).awayName}</span>
-                </div>
-                <span className="text-slate-400">vs</span>
-                <div className="flex items-center gap-2">
-                  <TeamLogo teamName={getGameTeams(nextGame, teamMap).homeName} size={18} />
-                  <span>{getGameTeams(nextGame, teamMap).homeName}</span>
-                </div>
-              </div>
+      <div className="space-y-3">
+        {liveGames.length > 0 ? (
+          <SectionShell
+            title="Live Now"
+            subtitle="Games happening right now."
+            rightLabel={`${liveGames.length} live`}
+          >
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {liveGames.map((game) => (
+                <SlateGameCard
+                  key={game.external_game_id}
+                  game={game}
+                  teamMap={teamMap}
+                  compact
+                />
+              ))}
             </div>
-          ) : (
-            <EmptyStateCard
-              title="No active games right now"
-              body="Once games tip, this section becomes your live tracker."
-            />
-          )}
-        </SectionShell>
-      )}
+          </SectionShell>
+        ) : (
+          <SectionShell
+            title="Next Up"
+            subtitle={nextGame ? "Next tip on deck." : "No live games in the current feed window."}
+            rightLabel={nextGame?.start_time ? formatEasternDateTime(nextGame.start_time) : undefined}
+          >
+            {nextGame ? (
+              <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 px-3 py-2.5">
+                <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-blue-200">
+                  {nextGame.round_name ?? "Tournament Game"}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white">
+                  <div className="flex items-center gap-2">
+                    <TeamLogo teamName={getGameTeams(nextGame, teamMap).awayName} size={16} />
+                    <span>{getGameTeams(nextGame, teamMap).awayName}</span>
+                  </div>
+                  <span className="text-slate-400">vs</span>
+                  <div className="flex items-center gap-2">
+                    <TeamLogo teamName={getGameTeams(nextGame, teamMap).homeName} size={16} />
+                    <span>{getGameTeams(nextGame, teamMap).homeName}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <EmptyStateCard
+                title="No active games right now"
+                body="Once games tip, this section becomes your live tracker."
+              />
+            )}
+          </SectionShell>
+        )}
 
-      <div className="my-4">
         <SectionShell
           title="Top of the League"
           subtitle="Fast standings snapshot."
@@ -606,7 +577,7 @@ export default async function DashboardPage() {
               topThree.map((forecast: ManagerForecast, index: number) => (
                 <div
                   key={forecast.memberId}
-                  className="rounded-2xl border border-slate-700/80 bg-[linear-gradient(135deg,rgba(15,23,42,0.96),rgba(23,32,51,0.96))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                  className="rounded-2xl border border-slate-700/80 bg-[linear-gradient(135deg,rgba(15,23,42,0.96),rgba(23,32,51,0.96))] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
@@ -615,14 +586,14 @@ export default async function DashboardPage() {
                     </div>
 
                     <div className="text-right">
-                      <div className="text-[10px] text-slate-400">Points</div>
-                      <div className="text-lg font-bold text-white">
+                      <div className="text-[9px] text-slate-400">Points</div>
+                      <div className="text-base font-bold text-white">
                         {forecast.currentPoints}
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-4 gap-2">
+                  <div className="mt-2 grid grid-cols-4 gap-2">
                     <MiniStat label="Alive" value={forecast.liveTeams} />
                     <MiniStat label="Out" value={forecast.eliminatedTeams} />
                     <MiniStat label="Upside" value={forecast.remainingUpside} />
@@ -634,7 +605,7 @@ export default async function DashboardPage() {
           </div>
 
           {remainingManagers.length > 0 ? (
-            <details className="mt-3 rounded-2xl border border-slate-700/80 bg-[#0f172a]/80 p-3">
+            <details className="mt-2 rounded-2xl border border-slate-700/80 bg-[#0f172a]/80 p-3">
               <summary className="cursor-pointer list-none text-sm font-semibold text-slate-200">
                 Show full standings
               </summary>
@@ -662,9 +633,7 @@ export default async function DashboardPage() {
             </details>
           ) : null}
         </SectionShell>
-      </div>
 
-      <div className="space-y-3">
         <CompactDetailsSection
           title="Today’s Slate"
           rightLabel={todaysGames.length > 0 ? `${todaysGames.length} games` : "No games today"}
@@ -676,10 +645,10 @@ export default async function DashboardPage() {
               body="When games land in today’s feed window, they’ll appear here grouped by status."
             />
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {slateSections.map((section) => (
                 <div key={section.key}>
-                  <div className={`mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] ${section.tone}`}>
+                  <div className={`mb-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] ${section.tone}`}>
                     {section.label}
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -707,12 +676,12 @@ export default async function DashboardPage() {
             {roundProgress.map((round) => (
               <div
                 key={round.round}
-                className="rounded-2xl border border-slate-700/80 bg-[#172033] px-3 py-3 text-center"
+                className="rounded-2xl border border-slate-700/80 bg-[#172033] px-2.5 py-2.5 text-center"
               >
-                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                   {round.short}
                 </div>
-                <div className="mt-1 text-base font-bold text-white">
+                <div className="mt-0.5 text-sm font-bold text-white">
                   {round.completed}/{round.total}
                 </div>
               </div>
@@ -766,20 +735,18 @@ export default async function DashboardPage() {
                 return (
                   <div
                     key={game.id}
-                    className="rounded-2xl border border-slate-700/80 bg-[#172033] px-3 py-3"
+                    className="rounded-2xl border border-slate-700/80 bg-[#172033] px-3 py-2.5"
                   >
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    <div className="mb-1.5 flex items-center justify-between gap-3">
+                      <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                         {game.round_name}
                       </div>
-                      <div className="text-[10px] text-slate-500">
-                        {statusLabel}
-                      </div>
+                      <div className="text-[9px] text-slate-500">{statusLabel}</div>
                     </div>
 
                     <div className="grid gap-1.5">
                       <div
-                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-1.5 ${
                           awayWon
                             ? "border-green-500/60 bg-green-500/10 text-green-200"
                             : homeWon
@@ -788,14 +755,14 @@ export default async function DashboardPage() {
                         }`}
                       >
                         <div className="flex min-w-0 items-center gap-2">
-                          <TeamLogo teamName={awayName} size={16} />
-                          <span className="truncate text-sm font-semibold">{awayName}</span>
+                          <TeamLogo teamName={awayName} size={15} />
+                          <span className="truncate text-[13px] font-semibold">{awayName}</span>
                         </div>
-                        <div className="text-sm font-bold">{awayScore ?? "—"}</div>
+                        <div className="text-[13px] font-bold">{awayScore ?? "—"}</div>
                       </div>
 
                       <div
-                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-1.5 ${
                           homeWon
                             ? "border-green-500/60 bg-green-500/10 text-green-200"
                             : awayWon
@@ -804,10 +771,10 @@ export default async function DashboardPage() {
                         }`}
                       >
                         <div className="flex min-w-0 items-center gap-2">
-                          <TeamLogo teamName={homeName} size={16} />
-                          <span className="truncate text-sm font-semibold">{homeName}</span>
+                          <TeamLogo teamName={homeName} size={15} />
+                          <span className="truncate text-[13px] font-semibold">{homeName}</span>
                         </div>
-                        <div className="text-sm font-bold">{homeScore ?? "—"}</div>
+                        <div className="text-[13px] font-bold">{homeScore ?? "—"}</div>
                       </div>
                     </div>
                   </div>
