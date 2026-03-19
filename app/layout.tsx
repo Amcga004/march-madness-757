@@ -24,9 +24,9 @@ export default function RootLayout({
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
                   <div className="flex items-center gap-3">
-                    <span className="shrink-0 text-xl sm:text-2xl">🏀</span>
+                    <span className="shrink-0 text-lg sm:text-2xl">🏀</span>
                     <div className="min-w-0">
-                      <h1 className="truncate text-lg font-extrabold tracking-tight text-white sm:text-2xl">
+                      <h1 className="truncate text-base font-extrabold tracking-tight text-white sm:text-2xl">
                         757 MM Draft
                       </h1>
                       <p className="hidden text-xs text-slate-400 sm:block">
@@ -43,11 +43,13 @@ export default function RootLayout({
             </div>
           </header>
 
-          <LeaderboardBar />
-          <LiveNowBar />
-          <LeagueStatusBanner />
+          <div className="sticky top-[57px] z-40 md:top-[73px]">
+            <LeaderboardBar />
+            <LiveNowBar />
+            <LeagueStatusBanner />
+          </div>
 
-          <main className="min-h-[calc(100vh-140px)] pb-4 md:pb-8">
+          <main className="min-h-[calc(100vh-120px)] pb-4 md:pb-8">
             {children}
           </main>
 

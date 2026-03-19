@@ -40,18 +40,18 @@ function getStatusLabel(
 
 function getPillClasses(index: number, statusLabel: string) {
   if (index === 0) {
-    return "border-amber-400/40 bg-amber-500/10 text-amber-100 shadow-[0_0_0_1px_rgba(251,191,36,0.10),0_0_18px_rgba(251,191,36,0.10)]";
+    return "border-amber-400/40 bg-amber-500/10";
   }
 
   if (statusLabel === "Chasing") {
-    return "border-blue-500/30 bg-blue-500/10 text-slate-100";
+    return "border-blue-500/30 bg-blue-500/10";
   }
 
   if (statusLabel === "At Risk") {
-    return "border-red-500/30 bg-red-500/10 text-slate-100";
+    return "border-red-500/30 bg-red-500/10";
   }
 
-  return "border-slate-700/80 bg-slate-900 text-slate-100";
+  return "border-slate-700/80 bg-slate-900/80";
 }
 
 function getStatusBadgeClasses(index: number, statusLabel: string) {
@@ -122,31 +122,31 @@ export default async function LeaderboardBar() {
     <div className="border-b border-slate-800/80 bg-[#020817]/95 text-white">
       <AutoRefreshLeaderboard />
 
-      <div className="mx-auto max-w-7xl px-4 py-2.5 sm:px-6">
-        <div className="flex items-start gap-3">
-          <span className="shrink-0 pt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Live Leaderboard
+      <div className="mx-auto max-w-7xl px-3 py-1.5 sm:px-6">
+        <div className="flex items-center gap-2">
+          <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-500 sm:text-[10px]">
+            Leaders
           </span>
 
-          <div className="-mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1 pb-1">
+          <div className="-mx-1 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-1 pb-0.5">
             {leaderboard.map((entry, index) => {
               const statusLabel = getStatusLabel(entry, index, leaderPoints);
 
               return (
                 <div
                   key={entry.name}
-                  className={`shrink-0 rounded-2xl border px-3 py-2 ${getPillClasses(
+                  className={`shrink-0 rounded-xl border px-2.5 py-1.5 ${getPillClasses(
                     index,
                     statusLabel
                   )}`}
                 >
-                  <div className="flex items-center gap-2 whitespace-nowrap">
-                    <span className="text-sm font-extrabold">
+                  <div className="flex items-center gap-1.5 whitespace-nowrap">
+                    <span className="text-xs font-extrabold text-white sm:text-sm">
                       #{index + 1} {entry.name}
                     </span>
 
                     <span
-                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${getStatusBadgeClasses(
+                      className={`rounded-full border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] ${getStatusBadgeClasses(
                         index,
                         statusLabel
                       )}`}
@@ -155,18 +155,10 @@ export default async function LeaderboardBar() {
                     </span>
                   </div>
 
-                  <div className="mt-1.5 flex items-center gap-2 whitespace-nowrap text-xs sm:text-sm">
+                  <div className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap text-[10px] sm:text-xs">
                     <span className="font-semibold text-white">{entry.points} pts</span>
-
                     <span className="text-slate-500">•</span>
-
                     <span className="text-slate-300">{entry.liveTeams} alive</span>
-
-                    <span className="hidden text-slate-500 sm:inline">•</span>
-
-                    <span className="hidden text-slate-400 sm:inline">
-                      {entry.draftedTeams} drafted
-                    </span>
                   </div>
                 </div>
               );
