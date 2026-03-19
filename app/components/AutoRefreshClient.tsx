@@ -7,15 +7,18 @@ type AutoRefreshClientProps = {
   intervalMs?: number;
   hiddenIntervalMs?: number;
   refreshOnFocus?: boolean;
+  minimumGapMs?: number;
 };
 
 export default function AutoRefreshClient({
-  intervalMs = 15000,
-  hiddenIntervalMs = 60000,
+  intervalMs = 5000,
+  hiddenIntervalMs = 20000,
   refreshOnFocus = true,
+  minimumGapMs = 1200,
 }: AutoRefreshClientProps) {
   const router = useRouter();
   const timeoutRef = useRef<number | null>(null);
+  const lastRefreshAtRef = useRef(0);
   const isRefreshingRef = useRef(false);
 
   useEffect(() => {
@@ -26,22 +29,8 @@ export default function AutoRefreshClient({
       }
     }
 
-    function runRefresh() {
-      if (document.hidden) {
-        scheduleNextRefresh(hiddenIntervalMs);
-        return;
-      }
-
-      if (!navigator.onLine) {
-        scheduleNextRefresh(hiddenIntervalMs);
-        return;
-      }
-
-      if (isRefreshingRef.current) {
-        scheduleNextRefresh(intervalMs);
-        return;
-      }
-
+    function markRefresh() {
+      lastRefreshAtRef.current = Date.now();
       isRefreshingRef.current = true;
 
       try {
@@ -49,26 +38,35 @@ export default function AutoRefreshClient({
       } finally {
         window.setTimeout(() => {
           isRefreshingRef.current = false;
-        }, 750);
+        }, 800);
       }
+    }
 
-      scheduleNextRefresh(intervalMs);
+    function safeRefresh() {
+      const now = Date.now();
+
+      if (document.hidden) return;
+      if (!navigator.onLine) return;
+      if (isRefreshingRef.current) return;
+      if (now - lastRefreshAtRef.current < minimumGapMs) return;
+
+      markRefresh();
     }
 
     function scheduleNextRefresh(delay: number) {
       clearScheduledRefresh();
 
       timeoutRef.current = window.setTimeout(() => {
-        runRefresh();
+        safeRefresh();
+        scheduleNextRefresh(document.hidden ? hiddenIntervalMs : intervalMs);
       }, delay);
     }
 
     function handleVisibilityChange() {
       if (!document.hidden) {
         if (refreshOnFocus && navigator.onLine) {
-          router.refresh();
+          safeRefresh();
         }
-
         scheduleNextRefresh(intervalMs);
       } else {
         scheduleNextRefresh(hiddenIntervalMs);
@@ -79,12 +77,12 @@ export default function AutoRefreshClient({
       if (!refreshOnFocus) return;
       if (!navigator.onLine) return;
 
-      router.refresh();
+      safeRefresh();
       scheduleNextRefresh(intervalMs);
     }
 
     function handleOnline() {
-      router.refresh();
+      safeRefresh();
       scheduleNextRefresh(intervalMs);
     }
 
@@ -106,7 +104,7 @@ export default function AutoRefreshClient({
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [router, intervalMs, hiddenIntervalMs, refreshOnFocus]);
+  }, [router, intervalMs, hiddenIntervalMs, refreshOnFocus, minimumGapMs]);
 
   return null;
 }
