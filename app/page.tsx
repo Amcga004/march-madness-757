@@ -402,7 +402,7 @@ function ExpandableSlateGameCard({
             <div className={`text-[9px] font-semibold uppercase tracking-[0.14em] ${statusClasses}`}>
               {statusLabel}
             </div>
-            {(showStats && (awayStats || homeStats)) ? (
+            {showStats && (awayStats || homeStats) ? (
               <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-300 transition-transform duration-200 group-open:rotate-180">
                 ▼
               </div>
@@ -510,9 +510,6 @@ export default async function DashboardPage() {
   const typedExternalGames = (externalGames ?? []) as ExternalGameSync[];
 
   const teamMap = new Map<string, string>(typedTeams.map((team) => [team.id, team.school_name]));
-  const externalGameMap = new Map<string, ExternalGameSync>(
-    typedExternalGames.map((game) => [game.external_game_id, game])
-  );
 
   const latestUpdated = typedGames[0]?.created_at ?? null;
 
@@ -555,8 +552,6 @@ export default async function DashboardPage() {
     completed: typedGames.filter((game) => game.round_name === round).length,
   }));
 
-  const recentResults = typedGames.slice(0, 6);
-
   const liveGames = typedExternalGames.filter((game) => isLiveStatus(game.espn_status));
   const nextGame =
     typedExternalGames.find(
@@ -582,7 +577,6 @@ export default async function DashboardPage() {
 
   const todaysLiveGames = todaysGames.filter((game) => isLiveStatus(game.espn_status));
   const todaysUpcomingGames = todaysGames.filter((game) => isScheduledStatus(game.espn_status));
-  const todaysFinalGames = todaysGames.filter((game) => isFinalStatus(game.espn_status));
 
   const leader = forecasts[0] ?? null;
   const topThree = forecasts.slice(0, 3);
@@ -599,12 +593,6 @@ export default async function DashboardPage() {
 
   const closestRaceDiff =
     forecasts.length >= 2 ? Math.abs(forecasts[0].currentPoints - forecasts[1].currentPoints) : 0;
-
-  const slateSections = [
-    { key: "live", label: "Live", games: todaysLiveGames, tone: "text-red-300" },
-    { key: "upcoming", label: "Upcoming", games: todaysUpcomingGames, tone: "text-blue-300" },
-    { key: "final", label: "Final", games: todaysFinalGames, tone: "text-slate-400" },
-  ].filter((section) => section.games.length > 0);
 
   return (
     <div className="mx-auto max-w-7xl p-3 sm:p-4 md:p-6">
@@ -788,3 +776,7 @@ export default async function DashboardPage() {
             ))}
           </div>
         </CompactDetailsSection>
+      </div>
+    </div>
+  );
+}
