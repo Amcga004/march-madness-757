@@ -579,9 +579,6 @@ export default async function DashboardPage() {
   const todaysUpcomingGames = todaysGames.filter((game) => isScheduledStatus(game.espn_status));
 
   const leader = forecasts[0] ?? null;
-  const topThree = forecasts.slice(0, 3);
-  const remainingManagers = forecasts.slice(3);
-
   const mostLiveTeams = forecasts.reduce<ManagerForecast | null>((best, current) => {
     if (!best) return current;
     if (current.liveTeams > best.liveTeams) return current;
@@ -686,16 +683,16 @@ export default async function DashboardPage() {
         <SectionShell
           title="Top of the League"
           subtitle="Fast standings snapshot."
-          rightLabel="Top 3"
+          rightLabel={`${forecasts.length} managers`}
         >
           <div className="space-y-2">
-            {topThree.length === 0 ? (
+            {forecasts.length === 0 ? (
               <EmptyStateCard
                 title="No standings yet"
                 body="Once games are recorded, manager standings will appear here."
               />
             ) : (
-              topThree.map((forecast: ManagerForecast, index: number) => (
+              forecasts.map((forecast: ManagerForecast, index: number) => (
                 <div
                   key={forecast.memberId}
                   className="rounded-2xl border border-slate-700/80 bg-[linear-gradient(135deg,rgba(15,23,42,0.96),rgba(23,32,51,0.96))] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
@@ -724,35 +721,6 @@ export default async function DashboardPage() {
               ))
             )}
           </div>
-
-          {remainingManagers.length > 0 ? (
-            <details className="mt-2 rounded-2xl border border-slate-700/80 bg-[#0f172a]/80 p-3">
-              <summary className="cursor-pointer list-none text-sm font-semibold text-slate-200">
-                Show full standings
-              </summary>
-
-              <div className="mt-3 space-y-2">
-                {remainingManagers.map((forecast: ManagerForecast, index: number) => (
-                  <div
-                    key={forecast.memberId}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-slate-700/80 bg-[#172033] px-3 py-2"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="text-sm font-semibold text-slate-400">#{index + 4}</div>
-                      <div className="truncate text-sm font-semibold text-white">
-                        {forecast.displayName}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 text-xs text-slate-300">
-                      <span>{forecast.currentPoints} pts</span>
-                      <span>{forecast.liveTeams} alive</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </details>
-          ) : null}
         </SectionShell>
 
         <CompactDetailsSection
