@@ -115,7 +115,30 @@ function sortGamesForDisplay(
   });
 }
 
-function getEasternDateKey(value: string) {
+function getEasternDayId(value: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+
+  const year = parts.find((part) => part.type === "year")?.value ?? "";
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
+
+  return `${year}-${month}-${day}`;
+}
+
+function getEasternDateChipLabel(value: string) {
+  return new Date(value).toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    month: "numeric",
+    day: "numeric",
+  });
+}
+
+function getEasternSectionTitle(value: string) {
   return new Date(value).toLocaleDateString("en-US", {
     timeZone: "America/New_York",
     weekday: "short",
@@ -124,42 +147,56 @@ function getEasternDateKey(value: string) {
   });
 }
 
-function getTodayEasternDateKey() {
-  return new Date().toLocaleDateString("en-US", {
-    timeZone: "America/New_York",
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+function getTodayEasternDayId() {
+  const now = new Date();
+  return getEasternDayId(now.toISOString());
 }
 
 function groupGamesByEasternDate(
   games: ExternalGameSync[],
   managerByTeamId: Map<string, string>
 ) {
-  const groups = new Map<string, ExternalGameSync[]>();
+  const groups = new Map<
+    string,
+    {
+      dayId: string;
+      chipLabel: string;
+      sectionTitle: string;
+      games: ExternalGameSync[];
+      firstStartTime: string | null;
+    }
+  >();
 
   for (const game of games) {
     if (!game.start_time) continue;
 
-    const dateKey = getEasternDateKey(game.start_time);
+    const dayId = getEasternDayId(game.start_time);
 
-    if (!groups.has(dateKey)) {
-      groups.set(dateKey, []);
+    if (!groups.has(dayId)) {
+      groups.set(dayId, {
+        dayId,
+        chipLabel: getEasternDateChipLabel(game.start_time),
+        sectionTitle: getEasternSectionTitle(game.start_time),
+        games: [],
+        firstStartTime: game.start_time,
+      });
     }
 
-    groups.get(dateKey)!.push(game);
+    const group = groups.get(dayId)!;
+    group.games.push(game);
+
+    if (
+      group.firstStartTime === null ||
+      new Date(game.start_time).getTime() < new Date(group.firstStartTime).getTime()
+    ) {
+      group.firstStartTime = game.start_time;
+    }
   }
 
-  return Array.from(groups.entries())
-    .map(([dateKey, groupedGames]) => ({
-      dateKey,
-      games: sortGamesForDisplay(groupedGames, managerByTeamId),
-      firstStartTime:
-        groupedGames
-          .map((game) => game.start_time)
-          .filter((value): value is string => !!value)
-          .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0] ?? null,
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      games: sortGamesForDisplay(group.games, managerByTeamId),
     }))
     .sort((a, b) => {
       const aTime = a.firstStartTime ? new Date(a.firstStartTime).getTime() : 0;
@@ -205,14 +242,19 @@ function SectionShell({
   subtitle,
   rightLabel,
   children,
+  id,
 }: {
   title: string;
   subtitle?: string;
   rightLabel?: string;
   children: React.ReactNode;
+  id?: string;
 }) {
   return (
-    <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
+    <section
+      id={id}
+      className="scroll-mt-28 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)]"
+    >
       <div className="mb-2.5 flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-white sm:text-base">{title}</h3>
@@ -263,6 +305,29 @@ function StatusPill({
   );
 }
 
+function DateJumpChip({
+  href,
+  label,
+  isToday,
+}: {
+  href: string;
+  label: string;
+  isToday: boolean;
+}) {
+  return (
+    <a
+      href={href}
+      className={`inline-flex shrink-0 items-center rounded-2xl border px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 ${
+        isToday
+          ? "border-blue-500/40 bg-blue-500/10 text-blue-200"
+          : "border-slate-700/80 bg-[#172033] text-slate-200 hover:bg-[#1c2940]"
+      }`}
+    >
+      {label}
+    </a>
+  );
+}
+
 export default async function ScoresPage() {
   const supabase = await createClient();
 
@@ -295,7 +360,7 @@ export default async function ScoresPage() {
   const upcomingGames = typedExternalGames.filter((game) => isScheduledStatus(game.espn_status));
 
   const groupedGames = groupGamesByEasternDate(typedExternalGames, managerByTeamId);
-  const todayKey = getTodayEasternDateKey();
+  const todayDayId = getTodayEasternDayId();
 
   return (
     <div className="mx-auto max-w-7xl p-3 sm:p-4 md:p-6">
@@ -322,6 +387,24 @@ export default async function ScoresPage() {
         <StatusPill label={`${upcomingGames.length} Upcoming`} tone="upcoming" />
       </section>
 
+      {groupedGames.length > 0 ? (
+        <section className="mb-4 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Dates
+          </div>
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            {groupedGames.map((group) => (
+              <DateJumpChip
+                key={group.dayId}
+                href={`#date-${group.dayId}`}
+                label={group.chipLabel}
+                isToday={group.dayId === todayDayId}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {groupedGames.length === 0 ? (
         <SectionShell title="Scores" subtitle="Tournament games will appear here as they enter the feed.">
           <EmptyStateCard
@@ -338,8 +421,9 @@ export default async function ScoresPage() {
 
             return (
               <SectionShell
-                key={group.dateKey}
-                title={group.dateKey === todayKey ? "Today" : group.dateKey}
+                key={group.dayId}
+                id={`date-${group.dayId}`}
+                title={group.dayId === todayDayId ? `Today • ${group.chipLabel}` : group.sectionTitle}
                 subtitle="Live games float to the top, then finals, then upcoming."
                 rightLabel={`${group.games.length} games`}
               >
