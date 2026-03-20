@@ -39,12 +39,6 @@ type ExternalGameSync = {
   raw_payload: unknown;
 };
 
-function getTodayEasternDateString() {
-  return new Date().toLocaleDateString("en-US", {
-    timeZone: "America/New_York",
-  });
-}
-
 function isLiveStatus(status: string | null | undefined) {
   if (!status) return false;
 
@@ -88,69 +82,6 @@ function getBracketHref(game: ExternalGameSync, teamMap: Map<string, Team>) {
   return `/bracket#${getRegionAnchor(region)}`;
 }
 
-function EmptyStateCard({
-  title,
-  body,
-}: {
-  title: string;
-  body: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-dashed border-slate-700 bg-[#0f172a] px-4 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
-      <div className="text-sm font-semibold text-white">{title}</div>
-      <div className="mt-1.5 text-xs text-slate-400 sm:text-sm">{body}</div>
-    </div>
-  );
-}
-
-function SectionShell({
-  title,
-  subtitle,
-  rightLabel,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  rightLabel?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
-      <div className="mb-2.5 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-white sm:text-base">{title}</h3>
-          {subtitle ? <p className="mt-0.5 text-[11px] text-slate-300 sm:text-xs">{subtitle}</p> : null}
-        </div>
-        {rightLabel ? <div className="text-[10px] text-slate-400">{rightLabel}</div> : null}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function StatusPill({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: "live" | "upcoming" | "final";
-}) {
-  const classes =
-    tone === "live"
-      ? "border-red-500/40 bg-red-500/10 text-red-200"
-      : tone === "upcoming"
-      ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
-      : "border-slate-700/80 bg-[#172033] text-slate-200";
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${classes}`}
-    >
-      {label}
-    </span>
-  );
-}
-
 function getOwnershipRank(game: ExternalGameSync, managerByTeamId: Map<string, string>) {
   const awayOwned = !!(game.mapped_away_team_id && managerByTeamId.get(game.mapped_away_team_id));
   const homeOwned = !!(game.mapped_home_team_id && managerByTeamId.get(game.mapped_home_team_id));
@@ -160,18 +91,81 @@ function getOwnershipRank(game: ExternalGameSync, managerByTeamId: Map<string, s
   return 0;
 }
 
-function sortGamesByLeagueRelevance(
+function getStatusPriority(game: ExternalGameSync) {
+  if (isLiveStatus(game.espn_status)) return 3;
+  if (isFinalStatus(game.espn_status)) return 2;
+  return 1;
+}
+
+function sortGamesForDisplay(
   games: ExternalGameSync[],
   managerByTeamId: Map<string, string>
 ) {
   return [...games].sort((a, b) => {
-    const ownershipDiff = getOwnershipRank(b, managerByTeamId) - getOwnershipRank(a, managerByTeamId);
+    const priorityDiff = getStatusPriority(b) - getStatusPriority(a);
+    if (priorityDiff !== 0) return priorityDiff;
+
+    const ownershipDiff =
+      getOwnershipRank(b, managerByTeamId) - getOwnershipRank(a, managerByTeamId);
     if (ownershipDiff !== 0) return ownershipDiff;
 
     const aTime = a.start_time ? new Date(a.start_time).getTime() : 0;
     const bTime = b.start_time ? new Date(b.start_time).getTime() : 0;
     return aTime - bTime;
   });
+}
+
+function getEasternDateKey(value: string) {
+  return new Date(value).toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function getTodayEasternDateKey() {
+  return new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function groupGamesByEasternDate(
+  games: ExternalGameSync[],
+  managerByTeamId: Map<string, string>
+) {
+  const groups = new Map<string, ExternalGameSync[]>();
+
+  for (const game of games) {
+    if (!game.start_time) continue;
+
+    const dateKey = getEasternDateKey(game.start_time);
+
+    if (!groups.has(dateKey)) {
+      groups.set(dateKey, []);
+    }
+
+    groups.get(dateKey)!.push(game);
+  }
+
+  return Array.from(groups.entries())
+    .map(([dateKey, groupedGames]) => ({
+      dateKey,
+      games: sortGamesForDisplay(groupedGames, managerByTeamId),
+      firstStartTime:
+        groupedGames
+          .map((game) => game.start_time)
+          .filter((value): value is string => !!value)
+          .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0] ?? null,
+    }))
+    .sort((a, b) => {
+      const aTime = a.firstStartTime ? new Date(a.firstStartTime).getTime() : 0;
+      const bTime = b.firstStartTime ? new Date(b.firstStartTime).getTime() : 0;
+      return aTime - bTime;
+    });
 }
 
 function buildScoresCardGame(
@@ -206,6 +200,69 @@ function buildScoresCardGame(
   };
 }
 
+function SectionShell({
+  title,
+  subtitle,
+  rightLabel,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  rightLabel?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
+      <div className="mb-2.5 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-white sm:text-base">{title}</h3>
+          {subtitle ? <p className="mt-0.5 text-[11px] text-slate-300 sm:text-xs">{subtitle}</p> : null}
+        </div>
+        {rightLabel ? <div className="text-[10px] text-slate-400">{rightLabel}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function EmptyStateCard({
+  title,
+  body,
+}: {
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-700 bg-[#0f172a] px-4 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+      <div className="text-sm font-semibold text-white">{title}</div>
+      <div className="mt-1.5 text-xs text-slate-400 sm:text-sm">{body}</div>
+    </div>
+  );
+}
+
+function StatusPill({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "live" | "upcoming" | "final";
+}) {
+  const classes =
+    tone === "live"
+      ? "border-red-500/40 bg-red-500/10 text-red-200"
+      : tone === "upcoming"
+      ? "border-blue-500/30 bg-blue-500/10 text-blue-200"
+      : "border-slate-700/80 bg-[#172033] text-slate-200";
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${classes}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 export default async function ScoresPage() {
   const supabase = await createClient();
 
@@ -233,50 +290,12 @@ export default async function ScoresPage() {
     typedPicks.map((pick) => [pick.team_id, memberNameById.get(pick.member_id) ?? "Unknown"])
   );
 
-  const todayEastern = getTodayEasternDateString();
+  const liveGames = typedExternalGames.filter((game) => isLiveStatus(game.espn_status));
+  const finalGames = typedExternalGames.filter((game) => isFinalStatus(game.espn_status));
+  const upcomingGames = typedExternalGames.filter((game) => isScheduledStatus(game.espn_status));
 
-  const liveGames = sortGamesByLeagueRelevance(
-    typedExternalGames.filter((game) => isLiveStatus(game.espn_status)),
-    managerByTeamId
-  );
-
-  const ownedLiveGames = liveGames.filter(
-    (game) =>
-      (game.mapped_home_team_id && managerByTeamId.get(game.mapped_home_team_id)) ||
-      (game.mapped_away_team_id && managerByTeamId.get(game.mapped_away_team_id))
-  );
-
-  const todayGames = typedExternalGames.filter((game) => {
-    if (!game.start_time) return false;
-
-    const gameDate = new Date(game.start_time).toLocaleDateString("en-US", {
-      timeZone: "America/New_York",
-    });
-
-    return gameDate === todayEastern;
-  });
-
-  const todayUpcomingGames = sortGamesByLeagueRelevance(
-    todayGames.filter((game) => isScheduledStatus(game.espn_status)),
-    managerByTeamId
-  );
-
-  const todayFinalGames = sortGamesByLeagueRelevance(
-    todayGames.filter((game) => isFinalStatus(game.espn_status)),
-    managerByTeamId
-  );
-
-  const nextGames = sortGamesByLeagueRelevance(
-    typedExternalGames
-      .filter(
-        (game) =>
-          isScheduledStatus(game.espn_status) &&
-          !!game.start_time &&
-          new Date(game.start_time).getTime() >= Date.now()
-      )
-      .slice(0, 8),
-    managerByTeamId
-  );
+  const groupedGames = groupGamesByEasternDate(typedExternalGames, managerByTeamId);
+  const todayKey = getTodayEasternDateKey();
 
   return (
     <div className="mx-auto max-w-7xl p-3 sm:p-4 md:p-6">
@@ -299,109 +318,52 @@ export default async function ScoresPage() {
 
       <section className="mb-3 flex flex-wrap gap-2">
         <StatusPill label={`${liveGames.length} Live`} tone="live" />
-        <StatusPill label={`${todayUpcomingGames.length} Upcoming`} tone="upcoming" />
-        <StatusPill label={`${todayFinalGames.length} Final`} tone="final" />
+        <StatusPill label={`${finalGames.length} Final`} tone="final" />
+        <StatusPill label={`${upcomingGames.length} Upcoming`} tone="upcoming" />
       </section>
 
-      {ownedLiveGames.length > 0 ? (
-        <section className="mb-3 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            League Spotlight
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {ownedLiveGames.slice(0, 6).map((game) => {
-              const cardGame = buildScoresCardGame(game, teamMap, managerByTeamId);
-              return (
-                <span
-                  key={game.external_game_id}
-                  className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200"
-                >
-                  {cardGame.away_team_name} vs {cardGame.home_team_name}
-                </span>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
-
-      <div className="space-y-3">
-        <SectionShell
-          title="Live Now"
-          subtitle="League-owned games float to the top."
-          rightLabel={liveGames.length > 0 ? `${liveGames.length} live` : "No live games"}
-        >
-          {liveGames.length === 0 ? (
-            <EmptyStateCard
-              title="No games are live right now"
-              body="When games tip, they’ll show here first with live scores, ownership, and team stats."
-            />
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {liveGames.map((game) => (
-                <ScoresGameCard
-                  key={game.external_game_id}
-                  game={buildScoresCardGame(game, teamMap, managerByTeamId)}
-                />
-              ))}
-            </div>
-          )}
+      {groupedGames.length === 0 ? (
+        <SectionShell title="Scores" subtitle="Tournament games will appear here as they enter the feed.">
+          <EmptyStateCard
+            title="No games available"
+            body="Once tournament games are scheduled or live, they’ll appear here automatically."
+          />
         </SectionShell>
+      ) : (
+        <div className="space-y-3">
+          {groupedGames.map((group) => {
+            const liveCount = group.games.filter((game) => isLiveStatus(game.espn_status)).length;
+            const finalCount = group.games.filter((game) => isFinalStatus(game.espn_status)).length;
+            const scheduledCount = group.games.filter((game) => isScheduledStatus(game.espn_status)).length;
 
-        <SectionShell
-          title="Up Next"
-          subtitle="Scheduled games on deck."
-          rightLabel={nextGames.length > 0 ? `${nextGames.length} queued` : "No upcoming games"}
-        >
-          {nextGames.length === 0 ? (
-            <EmptyStateCard
-              title="No upcoming games in feed"
-              body="Scheduled tournament games will appear here as they get closer."
-            />
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {nextGames.map((game) => (
-                <ScoresGameCard
-                  key={game.external_game_id}
-                  game={buildScoresCardGame(game, teamMap, managerByTeamId)}
-                />
-              ))}
-            </div>
-          )}
-        </SectionShell>
+            return (
+              <SectionShell
+                key={group.dateKey}
+                title={group.dateKey === todayKey ? "Today" : group.dateKey}
+                subtitle="Live games float to the top, then finals, then upcoming."
+                rightLabel={`${group.games.length} games`}
+              >
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {liveCount > 0 ? <StatusPill label={`${liveCount} Live`} tone="live" /> : null}
+                  {finalCount > 0 ? <StatusPill label={`${finalCount} Final`} tone="final" /> : null}
+                  {scheduledCount > 0 ? (
+                    <StatusPill label={`${scheduledCount} Upcoming`} tone="upcoming" />
+                  ) : null}
+                </div>
 
-        <details className="group rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-white sm:text-base">Finals Today</div>
-              <div className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-slate-400">
-                {todayFinalGames.length > 0 ? `${todayFinalGames.length} completed` : "No finals yet"}
-              </div>
-            </div>
-            <div className="shrink-0 text-slate-300 transition-transform duration-200 group-open:rotate-180">
-              ▼
-            </div>
-          </summary>
-
-          <div className="mt-3">
-            {todayFinalGames.length === 0 ? (
-              <EmptyStateCard
-                title="No completed games today"
-                body="Final scores will stack here once today’s games finish."
-              />
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {todayFinalGames.map((game) => (
-                  <ScoresGameCard
-                    key={game.external_game_id}
-                    game={buildScoresCardGame(game, teamMap, managerByTeamId)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </details>
-      </div>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {group.games.map((game) => (
+                    <ScoresGameCard
+                      key={game.external_game_id}
+                      game={buildScoresCardGame(game, teamMap, managerByTeamId)}
+                    />
+                  ))}
+                </div>
+              </SectionShell>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
