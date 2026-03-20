@@ -286,7 +286,7 @@ function DateJumpChip({
   return (
     <a
       href={href}
-      className={`inline-flex shrink-0 items-center rounded-2xl border px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 ${
+      className={`inline-flex shrink-0 items-center rounded-2xl border px-3 py-1.5 text-xs font-semibold transition hover:-translate-y-0.5 ${
         isToday
           ? "border-blue-500/40 bg-blue-500/10 text-blue-200"
           : "border-slate-700/80 bg-[#172033] text-slate-200 hover:bg-[#1c2940]"
@@ -316,7 +316,7 @@ function DateSection({
     <details
       id={id}
       open={defaultOpen}
-      className="group scroll-mt-32 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)]"
+      className="group scroll-mt-28 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)]"
     >
       <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
         <div>
@@ -397,11 +397,8 @@ export default async function ScoresPage() {
       </section>
 
       {groupedGames.length > 0 ? (
-        <section className="sticky top-[146px] z-30 mb-4 rounded-3xl border border-slate-700/80 bg-[#111827]/95 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Dates
-          </div>
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        <section className="sticky top-[92px] z-30 -mx-3 mb-4 border-y border-slate-800/80 bg-[#020817]/95 px-3 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl sm:mx-0 sm:rounded-2xl sm:border sm:px-3">
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1">
             {groupedGames.map((group) => (
               <DateJumpChip
                 key={group.dayId}
