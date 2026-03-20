@@ -148,8 +148,7 @@ function getEasternSectionTitle(value: string) {
 }
 
 function getTodayEasternDayId() {
-  const now = new Date();
-  return getEasternDayId(now.toISOString());
+  return getEasternDayId(new Date().toISOString());
 }
 
 function groupGamesByEasternDate(
@@ -237,36 +236,6 @@ function buildScoresCardGame(
   };
 }
 
-function SectionShell({
-  title,
-  subtitle,
-  rightLabel,
-  children,
-  id,
-}: {
-  title: string;
-  subtitle?: string;
-  rightLabel?: string;
-  children: React.ReactNode;
-  id?: string;
-}) {
-  return (
-    <section
-      id={id}
-      className="scroll-mt-28 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)]"
-    >
-      <div className="mb-2.5 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-white sm:text-base">{title}</h3>
-          {subtitle ? <p className="mt-0.5 text-[11px] text-slate-300 sm:text-xs">{subtitle}</p> : null}
-        </div>
-        {rightLabel ? <div className="text-[10px] text-slate-400">{rightLabel}</div> : null}
-      </div>
-      {children}
-    </section>
-  );
-}
-
 function EmptyStateCard({
   title,
   body,
@@ -325,6 +294,46 @@ function DateJumpChip({
     >
       {label}
     </a>
+  );
+}
+
+function DateSection({
+  id,
+  title,
+  subtitle,
+  rightLabel,
+  defaultOpen,
+  children,
+}: {
+  id: string;
+  title: string;
+  subtitle?: string;
+  rightLabel?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details
+      id={id}
+      open={defaultOpen}
+      className="group scroll-mt-32 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.28)]"
+    >
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-white sm:text-base">{title}</h3>
+          {subtitle ? <p className="mt-0.5 text-[11px] text-slate-300 sm:text-xs">{subtitle}</p> : null}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {rightLabel ? <div className="text-[10px] text-slate-400">{rightLabel}</div> : null}
+          <div className="shrink-0 text-slate-300 transition-transform duration-200 group-open:rotate-180">
+            ▼
+          </div>
+        </div>
+      </summary>
+
+      <div className="mt-3">{children}</div>
+    </details>
   );
 }
 
@@ -388,7 +397,7 @@ export default async function ScoresPage() {
       </section>
 
       {groupedGames.length > 0 ? (
-        <section className="mb-4 rounded-3xl border border-slate-700/80 bg-[#111827]/90 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+        <section className="sticky top-[146px] z-30 mb-4 rounded-3xl border border-slate-700/80 bg-[#111827]/95 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
             Dates
           </div>
@@ -406,12 +415,17 @@ export default async function ScoresPage() {
       ) : null}
 
       {groupedGames.length === 0 ? (
-        <SectionShell title="Scores" subtitle="Tournament games will appear here as they enter the feed.">
+        <DateSection
+          id="scores-empty"
+          title="Scores"
+          subtitle="Tournament games will appear here as they enter the feed."
+          defaultOpen
+        >
           <EmptyStateCard
             title="No games available"
             body="Once tournament games are scheduled or live, they’ll appear here automatically."
           />
-        </SectionShell>
+        </DateSection>
       ) : (
         <div className="space-y-3">
           {groupedGames.map((group) => {
@@ -419,13 +433,18 @@ export default async function ScoresPage() {
             const finalCount = group.games.filter((game) => isFinalStatus(game.espn_status)).length;
             const scheduledCount = group.games.filter((game) => isScheduledStatus(game.espn_status)).length;
 
+            const isToday = group.dayId === todayDayId;
+            const hasLive = liveCount > 0;
+            const defaultOpen = isToday || hasLive;
+
             return (
-              <SectionShell
+              <DateSection
                 key={group.dayId}
                 id={`date-${group.dayId}`}
-                title={group.dayId === todayDayId ? `Today • ${group.chipLabel}` : group.sectionTitle}
+                title={isToday ? `Today • ${group.chipLabel}` : group.sectionTitle}
                 subtitle="Live games float to the top, then finals, then upcoming."
                 rightLabel={`${group.games.length} games`}
+                defaultOpen={defaultOpen}
               >
                 <div className="mb-3 flex flex-wrap gap-2">
                   {liveCount > 0 ? <StatusPill label={`${liveCount} Live`} tone="live" /> : null}
@@ -443,7 +462,7 @@ export default async function ScoresPage() {
                     />
                   ))}
                 </div>
-              </SectionShell>
+              </DateSection>
             );
           })}
         </div>
