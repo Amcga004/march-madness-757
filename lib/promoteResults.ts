@@ -3,11 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 const SCORING: Record<string, number> = {
   "First Four": 0,
   "Round of 64": 2,
-  "Round of 32": 4,
-  "Sweet 16": 7,
-  "Elite Eight": 13,
-  "Final Four": 20,
-  Championship: 37,
+  "Round of 32": 5,
+  "Sweet 16": 10,
+  "Elite Eight": 17,
+  "Final Four": 25,
+  Championship: 35,
 };
 
 function normalizeRound(round: string | null | undefined): string {
