@@ -23,9 +23,11 @@ function normalizeRound(round: string | null | undefined): string {
     "round of 64": "Round of 64",
     "round-64": "Round of 64",
     "first round": "Round of 64",
+    "1st round": "Round of 64",
     "round of 32": "Round of 32",
     "round-32": "Round of 32",
     "second round": "Round of 32",
+    "2nd round": "Round of 32",
     "sweet 16": "Sweet 16",
     "sweet-16": "Sweet 16",
     "elite 8": "Elite Eight",
@@ -139,7 +141,7 @@ export async function promoteResults() {
 
     const { data: existingGame, error: existingGameError } = await supabase
       .from("games")
-      .select("id, league_id")
+      .select("id")
       .eq("external_game_id", game.external_game_id)
       .maybeSingle();
 

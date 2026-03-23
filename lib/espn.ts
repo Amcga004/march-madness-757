@@ -29,6 +29,10 @@ export type EspnEvent = {
   };
   competitions?: Array<{
     competitors: EspnCompetitionCompetitor[];
+    notes?: Array<{
+      type?: string;
+      headline?: string;
+    }>;
     status?: {
       type?: {
         name?: string;
@@ -54,6 +58,7 @@ export type NormalizedEspnGame = {
   espn_period: number | null;
   espn_clock: string | null;
   start_time: string | null;
+  round_name: string | null;
   home_team_external_id: string | null;
   away_team_external_id: string | null;
   home_team_name: string | null;
@@ -100,6 +105,69 @@ export function normalizeTeamName(name?: string | null): string | null {
     .replace(/\bcollege\b/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeRoundText(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  const key = value.toLowerCase().trim();
+
+  if (key.includes("first four") || key.includes("play-in") || key.includes("play in")) {
+    return "First Four";
+  }
+
+  if (
+    key.includes("1st round") ||
+    key.includes("first round") ||
+    key.includes("round of 64")
+  ) {
+    return "Round of 64";
+  }
+
+  if (
+    key.includes("2nd round") ||
+    key.includes("second round") ||
+    key.includes("round of 32")
+  ) {
+    return "Round of 32";
+  }
+
+  if (key.includes("sweet 16")) {
+    return "Sweet 16";
+  }
+
+  if (key.includes("elite 8") || key.includes("elite eight")) {
+    return "Elite Eight";
+  }
+
+  if (key.includes("final four") || key.includes("final 4")) {
+    return "Final Four";
+  }
+
+  if (key.includes("championship") || key.includes("title game")) {
+    return "Championship";
+  }
+
+  return null;
+}
+
+function inferRoundName(event: EspnEvent): string | null {
+  const competition = event.competitions?.[0];
+
+  const candidates: Array<string | null | undefined> = [
+    competition?.notes?.[0]?.headline,
+    event.status?.type?.detail,
+    event.status?.type?.shortDetail,
+    event.status?.type?.description,
+    event.name,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeRoundText(candidate);
+    if (normalized) return normalized;
+  }
+
+  return null;
 }
 
 export function getEspnScoreboardUrl(date: string) {
@@ -150,6 +218,7 @@ export function normalizeEspnEvent(event: EspnEvent): NormalizedEspnGame | null 
     espn_period: event.status?.period ?? null,
     espn_clock: event.status?.displayClock ?? null,
     start_time: event.date ?? null,
+    round_name: inferRoundName(event),
     home_team_external_id: home.team?.id ?? null,
     away_team_external_id: away.team?.id ?? null,
     home_team_name: normalizeTeamName(homeName),

@@ -80,6 +80,7 @@ export async function runSyncCycleForDates(requestedDates: string[]) {
           espn_period: normalized.espn_period,
           espn_clock: normalized.espn_clock,
           start_time: normalized.start_time,
+          round_name: normalized.round_name,
           home_team_external_id: normalized.home_team_external_id,
           away_team_external_id: normalized.away_team_external_id,
           home_team_name: normalized.home_team_name,
