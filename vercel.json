@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/sync",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/golf/sync-live-cron",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

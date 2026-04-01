@@ -1,0 +1,31 @@
+--- SCRIPT 0 ---
+
+
+--- SCRIPT 1 ---
+
+
+--- SCRIPT 2 ---
+
+
+--- SCRIPT 3 ---
+
+
+--- SCRIPT 4 ---
+
+
+--- SCRIPT 5 ---
+window.prerenderReady = false;
+
+--- SCRIPT 6 ---
+//src: index-static.html
+			window.version = '0.0.2';
+			window.commit = '7c1e886c';
+			window.ssr = false;
+			window.restAPI = '/api';
+			window.parseAppId = 'Actinium';
+
+--- SCRIPT 7 ---
+
+
+--- SCRIPT 8 ---
+
