@@ -2,7 +2,7 @@ import type { ProviderFetchResult, ProviderPlayerRow } from './types'
 
 function parseToPar(value: string | number | null | undefined): number | null {
   if (value == null) return null
-  if (typeof value === 'number') return value
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
 
   const cleaned = value.trim().toUpperCase()
   if (!cleaned || cleaned === 'E') return 0
@@ -12,167 +12,280 @@ function parseToPar(value: string | number | null | undefined): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-function safeJsonParse<T>(value: string): T | null {
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    return null
-  }
-}
-
-function flattenObjects(obj: unknown, acc: unknown[] = []): unknown[] {
-  if (Array.isArray(obj)) {
-    for (const item of obj) flattenObjects(item, acc)
-    return acc
+function parseIntSafe(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
   }
 
-  if (obj && typeof obj === 'object') {
-    acc.push(obj)
-    for (const value of Object.values(obj as Record<string, unknown>)) {
-      flattenObjects(value, acc)
-    }
-  }
-
-  return acc
-}
-
-function extractName(record: Record<string, unknown>): string | null {
-  const directKeys = [
-    'playerName',
-    'player_name',
-    'displayName',
-    'display_name',
-    'name',
-    'fullName',
-    'full_name',
-    'shortName',
-  ]
-
-  for (const key of directKeys) {
-    const value = record[key]
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim()
-    }
-  }
-
-  const player = record.player
-  if (player && typeof player === 'object') {
-    const playerRecord = player as Record<string, unknown>
-    for (const key of directKeys) {
-      const value = playerRecord[key]
-      if (typeof value === 'string' && value.trim()) {
-        return value.trim()
-      }
-    }
+  if (typeof value === 'string') {
+    const cleaned = value.trim()
+    if (!cleaned) return null
+    const n = Number.parseInt(cleaned, 10)
+    return Number.isFinite(n) ? n : null
   }
 
   return null
 }
 
-function extractRowsFromPgaJson(payload: unknown): ProviderPlayerRow[] {
-  const allObjects = flattenObjects(payload)
-  const rows: ProviderPlayerRow[] = []
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\./g, '')
+    .replace(/,/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
-  for (const node of allObjects) {
-    if (!node || typeof node !== 'object') continue
-    const record = node as Record<string, unknown>
+function deriveStatus(player: Record<string, unknown>, roundCount: number): string {
+  const rawStatus =
+    typeof player.status === 'string'
+      ? player.status
+      : typeof player.playerStatus === 'string'
+        ? player.playerStatus
+        : null
 
-    const playerName = extractName(record)
-    const positionText =
-      typeof record.position === 'string'
-        ? record.position
-        : typeof record.pos === 'string'
-          ? record.pos
-          : typeof record.rank === 'string'
-            ? record.rank
-            : null
+  if (rawStatus && rawStatus.trim()) return rawStatus.trim()
 
-    const totalToPar = parseToPar(
-      typeof record.totalToPar === 'string' || typeof record.totalToPar === 'number'
-        ? (record.totalToPar as string | number)
-        : typeof record.total_to_par === 'string' || typeof record.total_to_par === 'number'
-          ? (record.total_to_par as string | number)
-          : typeof record.toPar === 'string' || typeof record.toPar === 'number'
-            ? (record.toPar as string | number)
-            : typeof record.score === 'string' || typeof record.score === 'number'
-              ? (record.score as string | number)
-              : null
-    )
+  const thru =
+    typeof player.thru === 'string'
+      ? player.thru.trim().toUpperCase()
+      : typeof player.thru === 'number'
+        ? String(player.thru)
+        : null
 
-    const todayToPar = parseToPar(
-      typeof record.today === 'string' || typeof record.today === 'number'
-        ? (record.today as string | number)
-        : typeof record.todayToPar === 'string' || typeof record.todayToPar === 'number'
-          ? (record.todayToPar as string | number)
-          : typeof record.today_to_par === 'string' || typeof record.today_to_par === 'number'
-            ? (record.today_to_par as string | number)
-            : null
-    )
+  if (thru === 'F' && roundCount >= 4) return 'Final'
+  if (thru === 'F') return 'Round Complete'
+  if (thru) return 'In Progress'
+  return 'Not Started'
+}
 
-    const thru =
-      typeof record.thru === 'string'
-        ? record.thru
-        : typeof record.through === 'string'
-          ? record.through
-          : typeof record.holesCompletedText === 'string'
-            ? record.holesCompletedText
-            : typeof record.status === 'string' && /^\d+$|^F$/i.test(record.status)
-              ? record.status
-              : null
+function deriveCurrentRound(player: Record<string, unknown>, rounds: Array<number | null>): number | null {
+  const explicitRound =
+    parseIntSafe(player.round) ??
+    parseIntSafe(player.currentRound) ??
+    parseIntSafe(player.roundNumber)
 
-    const holesCompleted =
-      typeof record.holesCompleted === 'number'
-        ? record.holesCompleted
-        : typeof thru === 'string' && /^\d+$/.test(thru)
-          ? Number(thru)
+  if (explicitRound != null) return explicitRound
+
+  const thru =
+    typeof player.thru === 'string'
+      ? player.thru.trim().toUpperCase()
+      : typeof player.thru === 'number'
+        ? String(player.thru)
+        : null
+
+  const completedRounds = rounds.filter((r) => r != null).length
+  if (completedRounds === 0) return null
+  if (thru === 'F') return Math.min(completedRounds, 4)
+  return Math.min(completedRounds + 1, 4)
+}
+
+function deriveMadeCut(player: Record<string, unknown>, positionText: string | null, rounds: Array<number | null>): boolean | null {
+  const completedRounds = rounds.filter((r) => r != null).length
+
+  const rawMadeCut = player.madeCut
+  if (typeof rawMadeCut === 'boolean') return rawMadeCut
+
+  const normalizedPosition = positionText?.trim().toUpperCase() ?? ''
+  if (normalizedPosition === 'CUT' || normalizedPosition === 'MC') return false
+  if (completedRounds >= 3) return true
+  if (completedRounds < 2) return null
+  return null
+}
+
+function extractRoundStrokes(player: Record<string, unknown>): {
+  round1: number | null
+  round2: number | null
+  round3: number | null
+  round4: number | null
+} {
+  const directRound1 = parseIntSafe(player.round1) ?? parseIntSafe(player.r1)
+  const directRound2 = parseIntSafe(player.round2) ?? parseIntSafe(player.r2)
+  const directRound3 = parseIntSafe(player.round3) ?? parseIntSafe(player.r3)
+  const directRound4 = parseIntSafe(player.round4) ?? parseIntSafe(player.r4)
+
+  let round1 = directRound1
+  let round2 = directRound2
+  let round3 = directRound3
+  let round4 = directRound4
+
+  const rounds = Array.isArray(player.rounds) ? player.rounds : []
+
+  for (let i = 0; i < rounds.length; i += 1) {
+    const round = rounds[i]
+    if (!round || typeof round !== 'object') continue
+
+    const roundRecord = round as Record<string, unknown>
+    const strokes =
+      parseIntSafe(roundRecord.strokes) ??
+      parseIntSafe(roundRecord.score) ??
+      parseIntSafe(roundRecord.value)
+
+    const roundNumber =
+      parseIntSafe(roundRecord.roundNumber) ??
+      parseIntSafe(roundRecord.round) ??
+      i + 1
+
+    if (roundNumber === 1 && round1 == null) round1 = strokes
+    if (roundNumber === 2 && round2 == null) round2 = strokes
+    if (roundNumber === 3 && round3 == null) round3 = strokes
+    if (roundNumber === 4 && round4 == null) round4 = strokes
+  }
+
+  return { round1, round2, round3, round4 }
+}
+
+function extractPlayersFromJson(payload: unknown): Record<string, unknown>[] {
+  if (!payload || typeof payload !== 'object') return []
+
+  const root = payload as Record<string, unknown>
+
+  const candidates: unknown[] = [
+    root.leaderboard,
+    root.data,
+    root
+  ]
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') continue
+    const record = candidate as Record<string, unknown>
+
+    const possibleArrays: unknown[] = [
+      record.players,
+      record.playersList,
+      record.leaderboardRows,
+      record.entries,
+      record.results
+    ]
+
+    for (const arr of possibleArrays) {
+      if (Array.isArray(arr)) {
+        return arr.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+      }
+    }
+  }
+
+  return []
+}
+
+export async function fetchPgaLeaderboard(): Promise<ProviderFetchResult> {
+  const tournamentId = 'R2026020'
+
+  try {
+    const url = `https://statdata.pgatour.com/r/${tournamentId}/leaderboard-v2mini.json`
+
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        Accept: 'application/json,text/plain,*/*',
+      },
+      cache: 'no-store',
+    })
+
+    if (!res.ok) {
+      return {
+        source: 'pga',
+        success: false,
+        rows: [],
+        message: `PGA JSON fetch failed: ${res.status}`,
+      }
+    }
+
+    const json = await res.json()
+    const players = extractPlayersFromJson(json)
+
+    if (players.length === 0) {
+      return {
+        source: 'pga',
+        success: false,
+        rows: [],
+        message: 'No players found in PGA JSON feed',
+      }
+    }
+
+    const rows: ProviderPlayerRow[] = []
+
+    for (const player of players) {
+      const playerBio =
+        player.player_bio && typeof player.player_bio === 'object'
+          ? (player.player_bio as Record<string, unknown>)
           : null
 
-    const currentRound =
-      typeof record.currentRound === 'number'
-        ? record.currentRound
-        : typeof record.round === 'number'
-          ? record.round
-          : null
+      const playerName =
+        (typeof player.playerName === 'string' && player.playerName.trim()) ||
+        (typeof player.player_name === 'string' && player.player_name.trim()) ||
+        (typeof player.full_name === 'string' && player.full_name.trim()) ||
+        (typeof player.name === 'string' && player.name.trim()) ||
+        (playerBio && typeof playerBio.full_name === 'string' && playerBio.full_name.trim()) ||
+        (playerBio && typeof playerBio.player_name === 'string' && playerBio.player_name.trim()) ||
+        null
 
-    const round1 =
-      typeof record.round1 === 'number'
-        ? record.round1
-        : typeof record.r1 === 'number'
-          ? record.r1
-          : null
+      if (!playerName) continue
 
-    const round2 =
-      typeof record.round2 === 'number'
-        ? record.round2
-        : typeof record.r2 === 'number'
-          ? record.r2
-          : null
+      const positionText =
+        (typeof player.current_position === 'string' && player.current_position.trim()) ||
+        (typeof player.position === 'string' && player.position.trim()) ||
+        (typeof player.pos === 'string' && player.pos.trim()) ||
+        (typeof player.rank === 'string' && player.rank.trim()) ||
+        null
 
-    const round3 =
-      typeof record.round3 === 'number'
-        ? record.round3
-        : typeof record.r3 === 'number'
-          ? record.r3
-          : null
+      const totalToPar = parseToPar(
+        (typeof player.total === 'string' || typeof player.total === 'number'
+          ? player.total
+          : null) ??
+          (typeof player.totalToPar === 'string' || typeof player.totalToPar === 'number'
+            ? player.totalToPar
+            : null) ??
+          (typeof player.total_to_par === 'string' || typeof player.total_to_par === 'number'
+            ? player.total_to_par
+            : null) ??
+          (typeof player.score === 'string' || typeof player.score === 'number'
+            ? player.score
+            : null)
+      )
 
-    const round4 =
-      typeof record.round4 === 'number'
-        ? record.round4
-        : typeof record.r4 === 'number'
-          ? record.r4
-          : null
+      const todayToPar = parseToPar(
+        (typeof player.today === 'string' || typeof player.today === 'number'
+          ? player.today
+          : null) ??
+          (typeof player.todayToPar === 'string' || typeof player.todayToPar === 'number'
+            ? player.todayToPar
+            : null) ??
+          (typeof player.today_to_par === 'string' || typeof player.today_to_par === 'number'
+            ? player.today_to_par
+            : null)
+      )
 
-    const status =
-      typeof record.status === 'string'
-        ? record.status
-        : typeof record.playerStatus === 'string'
-          ? record.playerStatus
-          : null
+      const thru =
+        (typeof player.thru === 'string' && player.thru.trim()) ||
+        (typeof player.thru === 'number' ? String(player.thru) : null) ||
+        (typeof player.through === 'string' && player.through.trim()) ||
+        null
 
-    if (
-      playerName &&
-      (positionText || totalToPar !== null || todayToPar !== null || thru || status)
-    ) {
+      const holesCompleted =
+        parseIntSafe(player.holesCompleted) ??
+        (typeof thru === 'string' && /^\d+$/.test(thru) ? Number.parseInt(thru, 10) : null)
+
+      const { round1, round2, round3, round4 } = extractRoundStrokes(player)
+      const rounds = [round1, round2, round3, round4]
+      const currentRound = deriveCurrentRound(player, rounds)
+      const status = deriveStatus(player, rounds.filter((r) => r != null).length)
+      const madeCut = deriveMadeCut(player, positionText, rounds)
+
+      const hasUsefulData =
+        positionText != null ||
+        totalToPar != null ||
+        todayToPar != null ||
+        thru != null ||
+        round1 != null ||
+        round2 != null ||
+        round3 != null ||
+        round4 != null
+
+      if (!hasUsefulData) continue
+
       rows.push({
         playerName,
         source: 'pga',
@@ -186,86 +299,58 @@ function extractRowsFromPgaJson(payload: unknown): ProviderPlayerRow[] {
         round2,
         round3,
         round4,
-        madeCut: null,
+        madeCut,
         status,
         sourceUpdatedAt: null,
-        rawPayload: record,
+        rawPayload: player,
       })
-    }
-  }
-
-  const deduped = new Map<string, ProviderPlayerRow>()
-  for (const row of rows) {
-    if (!deduped.has(row.playerName)) {
-      deduped.set(row.playerName, row)
-    }
-  }
-
-  return Array.from(deduped.values())
-}
-
-export async function fetchPgaLeaderboard(): Promise<ProviderFetchResult> {
-  const url = process.env.PGA_GOLF_EVENT_URL
-
-  if (!url) {
-    return {
-      source: 'pga',
-      success: false,
-      rows: [],
-      message: 'Missing PGA_GOLF_EVENT_URL',
-    }
-  }
-
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-      },
-      cache: 'no-store',
-    })
-
-    if (!res.ok) {
-      return {
-        source: 'pga',
-        success: false,
-        rows: [],
-        message: `PGA fetch failed with ${res.status}`,
-      }
-    }
-
-    const html = await res.text()
-
-    const scriptMatches = Array.from(
-      html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)
-    ).map((m) => m[1])
-
-    const allRows: ProviderPlayerRow[] = []
-
-    for (const block of scriptMatches) {
-      const trimmed = block.trim()
-      if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) continue
-
-      const parsed = safeJsonParse<unknown>(trimmed)
-      if (!parsed) continue
-
-      const rows = extractRowsFromPgaJson(parsed)
-      if (rows.length > 0) {
-        allRows.push(...rows)
-      }
     }
 
     const deduped = new Map<string, ProviderPlayerRow>()
-    for (const row of allRows) {
-      if (!deduped.has(row.playerName)) deduped.set(row.playerName, row)
+    for (const row of rows) {
+      const key = normalizeName(row.playerName)
+      const existing = deduped.get(key)
+
+      if (!existing) {
+        deduped.set(key, row)
+        continue
+      }
+
+      const existingCompleteness = [
+        existing.positionText,
+        existing.totalToPar,
+        existing.todayToPar,
+        existing.round1,
+        existing.round2,
+        existing.round3,
+        existing.round4,
+      ].filter((value) => value != null).length
+
+      const incomingCompleteness = [
+        row.positionText,
+        row.totalToPar,
+        row.todayToPar,
+        row.round1,
+        row.round2,
+        row.round3,
+        row.round4,
+      ].filter((value) => value != null).length
+
+      if (incomingCompleteness > existingCompleteness) {
+        deduped.set(key, row)
+      }
     }
 
-    const rows = Array.from(deduped.values())
+    const finalRows = Array.from(deduped.values())
 
     return {
       source: 'pga',
-      success: rows.length > 0,
-      rows,
-      message: rows.length > 0 ? undefined : 'No parseable leaderboard rows found on PGA page',
+      success: finalRows.length > 0,
+      rows: finalRows,
+      message:
+        finalRows.length > 0
+          ? `Parsed ${finalRows.length} players from PGA JSON`
+          : 'No parseable rows found in PGA JSON feed',
     }
   } catch (error) {
     return {
