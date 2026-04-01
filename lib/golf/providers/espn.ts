@@ -94,7 +94,7 @@ export async function fetchEspnLeaderboard(): Promise<ProviderFetchResult> {
   }
 
   try {
-    const url = `https://site.api.espn.com/apis/v2/sports/golf/pga/leaderboard?event=${eventId}`
+    const url = `https://site.web.api.espn.com/apis/v2/sports/golf/pga/scoreboard?event=${eventId}`
 
     const res = await fetch(url, {
       headers: {
