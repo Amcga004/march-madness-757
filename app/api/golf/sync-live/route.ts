@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { syncEventField, upsertNormalizedLiveState } from '@/lib/golf/normalize'
 import { resolveProviders } from '@/lib/golf/providers'
-import type { SyncProviderMode } from '@/lib/golf/providers/types'
+import type { ProviderPlayerRow, SyncProviderMode } from '@/lib/golf/providers/types'
 import { refreshLiveManagerScores } from '@/lib/golf/scoring'
+import { upsertRoundAndEventResults } from '@/lib/golf/results'
 
 function deriveMode(requestedMode?: unknown): SyncProviderMode {
   if (
@@ -30,6 +31,31 @@ function deriveMode(requestedMode?: unknown): SyncProviderMode {
   }
 
   return 'espn_pga'
+}
+
+function mergeProviderRows(primary: ProviderPlayerRow[], fallback: ProviderPlayerRow[]) {
+  const normalizeName = (name: string) =>
+    name
+      .toLowerCase()
+      .replace(/\./g, '')
+      .replace(/,/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+  const merged = new Map<string, ProviderPlayerRow>()
+
+  for (const row of fallback) {
+    merged.set(normalizeName(row.playerName), row)
+  }
+
+  for (const row of primary) {
+    merged.set(normalizeName(row.playerName), {
+      ...merged.get(normalizeName(row.playerName)),
+      ...row,
+    })
+  }
+
+  return Array.from(merged.values())
 }
 
 export async function POST(req: Request) {
@@ -101,6 +127,16 @@ export async function POST(req: Request) {
       fallback: providers.fallback,
     })
 
+    const providerRowsForResults = mergeProviderRows(
+      providers.primary.rows ?? [],
+      providers.fallback.rows ?? []
+    )
+
+    const roundEventResult = await upsertRoundAndEventResults({
+      eventId: league.event_id,
+      rows: providerRowsForResults,
+    })
+
     const scoringResult = await refreshLiveManagerScores(leagueId, league.event_id)
 
     if (syncRunId) {
@@ -112,6 +148,8 @@ export async function POST(req: Request) {
           rows_written:
             (fieldResult.rowCount ?? 0) +
             (liveResult.rowCount ?? 0) +
+            (roundEventResult.roundRowCount ?? 0) +
+            (roundEventResult.eventRowCount ?? 0) +
             (scoringResult.managerRowCount ?? 0) +
             (scoringResult.playerRowCount ?? 0),
           metadata: {
@@ -119,6 +157,8 @@ export async function POST(req: Request) {
             mode,
             fieldRowCount: fieldResult.rowCount,
             liveRowCount: liveResult.rowCount,
+            roundRowCount: roundEventResult.roundRowCount,
+            eventResultRowCount: roundEventResult.eventRowCount,
             managerRowCount: scoringResult.managerRowCount,
             playerRowCount: scoringResult.playerRowCount,
             primarySource: providers.primary.source,
@@ -137,6 +177,8 @@ export async function POST(req: Request) {
       mode,
       fieldRowCount: fieldResult.rowCount,
       liveRowCount: liveResult.rowCount,
+      roundRowCount: roundEventResult.roundRowCount,
+      eventResultRowCount: roundEventResult.eventRowCount,
       managerRowCount: scoringResult.managerRowCount,
       playerRowCount: scoringResult.playerRowCount,
       primarySource: providers.primary.source,
