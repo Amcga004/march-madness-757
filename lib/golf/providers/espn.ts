@@ -2,22 +2,26 @@ import type { ProviderFetchResult, ProviderPlayerRow } from './types'
 
 function parseToPar(value: string | number | null | undefined): number | null {
   if (value == null) return null
-  if (typeof value === 'number') return value
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
 
   const cleaned = value.trim().toUpperCase()
-  if (!cleaned || cleaned === 'E') return 0
+  if (!cleaned) return null
+  if (cleaned === 'E' || cleaned === 'EVEN') return 0
+  if (cleaned === 'CUT' || cleaned === 'MC') return null
 
-  const n = Number(cleaned.replace('+', ''))
-  return Number.isFinite(n) ? n : null
+  const parsed = Number(cleaned.replace('+', ''))
+  return Number.isFinite(parsed) ? parsed : null
 }
 
-function parseIntSafe(value: unknown): number | null {
-  if (typeof value === 'number') return value
-  if (typeof value === 'string') {
-    const n = Number.parseInt(value, 10)
-    return Number.isFinite(n) ? n : null
-  }
-  return null
+function parseInteger(value: string | number | null | undefined): number | null {
+  if (value == null) return null
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+
+  const cleaned = value.trim()
+  if (!cleaned) return null
+
+  const parsed = Number.parseInt(cleaned, 10)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 function normalizeName(name: string): string {
@@ -31,7 +35,44 @@ function normalizeName(name: string): string {
     .trim()
 }
 
-function dedupe(rows: ProviderPlayerRow[]): ProviderPlayerRow[] {
+function decodeHtmlEntities(input: string): string {
+  return input
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_, code) => {
+      const n = Number(code)
+      return Number.isFinite(n) ? String.fromCharCode(n) : _
+    })
+}
+
+function stripTags(html: string): string {
+  return decodeHtmlEntities(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+      .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+      .replace(/<img[^>]*>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\u00a0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
+}
+
+function inferMadeCut(positionText: string | null): boolean | null {
+  const normalized = positionText?.trim().toUpperCase() ?? ''
+  if (!normalized) return null
+  if (normalized === 'CUT' || normalized === 'MC') return false
+  return true
+}
+
+function dedupeRows(rows: ProviderPlayerRow[]): ProviderPlayerRow[] {
   const map = new Map<string, ProviderPlayerRow>()
 
   for (const row of rows) {
@@ -43,13 +84,29 @@ function dedupe(rows: ProviderPlayerRow[]): ProviderPlayerRow[] {
       continue
     }
 
-    const existingScore =
-      [existing.round1, existing.round2, existing.round3, existing.round4].filter(v => v != null).length
+    const existingCompleteness = [
+      existing.positionText,
+      existing.totalToPar,
+      existing.todayToPar,
+      existing.thru,
+      existing.round1,
+      existing.round2,
+      existing.round3,
+      existing.round4,
+    ].filter((value) => value != null).length
 
-    const newScore =
-      [row.round1, row.round2, row.round3, row.round4].filter(v => v != null).length
+    const incomingCompleteness = [
+      row.positionText,
+      row.totalToPar,
+      row.todayToPar,
+      row.thru,
+      row.round1,
+      row.round2,
+      row.round3,
+      row.round4,
+    ].filter((value) => value != null).length
 
-    if (newScore > existingScore) {
+    if (incomingCompleteness > existingCompleteness) {
       map.set(key, row)
     }
   }
@@ -57,48 +114,123 @@ function dedupe(rows: ProviderPlayerRow[]): ProviderPlayerRow[] {
   return Array.from(map.values())
 }
 
-function extractRounds(linescores: any[]): {
-  r1: number | null
-  r2: number | null
-  r3: number | null
-  r4: number | null
-} {
-  let r1 = null
-  let r2 = null
-  let r3 = null
-  let r4 = null
+function extractLeaderboardTextWindow(pageText: string): string | null {
+  const headerPattern = /Final\s+POS\s+PLAYER\s+SCORE\s+R1\s+R2\s+R3\s+R4\s+TOT/i
+  const altHeaderPattern = /POS\s+PLAYER\s+SCORE\s+R1\s+R2\s+R3\s+R4\s+TOT/i
 
-  for (const l of linescores || []) {
-    const round = l.period ?? l.round ?? null
-    const score = parseIntSafe(l.value ?? l.score)
-
-    if (round === 1) r1 = score
-    if (round === 2) r2 = score
-    if (round === 3) r3 = score
-    if (round === 4) r4 = score
+  let match = pageText.match(headerPattern)
+  if (!match || match.index == null) {
+    match = pageText.match(altHeaderPattern)
   }
 
-  return { r1, r2, r3, r4 }
+  if (!match || match.index == null) {
+    return null
+  }
+
+  const afterHeader = pageText.slice(match.index + match[0].length)
+
+  const stopPatterns = [
+    /\bTop Performers\b/i,
+    /\bPlayer Stats\b/i,
+    /\bCourse Stats\b/i,
+    /\bTournament News\b/i,
+    /\bESPN BET\b/i,
+    /\bSee All\b/i,
+    /\bSchedule\b/i,
+  ]
+
+  let endIndex = afterHeader.length
+  for (const pattern of stopPatterns) {
+    const stop = afterHeader.match(pattern)
+    if (stop && stop.index != null) {
+      endIndex = Math.min(endIndex, stop.index)
+    }
+  }
+
+  return afterHeader.slice(0, endIndex).trim()
+}
+
+function parseLeaderboardRowsFromText(pageText: string): ProviderPlayerRow[] {
+  const textWindow = extractLeaderboardTextWindow(pageText)
+  if (!textWindow) return []
+
+  const normalizedWindow = textWindow
+    .normalize('NFKC')
+    .replace(/\$/g, ' $')
+    .replace(/([A-Z])\$/g, '$1 $')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  const rows: ProviderPlayerRow[] = []
+
+  const rowPattern =
+    /(T?\d+|CUT|MC)\s+([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'’.\- ]+?)\s+(-?\d+|\+\d+|E)\s+(\d{2,3})\s+(\d{2,3})\s+(\d{2,3})\s+(\d{2,3})\s+(\d{2,3})(?=\s+\$|\s+\d+\b|$)/g
+
+  let match: RegExpExecArray | null
+  while ((match = rowPattern.exec(normalizedWindow)) !== null) {
+    const positionText = match[1]?.trim() ?? null
+    const playerName = match[2]?.replace(/\s+/g, ' ').trim() ?? ''
+    const totalToPar = parseToPar(match[3] ?? null)
+    const round1 = parseInteger(match[4] ?? null)
+    const round2 = parseInteger(match[5] ?? null)
+    const round3 = parseInteger(match[6] ?? null)
+    const round4 = parseInteger(match[7] ?? null)
+    const totalStrokes = parseInteger(match[8] ?? null)
+
+    if (!playerName) continue
+
+    const todayToPar =
+      round1 != null &&
+      round2 != null &&
+      round3 != null &&
+      round4 != null &&
+      totalStrokes != null
+        ? totalStrokes - (round1 + round2 + round3)
+        : null
+
+    rows.push({
+      playerName,
+      source: 'espn',
+      positionText,
+      totalToPar,
+      todayToPar,
+      thru: 'F',
+      holesCompleted: 18,
+      currentRound: 4,
+      round1,
+      round2,
+      round3,
+      round4,
+      madeCut: inferMadeCut(positionText),
+      status: 'Final',
+      sourceUpdatedAt: null,
+      rawPayload: {
+        parser: 'espn_public_page_text',
+        totalStrokes,
+      },
+    })
+  }
+
+  return dedupeRows(rows)
 }
 
 export async function fetchEspnLeaderboard(): Promise<ProviderFetchResult> {
-  const eventId = process.env.ESPN_GOLF_EVENT_ID
+  const url = process.env.ESPN_GOLF_EVENT_URL
 
-  if (!eventId) {
+  if (!url) {
     return {
       source: 'espn',
       success: false,
       rows: [],
-      message: 'Missing ESPN_GOLF_EVENT_ID',
+      message: 'Missing ESPN_GOLF_EVENT_URL',
     }
   }
 
   try {
-    const url = `https://site.web.api.espn.com/apis/v2/sports/golf/pga/scoreboard?event=${eventId}`
-
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
       cache: 'no-store',
     })
@@ -108,104 +240,22 @@ export async function fetchEspnLeaderboard(): Promise<ProviderFetchResult> {
         source: 'espn',
         success: false,
         rows: [],
-        message: `ESPN API failed: ${res.status}`,
+        message: `ESPN page fetch failed: ${res.status}`,
       }
     }
 
-    const json = await res.json()
-
-    const competitors =
-      json?.events?.[0]?.competitions?.[0]?.competitors ??
-      json?.competitions?.[0]?.competitors ??
-      []
-
-    if (!Array.isArray(competitors)) {
-      return {
-        source: 'espn',
-        success: false,
-        rows: [],
-        message: 'No competitors found in ESPN response',
-      }
-    }
-
-    const rows: ProviderPlayerRow[] = []
-
-    for (const c of competitors) {
-      const athlete = c.athlete ?? {}
-      const name = athlete.displayName ?? athlete.shortName
-
-      if (!name) continue
-
-      const positionText =
-        c?.position?.displayValue ??
-        c?.position?.abbreviation ??
-        null
-
-      const totalToPar = parseToPar(
-        c?.score ??
-        c?.toPar ??
-        c?.totalToPar
-      )
-
-      const todayToPar = parseToPar(c?.today)
-
-      const thru = c?.thru ?? null
-
-      const holesCompleted =
-        typeof thru === 'string' && /^\d+$/.test(thru)
-          ? Number(thru)
-          : null
-
-      const { r1, r2, r3, r4 } = extractRounds(c.linescores || [])
-
-      const completedRounds = [r1, r2, r3, r4].filter(v => v != null).length
-
-      const currentRound =
-        thru === 'F'
-          ? Math.min(completedRounds, 4)
-          : Math.min(completedRounds + 1, 4)
-
-      const status =
-        thru === 'F'
-          ? completedRounds >= 4 ? 'Final' : 'Round Complete'
-          : thru ? 'In Progress' : 'Not Started'
-
-      const madeCut =
-        completedRounds >= 3
-          ? true
-          : positionText === 'CUT' || positionText === 'MC'
-            ? false
-            : null
-
-      rows.push({
-        playerName: name,
-        source: 'espn',
-        positionText,
-        totalToPar,
-        todayToPar,
-        thru,
-        holesCompleted,
-        currentRound,
-        round1: r1,
-        round2: r2,
-        round3: r3,
-        round4: r4,
-        madeCut,
-        status,
-        sourceUpdatedAt: null,
-        rawPayload: c,
-      })
-    }
-
-    const finalRows = dedupe(rows)
-
-    console.log('ESPN API ROWS:', finalRows.length)
+    const html = await res.text()
+    const pageText = stripTags(html)
+    const rows = parseLeaderboardRowsFromText(pageText)
 
     return {
       source: 'espn',
-      success: finalRows.length > 0,
-      rows: finalRows,
-      message: `Parsed ${finalRows.length} players from ESPN API`,
+      success: rows.length > 0,
+      rows,
+      message:
+        rows.length > 0
+          ? `Parsed ${rows.length} players from ESPN public leaderboard page`
+          : 'No parseable leaderboard rows found on ESPN public page',
     }
   } catch (error) {
     return {
