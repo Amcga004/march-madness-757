@@ -57,7 +57,8 @@ export default function AppHeader() {
             </div>
           </div>
 
-          <div className="md:hidden">
+          <div className="flex items-center gap-2 md:hidden">
+            <SportSwitcher />
             <HeaderMenu />
           </div>
         </div>
