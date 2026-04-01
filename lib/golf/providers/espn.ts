@@ -24,21 +24,188 @@ function parseInteger(value: string | number | null | undefined): number | null 
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\./g, '')
+    .replace(/,/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function decodeHtmlEntities(input: string): string {
+  return input
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_, code) => {
+      const n = Number(code)
+      return Number.isFinite(n) ? String.fromCharCode(n) : _
+    })
+}
+
+function stripTags(html: string): string {
+  return decodeHtmlEntities(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\u00a0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
+}
+
+function inferMadeCut(positionText: string | null): boolean | null {
+  const normalized = positionText?.trim().toUpperCase() ?? ''
+  if (!normalized) return null
+  if (normalized === 'CUT' || normalized === 'MC') return false
+  return true
+}
+
+function dedupeRows(rows: ProviderPlayerRow[]): ProviderPlayerRow[] {
+  const deduped = new Map<string, ProviderPlayerRow>()
+
+  for (const row of rows) {
+    const key = normalizeName(row.playerName)
+    const existing = deduped.get(key)
+
+    if (!existing) {
+      deduped.set(key, row)
+      continue
+    }
+
+    const existingCompleteness = [
+      existing.positionText,
+      existing.totalToPar,
+      existing.todayToPar,
+      existing.thru,
+      existing.round1,
+      existing.round2,
+      existing.round3,
+      existing.round4,
+    ].filter((value) => value != null).length
+
+    const incomingCompleteness = [
+      row.positionText,
+      row.totalToPar,
+      row.todayToPar,
+      row.thru,
+      row.round1,
+      row.round2,
+      row.round3,
+      row.round4,
+    ].filter((value) => value != null).length
+
+    if (incomingCompleteness > existingCompleteness) {
+      deduped.set(key, row)
+    }
+  }
+
+  return Array.from(deduped.values())
+}
+
+function extractLeaderboardTextWindow(pageText: string): string | null {
+  const headerPattern = /POS\s+PLAYER\s+SCORE\s+R1\s+R2\s+R3\s+R4\s+TOT/i
+  const headerMatch = pageText.match(headerPattern)
+
+  if (!headerMatch || headerMatch.index == null) {
+    return null
+  }
+
+  const start = headerMatch.index + headerMatch[0].length
+  const afterHeader = pageText.slice(start)
+
+  const stopPatterns = [
+    /\bTop Performers\b/i,
+    /\bAll Players\b/i,
+    /\bPlayer Stats\b/i,
+    /\bCourse Stats\b/i,
+    /\bTournament News\b/i,
+    /\bESPN BET\b/i,
+    /\bSee All\b/i,
+  ]
+
+  let endIndex = afterHeader.length
+  for (const pattern of stopPatterns) {
+    const match = afterHeader.match(pattern)
+    if (match && match.index != null) {
+      endIndex = Math.min(endIndex, match.index)
+    }
+  }
+
+  return afterHeader.slice(0, endIndex).trim()
+}
+
+function parseLeaderboardRowsFromText(pageText: string): ProviderPlayerRow[] {
+  const windowText = extractLeaderboardTextWindow(pageText)
+  if (!windowText) return []
+
+  const rows: ProviderPlayerRow[] = []
+
+  const rowPattern =
+    /(T?\d+|CUT|MC)\s+([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'’.\- ]+?)\s+(-?\d+|\+\d+|E)\s+(\d{2,3})\s+(\d{2,3})\s+(\d{2,3})\s+(\d{2,3})\s+(\d{2,3})(?=\s+\$|\s+\d+\b|$)/g
+
+  let match: RegExpExecArray | null
+  while ((match = rowPattern.exec(windowText)) !== null) {
+    const positionText = match[1]?.trim() ?? null
+    const playerName = match[2]?.replace(/\s+/g, ' ').trim() ?? ''
+    const totalToPar = parseToPar(match[3] ?? null)
+    const round1 = parseInteger(match[4] ?? null)
+    const round2 = parseInteger(match[5] ?? null)
+    const round3 = parseInteger(match[6] ?? null)
+    const round4 = parseInteger(match[7] ?? null)
+    const totalStrokes = parseInteger(match[8] ?? null)
+
+    if (!playerName) continue
+
+    const derivedTodayToPar =
+      round1 != null &&
+      round2 != null &&
+      round3 != null &&
+      round4 != null &&
+      totalStrokes != null
+        ? totalStrokes - (round1 + round2 + round3)
+        : null
+
+    rows.push({
+      playerName,
+      source: 'espn',
+      positionText,
+      totalToPar,
+      todayToPar: derivedTodayToPar,
+      thru: 'F',
+      holesCompleted: 18,
+      currentRound: 4,
+      round1,
+      round2,
+      round3,
+      round4,
+      madeCut: inferMadeCut(positionText),
+      status: 'Final',
+      sourceUpdatedAt: null,
+      rawPayload: {
+        parser: 'espn_text_leaderboard',
+        totalStrokes,
+      },
+    })
+  }
+
+  return dedupeRows(rows)
+}
+
 function safeJsonParse<T>(value: string): T | null {
   try {
     return JSON.parse(value) as T
   } catch {
     return null
   }
-}
-
-function normalizeName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/\./g, '')
-    .replace(/,/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 function flattenObjects(obj: unknown, acc: unknown[] = []): unknown[] {
@@ -90,10 +257,7 @@ function getNestedObject(
   return null
 }
 
-function extractRoundScoreFromLine(
-  line: unknown,
-  roundNumber: number
-): number | null {
+function extractRoundScoreFromLine(line: unknown, roundNumber: number): number | null {
   if (!line || typeof line !== 'object') return null
   const record = line as Record<string, unknown>
 
@@ -107,10 +271,7 @@ function extractRoundScoreFromLine(
   if (directScore != null) return directScore
 
   const displayValue = getString(record, ['displayValue', 'display', 'label'])
-  const parsedDisplay = parseInteger(displayValue)
-  if (parsedDisplay != null) return parsedDisplay
-
-  return null
+  return parseInteger(displayValue)
 }
 
 function extractRoundScores(record: Record<string, unknown>) {
@@ -140,83 +301,7 @@ function extractRoundScores(record: Record<string, unknown>) {
     }
   }
 
-  const statistics = Array.isArray(record.statistics) ? record.statistics : null
-  if (statistics) {
-    for (const stat of statistics) {
-      if (!stat || typeof stat !== 'object') continue
-      const statRecord = stat as Record<string, unknown>
-
-      const name = (
-        getString(statRecord, ['name', 'displayName', 'shortDisplayName']) ?? ''
-      ).toLowerCase()
-
-      const value = getNumber(statRecord, ['value', 'displayValue'])
-      if (value == null) continue
-
-      if (round1 == null && (name === 'r1' || name.includes('round 1'))) round1 = value
-      if (round2 == null && (name === 'r2' || name.includes('round 2'))) round2 = value
-      if (round3 == null && (name === 'r3' || name.includes('round 3'))) round3 = value
-      if (round4 == null && (name === 'r4' || name.includes('round 4'))) round4 = value
-    }
-  }
-
   return { round1, round2, round3, round4 }
-}
-
-function inferCurrentRound(
-  rounds: Array<number | null>,
-  thru: string | null,
-  holesCompleted: number | null
-): number | null {
-  const completedRounds = rounds.filter((value) => value != null).length
-  const normalizedThru = thru?.trim().toUpperCase() ?? ''
-
-  if (completedRounds === 0) return null
-
-  if (normalizedThru === 'F') {
-    if (completedRounds >= 4) return 4
-    return completedRounds
-  }
-
-  if (holesCompleted != null && holesCompleted >= 1 && holesCompleted <= 18) {
-    return Math.min(completedRounds + 1, 4)
-  }
-
-  return Math.min(completedRounds, 4)
-}
-
-function inferStatus(
-  thru: string | null,
-  currentRound: number | null,
-  rounds: Array<number | null>,
-  rawStatus: string | null
-): string {
-  if (rawStatus?.trim()) return rawStatus.trim()
-
-  const normalizedThru = thru?.trim().toUpperCase() ?? ''
-
-  if (rounds.every((value) => value == null) && !normalizedThru) return 'Not Started'
-  if (normalizedThru === 'F' && rounds.filter((value) => value != null).length >= 4) return 'Final'
-  if (normalizedThru === 'F') return 'Round Complete'
-  if (normalizedThru) return 'In Progress'
-  if (currentRound != null) return 'In Progress'
-  return 'Not Started'
-}
-
-function inferMadeCut(
-  rounds: Array<number | null>,
-  positionText: string | null,
-  status: string | null
-): boolean | null {
-  const completedRounds = rounds.filter((value) => value != null).length
-  const normalizedPosition = positionText?.trim().toUpperCase() ?? ''
-  const normalizedStatus = status?.toLowerCase() ?? ''
-
-  if (normalizedPosition === 'CUT' || normalizedPosition === 'MC') return false
-  if (completedRounds >= 3) return true
-  if (normalizedStatus.includes('final') && completedRounds >= 2) return true
-  if (completedRounds < 2) return null
-  return null
 }
 
 function extractRowsFromEspnJson(payload: unknown): ProviderPlayerRow[] {
@@ -260,17 +345,6 @@ function extractRowsFromEspnJson(payload: unknown): ProviderPlayerRow[] {
       (typeof thru === 'string' && /^\d+$/.test(thru) ? Number.parseInt(thru, 10) : null)
 
     const { round1, round2, round3, round4 } = extractRoundScores(record)
-    const currentRound =
-      getNumber(record, ['currentRound', 'round']) ??
-      inferCurrentRound([round1, round2, round3, round4], thru, holesCompleted)
-
-    const rawStatus = getString(record, ['status'])
-    const status = inferStatus(thru, currentRound, [round1, round2, round3, round4], rawStatus)
-
-    const madeCut =
-      typeof record.madeCut === 'boolean'
-        ? record.madeCut
-        : inferMadeCut([round1, round2, round3, round4], positionText, status)
 
     const hasUsefulData =
       positionText != null ||
@@ -293,57 +367,19 @@ function extractRowsFromEspnJson(payload: unknown): ProviderPlayerRow[] {
       todayToPar,
       thru,
       holesCompleted,
-      currentRound,
+      currentRound: null,
       round1,
       round2,
       round3,
       round4,
-      madeCut,
-      status,
+      madeCut: inferMadeCut(positionText),
+      status: null,
       sourceUpdatedAt: null,
       rawPayload: record,
     })
   }
 
-  const deduped = new Map<string, ProviderPlayerRow>()
-
-  for (const row of rows) {
-    const key = normalizeName(row.playerName)
-    const existing = deduped.get(key)
-
-    if (!existing) {
-      deduped.set(key, row)
-      continue
-    }
-
-    const existingCompleteness = [
-      existing.positionText,
-      existing.totalToPar,
-      existing.todayToPar,
-      existing.thru,
-      existing.round1,
-      existing.round2,
-      existing.round3,
-      existing.round4,
-    ].filter((value) => value != null).length
-
-    const incomingCompleteness = [
-      row.positionText,
-      row.totalToPar,
-      row.todayToPar,
-      row.thru,
-      row.round1,
-      row.round2,
-      row.round3,
-      row.round4,
-    ].filter((value) => value != null).length
-
-    if (incomingCompleteness > existingCompleteness) {
-      deduped.set(key, row)
-    }
-  }
-
-  return Array.from(deduped.values())
+  return dedupeRows(rows)
 }
 
 export async function fetchEspnLeaderboard(): Promise<ProviderFetchResult> {
@@ -378,32 +414,29 @@ export async function fetchEspnLeaderboard(): Promise<ProviderFetchResult> {
 
     const html = await res.text()
 
+    const pageText = stripTags(html)
+    const textRows = parseLeaderboardRowsFromText(pageText)
+
+    if (textRows.length > 0) {
+      return {
+        source: 'espn',
+        success: true,
+        rows: textRows,
+        message: `Parsed ${textRows.length} leaderboard rows from ESPN page text`,
+      }
+    }
+
     const scriptMatches = Array.from(
       html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)
     ).map((m) => m[1])
 
     const allRows: ProviderPlayerRow[] = []
-    let debugLogged = false
 
     for (const block of scriptMatches) {
       const trimmed = block.trim()
       if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) continue
 
       const parsed = safeJsonParse<unknown>(trimmed)
-
-      if (parsed && typeof parsed === 'object' && !debugLogged) {
-        const str = JSON.stringify(parsed)
-        if (
-          str.includes('leaderboard') ||
-          str.includes('competitor') ||
-          str.includes('linescores') ||
-          str.includes('displayName')
-        ) {
-          console.log('POTENTIAL ESPN STRUCTURE:', str.slice(0, 4000))
-          debugLogged = true
-        }
-      }
-
       if (!parsed) continue
 
       const rows = extractRowsFromEspnJson(parsed)
@@ -412,44 +445,7 @@ export async function fetchEspnLeaderboard(): Promise<ProviderFetchResult> {
       }
     }
 
-    const deduped = new Map<string, ProviderPlayerRow>()
-    for (const row of allRows) {
-      const key = normalizeName(row.playerName)
-      const existing = deduped.get(key)
-
-      if (!existing) {
-        deduped.set(key, row)
-        continue
-      }
-
-      const existingCompleteness = [
-        existing.positionText,
-        existing.totalToPar,
-        existing.todayToPar,
-        existing.thru,
-        existing.round1,
-        existing.round2,
-        existing.round3,
-        existing.round4,
-      ].filter((value) => value != null).length
-
-      const incomingCompleteness = [
-        row.positionText,
-        row.totalToPar,
-        row.todayToPar,
-        row.thru,
-        row.round1,
-        row.round2,
-        row.round3,
-        row.round4,
-      ].filter((value) => value != null).length
-
-      if (incomingCompleteness > existingCompleteness) {
-        deduped.set(key, row)
-      }
-    }
-
-    const rows = Array.from(deduped.values())
+    const rows = dedupeRows(allRows)
 
     return {
       source: 'espn',
@@ -457,7 +453,7 @@ export async function fetchEspnLeaderboard(): Promise<ProviderFetchResult> {
       rows,
       message:
         rows.length > 0
-          ? `Parsed ${rows.length} leaderboard rows from ESPN JSON`
+          ? `Parsed ${rows.length} leaderboard rows from ESPN JSON fallback`
           : 'No parseable leaderboard rows found on ESPN page',
     }
   } catch (error) {
