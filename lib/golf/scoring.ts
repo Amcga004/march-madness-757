@@ -61,6 +61,11 @@ function todayPointsFromToPar(todayToPar: number | null | undefined): number {
   return pts < -5 ? -5 : pts
 }
 
+function livePointsFromTotalToPar(totalToPar: number | null | undefined): number {
+  if (totalToPar == null) return 0
+  return -1 * totalToPar
+}
+
 export async function refreshLiveManagerScores(leagueId: string, eventId: string) {
   const supabase = await createClient()
 
@@ -186,12 +191,13 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
     const totalToPar = live?.total_to_par ?? null
     const todayToPar = live?.today_to_par ?? null
 
-    const roundPoints = totals?.round_points ?? 0
+    const liveBasePoints = livePointsFromTotalToPar(totalToPar)
+    const todayPoints = todayPointsFromToPar(todayToPar)
+
     const cutBonus = totals?.cut_bonus ?? 0
     const finishBonus = totals?.finish_bonus ?? 0
-    const totalFantasyPoints = totals?.total_fantasy_points ?? 0
 
-    const todayPoints = todayPointsFromToPar(todayToPar)
+    const totalFantasyPoints = liveBasePoints + cutBonus + finishBonus
     const cutStatus = deriveCutStatus(live?.status)
 
     playerFantasyPayload.push({
