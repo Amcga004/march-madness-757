@@ -1,8 +1,14 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authHeader = request.headers.get('authorization')
+  const secret = process.env.GOLF_SYNC_SECRET
+
+  if (!secret || authHeader !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
-    const secret = process.env.GOLF_SYNC_SECRET
     const baseUrl =
       process.env.NEXT_PUBLIC_SITE_URL ||
       process.env.VERCEL_PROJECT_PRODUCTION_URL ||
@@ -30,7 +36,7 @@ export async function GET() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-golf-sync-secret': secret,
+        'Authorization': `Bearer ${secret}`,
       },
       body: JSON.stringify({ leagueId, mode }),
       cache: 'no-store',

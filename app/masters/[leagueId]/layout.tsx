@@ -18,7 +18,7 @@ export default async function MastersLeagueLayout({
   return (
     <div className="min-h-screen bg-[#f3f1ea] text-[#162317] antialiased">
       <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(11,93,59,0.06),transparent_28%),linear-gradient(180deg,#f6f4ed_0%,#f3f1ea_42%,#eeece3_100%)]">
-        <LiveAutoRefresh intervalMs={60000} />
+        <LiveAutoRefresh leagueId={leagueId} intervalMs={60000} />
 
         <header className="sticky top-0 z-50 border-b border-[#d9ddcf] bg-[rgba(243,241,234,0.96)] text-[#162317] shadow-[0_8px_20px_rgba(16,24,40,0.06)] backdrop-blur-xl">
           <div className="mx-auto max-w-7xl px-3 py-2.5 sm:px-4 md:px-6">

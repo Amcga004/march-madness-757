@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireUser } from '@/lib/requireAuth'
 
 export async function POST(req: Request) {
+  try {
+    await requireUser()
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
     const supabase = await createClient()
     const body = await req.json()

@@ -59,6 +59,13 @@ function mergeProviderRows(primary: ProviderPlayerRow[], fallback: ProviderPlaye
 }
 
 export async function POST(req: Request) {
+  const authHeader = req.headers.get('authorization')
+  const expected = process.env.GOLF_SYNC_SECRET
+
+  if (!expected || authHeader !== `Bearer ${expected}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const supabase = await createClient()
 
   let syncRunId: string | null = null

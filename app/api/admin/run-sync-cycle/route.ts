@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseRequestedDates, runSyncCycleForDates } from "@/lib/runSyncCycle";
+import { requireUser } from "@/lib/requireAuth";
 
 export async function POST(request: NextRequest) {
+  try {
+    await requireUser();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const authHeader = request.headers.get("authorization");
     const expected = process.env.CRON_SECRET;

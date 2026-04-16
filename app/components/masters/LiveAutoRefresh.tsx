@@ -1,28 +1,53 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 
 type Props = {
+  leagueId: string
   intervalMs?: number
 }
 
-export default function LiveAutoRefresh({ intervalMs = 60000 }: Props) {
+export default function LiveAutoRefresh({
+  leagueId,
+  intervalMs = 60000,
+}: Props) {
   const router = useRouter()
   const pathname = usePathname()
+  const isRunningRef = useRef(false)
 
   useEffect(() => {
     const isGolfPage = pathname.startsWith('/masters')
-    if (!isGolfPage) return
+    if (!isGolfPage || !leagueId) return
 
     let timer: ReturnType<typeof setInterval> | null = null
+
+    async function runSync() {
+      if (isRunningRef.current) return
+      if (document.visibilityState !== 'visible') return
+
+      isRunningRef.current = true
+
+      try {
+        await fetch('/api/golf/sync-live', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ leagueId }),
+        })
+      } catch (error) {
+        console.error('LiveAutoRefresh sync failed:', error)
+      } finally {
+        router.refresh()
+        isRunningRef.current = false
+      }
+    }
 
     function start() {
       if (timer) return
       timer = setInterval(() => {
-        if (document.visibilityState === 'visible') {
-          router.refresh()
-        }
+        void runSync()
       }, intervalMs)
     }
 
@@ -34,13 +59,14 @@ export default function LiveAutoRefresh({ intervalMs = 60000 }: Props) {
 
     function handleVisibilityChange() {
       if (document.visibilityState === 'visible') {
-        router.refresh()
+        void runSync()
         start()
       } else {
         stop()
       }
     }
 
+    void runSync()
     start()
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
@@ -48,7 +74,7 @@ export default function LiveAutoRefresh({ intervalMs = 60000 }: Props) {
       stop()
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [intervalMs, pathname, router])
+  }, [intervalMs, leagueId, pathname, router])
 
   return null
 }

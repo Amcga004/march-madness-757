@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser } from "@/lib/requireAuth";
 
 type LeagueMemberRow = {
   id: string;
@@ -18,6 +19,12 @@ type TeamResultRow = {
 };
 
 export async function POST(req: NextRequest) {
+  try {
+    await requireUser();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
     const seasonYear = Number(body?.seasonYear);

@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { promoteResults } from "@/lib/promoteResults";
+import { requireUser } from "@/lib/requireAuth";
 
 export async function POST() {
+  try {
+    await requireUser();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const result = await promoteResults();
 

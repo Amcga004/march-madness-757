@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 export async function POST(req: Request) {
+  const authHeader = req.headers.get('authorization')
+  const expected = process.env.GOLF_SYNC_SECRET
+
+  if (!expected || authHeader !== `Bearer ${expected}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
     const supabase = await createClient()
 

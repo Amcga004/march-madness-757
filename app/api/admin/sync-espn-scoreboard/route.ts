@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { fetchEspnScoreboard, normalizeEspnEvent } from "@/lib/espn";
+import { requireUser } from "@/lib/requireAuth";
 
 function getTodayEasternLikeDateString() {
   const now = new Date();
@@ -11,6 +12,12 @@ function getTodayEasternLikeDateString() {
 }
 
 export async function POST(request: NextRequest) {
+  try {
+    await requireUser();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const authHeader = request.headers.get("authorization");
     const expected = process.env.CRON_SECRET;
