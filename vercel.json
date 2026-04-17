@@ -23,6 +23,10 @@
     {
       "path": "/api/platform/ncaa-draft-check",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/betting/ingest",
+      "schedule": "0 */4 * * *"
     }
   ]
 }
