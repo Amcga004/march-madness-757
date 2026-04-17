@@ -9,7 +9,7 @@ const SPORT_MAP = {
   ncaab: "basketball_ncaab",
 } as const;
 
-const BOOKMAKERS = "draftkings,fanduel,betmgm,caesars,williamhill_us,pointsbetus";
+const BOOKMAKERS = "draftkings,fanduel,betmgm,caesars,williamhill_us,pointsbetus,betrivers";
 
 async function fetchOdds(sportKey: string): Promise<any[]> {
   const apiKey = process.env.ODDS_API_KEY;

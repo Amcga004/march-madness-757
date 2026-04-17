@@ -69,6 +69,12 @@ async function ingestEspnSport(sport: SportKey) {
         canonicalName: homeName,
         abbreviation: homeAbbr,
         location: homeCompetitor.team?.location,
+        metadata: {
+          logoUrl: homeCompetitor.team?.logo ?? null,
+          espnId: homeEspnId,
+          color: homeCompetitor.team?.color ?? null,
+          alternateColor: homeCompetitor.team?.alternateColor ?? null,
+        },
       });
       await registerMapping({
         entityType: "team",
@@ -86,6 +92,12 @@ async function ingestEspnSport(sport: SportKey) {
         canonicalName: awayName,
         abbreviation: awayAbbr,
         location: awayCompetitor.team?.location,
+        metadata: {
+          logoUrl: awayCompetitor.team?.logo ?? null,
+          espnId: awayEspnId,
+          color: awayCompetitor.team?.color ?? null,
+          alternateColor: awayCompetitor.team?.alternateColor ?? null,
+        },
       });
       await registerMapping({
         entityType: "team",
