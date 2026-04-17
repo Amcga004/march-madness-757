@@ -15,6 +15,14 @@
     {
       "path": "/api/platform/ingest-schedule",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/platform/golf-scoring-sync",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/platform/ncaa-draft-check",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
