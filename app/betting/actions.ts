@@ -62,6 +62,12 @@ export async function fetchSlateData(date: string, sport: string, userId: string
   ].filter(Boolean);
   console.log("[game-keys]", allGames.slice(0, 5).map((g: any) => `${g.awayTeam}|${g.homeTeam}`));
 
+  function normalizeTeam(name: string) {
+    return name.toLowerCase().trim()
+      .replace(/[^a-z0-9 ]/g, '')
+      .replace(/\s+/g, ' ');
+  }
+
   // Enrich with odds
   const etStart = new Date(`${date}T04:00:00Z`);
   const etEnd = new Date(`${date}T04:00:00Z`);
@@ -75,7 +81,7 @@ export async function fetchSlateData(date: string, sport: string, userId: string
 
   const oddsMap = new Map<string, any[]>();
   for (const odd of oddsData ?? []) {
-    const key = `${odd.away_team}|${odd.home_team}`;
+    const key = `${normalizeTeam(odd.away_team)}|${normalizeTeam(odd.home_team)}`;
     if (!oddsMap.has(key)) oddsMap.set(key, []);
     oddsMap.get(key)!.push(odd);
   }
@@ -90,7 +96,7 @@ export async function fetchSlateData(date: string, sport: string, userId: string
       .eq("suppressed", false);
     console.log("[signals-debug] userId:", userId, "count:", signalsData?.length ?? 0);
     for (const s of signalsData ?? []) {
-      const key = `${s.away_team}|${s.home_team}`;
+      const key = `${normalizeTeam(s.away_team)}|${normalizeTeam(s.home_team)}`;
       if (!signalsMap.has(key)) signalsMap.set(key, []);
       signalsMap.get(key)!.push(s);
     }
@@ -106,11 +112,11 @@ export async function fetchSlateData(date: string, sport: string, userId: string
 
   const consensusMap = new Map<string, any>();
   for (const c of consensusData ?? []) {
-    consensusMap.set(`${c.away_team}|${c.home_team}`, c);
+    consensusMap.set(`${normalizeTeam(c.away_team)}|${normalizeTeam(c.home_team)}`, c);
   }
 
   const enrichedGames = allGames.map((game: any) => {
-    const key = `${game.awayTeam}|${game.homeTeam}`;
+    const key = `${normalizeTeam(game.awayTeam)}|${normalizeTeam(game.homeTeam)}`;
     return {
       ...game,
       odds: oddsMap.get(key) ?? [],
