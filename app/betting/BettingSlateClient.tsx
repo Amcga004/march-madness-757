@@ -1,5 +1,13 @@
 "use client";
 
+// ⚠️ HYDRATION RULE: Never add console.log, Math.random(), Date.now(),
+// or any non-deterministic code directly inside JSX or the render/map body.
+// This causes React hydration errors (#418) because server and client
+// produce different output.
+//
+// For debugging: always use useEffect(() => { console.log(...) }, [dep])
+// useEffect runs client-side only after hydration — no mismatch possible.
+
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import AuthButton from "@/app/components/AuthButton";
@@ -126,6 +134,21 @@ export default function BettingSlateClient({
       }
     }
   }, [currentUser?.id]);
+
+  useEffect(() => {
+    const orlDet = liveGames.find((g: any) =>
+      g.awayTeam?.includes("Orlando") || g.homeTeam?.includes("Detroit")
+    );
+    if (orlDet) {
+      console.log("[ORL/DET debug]", {
+        isLive: orlDet.isLive,
+        isFinal: orlDet.isFinal,
+        statusDetail: orlDet.statusDetail,
+        signalsCount: orlDet.signals?.length ?? 0,
+        signals: orlDet.signals,
+      });
+    }
+  }, [liveGames]);
 
   const today = new Date().toISOString().split("T")[0];
   const prev = new Date(new Date(date + "T12:00:00").getTime() - 86400000).toISOString().split("T")[0];
@@ -396,18 +419,6 @@ export default function BettingSlateClient({
 
           {/* Rows */}
           {bySport[sportKey].map(game => {
-            if (game.awayTeam?.includes("Orlando") || game.homeTeam?.includes("Orlando") ||
-                game.awayTeam?.includes("Detroit") || game.homeTeam?.includes("Detroit")) {
-              console.log("[ORL/DET debug]", {
-                awayTeam: game.awayTeam,
-                homeTeam: game.homeTeam,
-                isLive: game.isLive,
-                isFinal: game.isFinal,
-                statusDetail: game.statusDetail,
-                signalsCount: game.signals?.length ?? 0,
-                signals: game.signals,
-              });
-            }
             const expanded = expandedGame === game.id;
             const bestAway = getBest(game, "away");
             const bestHome = getBest(game, "home");
