@@ -115,8 +115,10 @@ export async function fetchSlateData(date: string, sport: string, userId: string
     consensusMap.set(`${normalizeTeam(c.away_team)}|${normalizeTeam(c.home_team)}`, c);
   }
 
+  console.log('[DEBUG signals-keys]', Array.from(signalsMap.keys()));
   const enrichedGames = allGames.map((game: any) => {
     const key = `${normalizeTeam(game.awayTeam)}|${normalizeTeam(game.homeTeam)}`;
+    console.log('[DEBUG game-key]', key, 'found:', signalsMap.has(key));
     return {
       ...game,
       odds: oddsMap.get(key) ?? [],
