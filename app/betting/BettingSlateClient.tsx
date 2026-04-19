@@ -93,20 +93,9 @@ export default function BettingSlateClient({
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
-    const todayET = new Date().toLocaleDateString("en-CA", {
-      timeZone: "America/New_York"
-    });
-    if (date < todayET && typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (!urlParams.has("date")) {
-        window.location.href = "/betting";
-      }
-    }
-  }, [date]);
-
   const refresh = useCallback(async () => {
     const todayET = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
     if (date !== todayET) return;
 
     try {
@@ -132,10 +121,12 @@ export default function BettingSlateClient({
 
   useEffect(() => {
     if (currentUser?.id) {
-      const t = setTimeout(() => refresh(), 100);
-      return () => clearTimeout(t);
+      const hasSignals = liveGames.some((g: any) => g.signals?.length > 0);
+      if (!hasSignals) {
+        setTimeout(() => refresh(), 500);
+      }
     }
-  }, [currentUser?.id, refresh]);
+  }, [currentUser?.id]);
 
   const today = new Date().toISOString().split("T")[0];
   const prev = new Date(new Date(date + "T12:00:00").getTime() - 86400000).toISOString().split("T")[0];
