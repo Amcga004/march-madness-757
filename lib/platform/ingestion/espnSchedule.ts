@@ -36,11 +36,14 @@ async function fetchEspnScoreboard(url: string): Promise<any> {
   return res.json();
 }
 
-async function ingestEspnSport(sport: SportKey) {
+async function ingestEspnSport(sport: SportKey, dateStr?: string) {
   const config = SPORT_CONFIG[sport];
-  const data = await fetchEspnScoreboard(config.url);
+  const urlWithDate = dateStr
+    ? `${config.url}?dates=${dateStr}`
+    : config.url;
+  const data = await fetchEspnScoreboard(urlWithDate);
 
-  await saveSnapshot(config.sourceKey, config.sportKey, "scoreboard", data);
+  await saveSnapshot(config.sourceKey, config.sportKey, `scoreboard_${dateStr ?? "today"}`, data);
 
   const events = data.events ?? [];
   let created = 0;
@@ -137,19 +140,46 @@ async function ingestEspnSport(sport: SportKey) {
   return { sport, eventsFound: events.length, created, updated };
 }
 
+function getDateRange(days: number): string[] {
+  const dates: string[] = [];
+  const now = new Date();
+  for (let i = 0; i < days; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() + i);
+    // YYYYMMDD format for ESPN
+    dates.push(d.toISOString().slice(0, 10).replace(/-/g, ""));
+  }
+  return dates;
+}
+
 export async function ingestAllEspnSchedules() {
   const results = [];
+  const dates = getDateRange(8); // today through today+7
 
   for (const sport of ["nba", "mlb", "ncaab"] as SportKey[]) {
     const config = SPORT_CONFIG[sport];
-    try {
-      const result = await ingestEspnSport(sport);
+    let totalCreated = 0;
+    let totalUpdated = 0;
+    let totalEvents = 0;
+    let lastError: string | null = null;
+
+    for (const dateStr of dates) {
+      try {
+        const result = await ingestEspnSport(sport, dateStr);
+        totalCreated += result.created;
+        totalUpdated += result.updated;
+        totalEvents += result.eventsFound;
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : "Unknown error";
+      }
+    }
+
+    if (lastError && totalEvents === 0) {
+      await recordSyncFailure(config.sourceKey, lastError);
+      results.push({ sport, ok: false, error: lastError });
+    } else {
       await recordSyncSuccess(config.sourceKey);
-      results.push({ ...result, ok: true });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      await recordSyncFailure(config.sourceKey, message);
-      results.push({ sport, ok: false, error: message });
+      results.push({ sport, ok: true, eventsFound: totalEvents, created: totalCreated, updated: totalUpdated, daysIngested: dates.length });
     }
   }
 

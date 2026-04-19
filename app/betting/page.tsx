@@ -18,13 +18,16 @@ export default async function BettingPage({
   const sport = params.sport ?? "all";
 
   const supabase = createServiceClient();
+  const isHistorical = date < today;
 
   // Fetch full schedule from ESPN for each sport
+  // ESPN accepts ?dates=YYYYMMDD for historical lookups
+  const espnDateParam = date.replace(/-/g, "");
   async function fetchEspnScoreboard(sportPath: string) {
     try {
       const res = await fetch(
-        `https://site.api.espn.com/apis/site/v2/sports/${sportPath}/scoreboard`,
-        { next: { revalidate: 60 } }
+        `https://site.api.espn.com/apis/site/v2/sports/${sportPath}/scoreboard?dates=${espnDateParam}`,
+        { next: { revalidate: isHistorical ? 3600 : 60 } }
       );
       if (!res.ok) return [];
       const data = await res.json();
@@ -76,12 +79,20 @@ export default async function BettingPage({
     ...ncaabEvents.map((e: any) => normalizeEspnGame(e, "ncaab")),
   ].filter(Boolean);
 
-  // Fetch odds and index by team name for enrichment
+  // Fetch odds — ET day window (midnight ET = 04:00 UTC)
+  // Historical dates: closing_line=true only (locked pre-game odds)
+  // Today: all odds (closing_line=false for pre-game, both for live/final)
+  const etStart = new Date(`${date}T04:00:00Z`);
+  const etEnd = new Date(`${date}T04:00:00Z`);
+  etEnd.setDate(etEnd.getDate() + 1);
+
   let oddsQuery = supabase
     .from("market_odds")
     .select("*")
-    .gte("commence_time", `${date}T00:00:00Z`)
-    .lt("commence_time", `${date}T23:59:59Z`);
+    .gte("commence_time", etStart.toISOString())
+    .lt("commence_time", etEnd.toISOString());
+
+  if (isHistorical) oddsQuery = oddsQuery.eq("closing_line", true);
 
   const { data: oddsData } = await oddsQuery;
 
@@ -99,9 +110,9 @@ export default async function BettingPage({
     oddsMap.get(key)!.push(odd);
   }
 
-  // Fetch signals and join onto games directly
+  // Fetch signals — skip for historical dates (all suppressed for past games)
   const signalsMap = new Map<string, any[]>();
-  if (user) {
+  if (user && !isHistorical) {
     let sigQuery = supabase
       .from("signals")
       .select("*")

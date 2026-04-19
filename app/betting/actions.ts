@@ -68,15 +68,22 @@ export async function fetchSlateData(date: string, sport: string, userId: string
   }
 
   // Enrich with odds
+  const todayET = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const isHistorical = date < todayET;
+
   const etStart = new Date(`${date}T04:00:00Z`);
   const etEnd = new Date(`${date}T04:00:00Z`);
   etEnd.setDate(etEnd.getDate() + 1);
 
-  const { data: oddsData } = await supabase
+  let oddsQuery = supabase
     .from("market_odds")
     .select("*")
     .gte("commence_time", etStart.toISOString())
     .lt("commence_time", etEnd.toISOString());
+
+  if (isHistorical) oddsQuery = oddsQuery.eq("closing_line", true);
+
+  const { data: oddsData } = await oddsQuery;
 
   const oddsMap = new Map<string, any[]>();
   for (const odd of oddsData ?? []) {
@@ -229,4 +236,85 @@ export async function fetchGolfLeaderboard(tournamentId: string) {
     console.error("[golf-espn] error:", e);
     return [];
   }
+}
+
+export async function savePick(pick: {
+  userId: string;
+  gameDate: string;
+  externalGameId: string | null;
+  awayTeam: string;
+  homeTeam: string;
+  sportKey: string;
+  pickedTeam: string;
+  pickOdds: number;
+}) {
+  const supabase = createServiceClient();
+  const { error } = await supabase.from("bet_slip").insert({
+    user_id: pick.userId,
+    game_date: pick.gameDate,
+    external_game_id: pick.externalGameId,
+    away_team: pick.awayTeam,
+    home_team: pick.homeTeam,
+    sport_key: pick.sportKey,
+    picked_team: pick.pickedTeam,
+    pick_odds: pick.pickOdds,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function fetchMyPicks(userId: string) {
+  const supabase = createServiceClient();
+  const { data: picks } = await supabase
+    .from("bet_slip")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (!picks || picks.length === 0) return [];
+
+  const todayET = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
+  // Fetch ESPN final scores for each unique past game date
+  const uniqueDates = [...new Set(picks.map((p: any) => p.game_date as string))].filter(d => d <= todayET);
+  const scoresByGame: Record<string, { homeScore: number; awayScore: number; isFinal: boolean }> = {};
+
+  for (const d of uniqueDates) {
+    const dateStr = d.replace(/-/g, "");
+    const sportPaths = ["basketball/nba", "baseball/mlb", "basketball/mens-college-basketball"];
+    await Promise.all(sportPaths.map(async (path) => {
+      try {
+        const res = await fetch(
+          `https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${dateStr}`,
+          { next: { revalidate: 3600 } }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        for (const event of data.events ?? []) {
+          const comp = event.competitions?.[0];
+          const home = comp?.competitors?.find((c: any) => c.homeAway === "home");
+          const away = comp?.competitors?.find((c: any) => c.homeAway === "away");
+          if (!home || !away) continue;
+          scoresByGame[event.id] = {
+            homeScore: Number(home.score ?? 0),
+            awayScore: Number(away.score ?? 0),
+            isFinal: event.status?.type?.state === "post",
+          };
+        }
+      } catch {}
+    }));
+  }
+
+  return picks.map((pick: any) => {
+    const scores = pick.external_game_id ? scoresByGame[pick.external_game_id] : null;
+    let result: "win" | "loss" | "pending" = "pending";
+    if (scores?.isFinal) {
+      const pickedHome = pick.picked_team === pick.home_team;
+      result = pickedHome
+        ? scores.homeScore > scores.awayScore ? "win" : "loss"
+        : scores.awayScore > scores.homeScore ? "win" : "loss";
+    }
+    return { ...pick, result, scores };
+  });
 }

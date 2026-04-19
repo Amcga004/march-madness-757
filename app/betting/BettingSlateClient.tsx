@@ -12,7 +12,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import AuthButton from "@/app/components/AuthButton";
 import GolfTournamentCard from "./GolfTournamentCard";
-import { fetchSlateData, fetchGolfLeaderboard } from "./actions";
+import { fetchSlateData, fetchGolfLeaderboard, savePick, fetchMyPicks } from "./actions";
 
 const SPORT_LABELS: Record<string, string> = {
   nba: "NBA",
@@ -81,6 +81,10 @@ export default function BettingSlateClient({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentUser, setCurrentUser] = useState(user);
   const userRef = useRef(currentUser);
+  const [activeTab, setActiveTab] = useState<"slate" | "picks">("slate");
+  const [slipModal, setSlipModal] = useState<{ game: any; selectedSide: "home" | "away" } | null>(null);
+  const [myPicks, setMyPicks] = useState<any[] | null>(null);
+  const [savingPick, setSavingPick] = useState(false);
   useEffect(() => { userRef.current = currentUser; }, [currentUser]);
 
   useEffect(() => {
@@ -150,6 +154,12 @@ export default function BettingSlateClient({
       });
     }
   }, [liveGames]);
+
+  useEffect(() => {
+    if (activeTab === "picks" && currentUser && myPicks === null) {
+      fetchMyPicks(currentUser.id).then(setMyPicks);
+    }
+  }, [activeTab, currentUser]);
 
   const today = todayET;
   const prev = new Date(new Date(date + "T12:00:00").getTime() - 86400000).toISOString().split("T")[0];
@@ -337,15 +347,36 @@ export default function BettingSlateClient({
         </div>
       </div>
 
+      {/* Tab switcher */}
+      {currentUser && (
+        <div style={{ display: "flex", gap: "0", marginBottom: "16px", borderBottom: "0.5px solid var(--color-border-tertiary)" }}>
+          {(["slate", "picks"] as const).map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)} style={{
+              padding: "8px 16px",
+              fontSize: "12px",
+              fontWeight: activeTab === tab ? 600 : 400,
+              color: activeTab === tab ? "#EA6C0A" : "var(--color-text-secondary)",
+              background: "transparent",
+              border: "none",
+              borderBottom: activeTab === tab ? "2px solid #EA6C0A" : "2px solid transparent",
+              cursor: "pointer",
+              marginBottom: "-0.5px",
+            }}>
+              {tab === "slate" ? "Today's Slate" : "My Picks"}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* No games */}
-      {filteredGames.length === 0 && (
+      {activeTab === "slate" && filteredGames.length === 0 && (
         <div style={{ padding: "60px 0", textAlign: "center", color: "var(--color-text-secondary)" }}>
           No games found for this date.
         </div>
       )}
 
       {/* Games by sport */}
-      {Object.keys(bySport).map(sportKey => (
+      {activeTab === "slate" && Object.keys(bySport).map(sportKey => (
         <div key={sportKey} style={{ marginBottom: "28px" }}>
 
           {/* Sport header */}
@@ -678,9 +709,12 @@ export default function BettingSlateClient({
 
                   {/* Actions */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "5px", alignItems: "flex-start" }}>
-                    {currentUser && topSignal && (
+                    {currentUser && !game.isLive && !game.isFinal && (
                       <span style={{ fontSize: "11px", color: "#16A34A", fontWeight: 500, cursor: "pointer" }}
-                        onClick={e => e.stopPropagation()}>
+                        onClick={e => {
+                          e.stopPropagation();
+                          setSlipModal({ game, selectedSide: topSignal?.side ?? "away" });
+                        }}>
                         + Slip
                       </span>
                     )}
@@ -859,7 +893,7 @@ export default function BettingSlateClient({
         </div>
       ))}
 
-      {liveGolf.length > 0 && (
+      {activeTab === "slate" && liveGolf.length > 0 && (
         <GolfTournamentCard
           tournamentName={golfTournamentName}
           roundStatus={golfRoundStatus}
@@ -868,7 +902,7 @@ export default function BettingSlateClient({
       )}
 
       {/* Footer CTA */}
-      {!currentUser && filteredGames.length > 0 && (
+      {activeTab === "slate" && !currentUser && filteredGames.length > 0 && (
         <div style={{
           padding: "14px 0",
           borderTop: "0.5px solid var(--color-border-tertiary)",
@@ -877,6 +911,133 @@ export default function BettingSlateClient({
         }}>
           Signals and edge calculations require a free account.{" "}
           <a href="/login" style={{ color: "#EA6C0A", textDecoration: "none" }}>Sign in free →</a>
+        </div>
+      )}
+
+      {/* My Picks tab */}
+      {activeTab === "picks" && (
+        <div>
+          {myPicks === null ? (
+            <div style={{ padding: "60px 0", textAlign: "center", color: "var(--color-text-secondary)", fontSize: "13px" }}>
+              Loading picks...
+            </div>
+          ) : myPicks.length === 0 ? (
+            <div style={{ padding: "60px 0", textAlign: "center", color: "var(--color-text-secondary)", fontSize: "13px" }}>
+              No picks yet. Click "+ Slip" on any pre-game matchup to add one.
+            </div>
+          ) : (
+            <div>
+              {/* Header row */}
+              <div style={{ display: "grid", gridTemplateColumns: "90px 1fr 1fr 70px 70px", gap: "8px", padding: "5px 8px 4px", borderBottom: "0.5px solid var(--color-border-tertiary)" }}>
+                {["Date", "Matchup", "Pick", "Odds", "Result"].map((h, i) => (
+                  <span key={i} style={{ fontSize: "10px", color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
+                ))}
+              </div>
+              {myPicks.map((pick: any) => {
+                const resultColor = pick.result === "win" ? "#16A34A" : pick.result === "loss" ? "#DC2626" : "#6B7280";
+                const resultLabel = pick.result === "win" ? "Win" : pick.result === "loss" ? "Loss" : "Pending";
+                return (
+                  <div key={pick.id} style={{ display: "grid", gridTemplateColumns: "90px 1fr 1fr 70px 70px", gap: "8px", padding: "10px 8px", borderBottom: "0.5px solid var(--color-border-tertiary)", alignItems: "center" }}>
+                    <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+                      {new Date(pick.game_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                    <span style={{ fontSize: "12px" }}>
+                      {pick.away_team} @ {pick.home_team}
+                    </span>
+                    <span style={{ fontSize: "12px", fontWeight: 500 }}>
+                      {pick.picked_team}
+                    </span>
+                    <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+                      {pick.pick_odds > 0 ? `+${pick.pick_odds}` : pick.pick_odds}
+                    </span>
+                    <span style={{ fontSize: "12px", fontWeight: 500, color: resultColor }}>
+                      {resultLabel}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Bet slip modal */}
+      {slipModal && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
+          onClick={() => setSlipModal(null)}
+        >
+          <div
+            style={{ background: "#1A2236", border: "0.5px solid var(--color-border-secondary)", borderRadius: "12px", padding: "24px", width: "360px", maxWidth: "90vw" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontSize: "11px", color: "var(--color-text-secondary)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Add to slip</div>
+            <div style={{ fontSize: "15px", fontWeight: 600, marginBottom: "20px" }}>
+              {slipModal.game.awayTeam} @ {slipModal.game.homeTeam}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "20px" }}>
+              {(["away", "home"] as const).map(side => {
+                const team = side === "away" ? slipModal.game.awayTeam : slipModal.game.homeTeam;
+                const best = getBest(slipModal.game, side);
+                const isSelected = slipModal.selectedSide === side;
+                return (
+                  <button key={side} onClick={() => setSlipModal(m => m ? { ...m, selectedSide: side } : null)} style={{
+                    padding: "12px", borderRadius: "8px", cursor: "pointer", textAlign: "center",
+                    border: isSelected ? "1.5px solid #EA6C0A" : "0.5px solid var(--color-border-secondary)",
+                    background: isSelected ? "#EA6C0A15" : "transparent", color: "#F1F3F5",
+                  }}>
+                    <div style={{ fontSize: "12px", fontWeight: 500, marginBottom: "4px" }}>{team}</div>
+                    <div style={{ fontSize: "15px", fontWeight: 600, color: isSelected ? "#EA6C0A" : "#9CA3AF" }}>
+                      {best ? (best.price > 0 ? `+${best.price}` : `${best.price}`) : "—"}
+                    </div>
+                    {best && <div style={{ fontSize: "10px", color: "#6B7280", marginTop: "2px" }}>{BOOK_LABELS[best.bookmaker] ?? best.bookmaker}</div>}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              disabled={savingPick}
+              onClick={async () => {
+                if (!currentUser || savingPick) return;
+                setSavingPick(true);
+                const side = slipModal.selectedSide;
+                const pickedTeam = side === "home" ? slipModal.game.homeTeam : slipModal.game.awayTeam;
+                const best = getBest(slipModal.game, side);
+                const result = await savePick({
+                  userId: currentUser.id,
+                  gameDate: date,
+                  externalGameId: slipModal.game.id ?? null,
+                  awayTeam: slipModal.game.awayTeam,
+                  homeTeam: slipModal.game.homeTeam,
+                  sportKey: slipModal.game.sportKey,
+                  pickedTeam,
+                  pickOdds: best?.price ?? 0,
+                });
+                setSavingPick(false);
+                if (result.ok) {
+                  setSlipModal(null);
+                  setMyPicks(null);
+                }
+              }}
+              style={{
+                width: "100%", padding: "12px", borderRadius: "8px",
+                cursor: savingPick ? "not-allowed" : "pointer",
+                background: "#EA6C0A", border: "none", color: "#fff",
+                fontSize: "14px", fontWeight: 600, opacity: savingPick ? 0.6 : 1,
+              }}
+            >
+              {savingPick ? "Saving..." : "Add to Slip"}
+            </button>
+            <button onClick={() => setSlipModal(null)} style={{
+              width: "100%", padding: "8px", marginTop: "8px", borderRadius: "8px",
+              cursor: "pointer", background: "transparent", border: "none",
+              color: "var(--color-text-secondary)", fontSize: "13px",
+            }}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>
