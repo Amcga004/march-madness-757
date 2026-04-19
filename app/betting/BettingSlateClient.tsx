@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { createClient } from "@/lib/supabase/browser";
 import AuthButton from "@/app/components/AuthButton";
 import GolfTournamentCard from "./GolfTournamentCard";
+import { fetchSlateData, fetchGolfLeaderboard } from "./actions";
 
 const SPORT_LABELS: Record<string, string> = {
   nba: "NBA",
@@ -48,23 +50,92 @@ const MODEL_LABELS: Record<string, string> = {
 interface Props {
   date: string;
   sport: string;
-  odds: any[];
+  games: any[];
   signals: any[] | null;
   consensus: any[];
   mlbStartersByTeam: Record<string, { pitcher: string; confirmed: boolean }>;
   golfLeaderboard: any[];
   golfTournamentName: string;
+  golfTournamentId: string;
   golfRoundStatus: string;
   teamLogos: any[];
   user: { id: string; email?: string } | null;
 }
 
 export default function BettingSlateClient({
-  date, sport, odds, signals, consensus, mlbStartersByTeam, golfLeaderboard, golfTournamentName, golfRoundStatus, teamLogos, user,
+  date, sport, games, signals, consensus, mlbStartersByTeam, golfLeaderboard, golfTournamentName, golfTournamentId, golfRoundStatus, teamLogos, user,
 }: Props) {
   const [activeSport, setActiveSport] = useState(sport);
   const [activeMarket, setActiveMarket] = useState("h2h");
   const [expandedGame, setExpandedGame] = useState<string | null>(null);
+  const [liveGames, setLiveGames] = useState(games);
+  const [liveGolf, setLiveGolf] = useState(golfLeaderboard);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [currentUser, setCurrentUser] = useState(user);
+  const userRef = useRef(currentUser);
+  useEffect(() => { userRef.current = currentUser; }, [currentUser]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.user && !currentUser) {
+        setCurrentUser({ id: data.session.user.id, email: data.session.user.email });
+      }
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setCurrentUser({ id: session.user.id, email: session.user.email });
+      } else {
+        setCurrentUser(null);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const todayET = new Date().toLocaleDateString("en-CA", {
+      timeZone: "America/New_York"
+    });
+    if (date < todayET && typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (!urlParams.has("date")) {
+        window.location.href = "/betting";
+      }
+    }
+  }, [date]);
+
+  const refresh = useCallback(async () => {
+    const todayET = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    if (date !== todayET) return;
+
+    try {
+      setIsRefreshing(true);
+      const [slateData, golfData] = await Promise.all([
+        fetchSlateData(todayET, activeSport, userRef.current?.id ?? null),
+        golfTournamentId ? fetchGolfLeaderboard(golfTournamentId) : Promise.resolve(liveGolf),
+      ]);
+      setLiveGames(slateData.enrichedGames);
+      if (golfData.length > 0) setLiveGolf(golfData);
+      setLastUpdated(new Date());
+    } catch (e) {
+      console.error("[refresh] failed:", e);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [date, activeSport, golfTournamentId]);
+
+  useEffect(() => {
+    const interval = setInterval(refresh, 60000);
+    return () => clearInterval(interval);
+  }, [refresh]);
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      const t = setTimeout(() => refresh(), 100);
+      return () => clearTimeout(t);
+    }
+  }, [currentUser?.id, refresh]);
 
   const today = new Date().toISOString().split("T")[0];
   const prev = new Date(new Date(date + "T12:00:00").getTime() - 86400000).toISOString().split("T")[0];
@@ -88,46 +159,25 @@ export default function BettingSlateClient({
     return price > 0 ? `+${price}` : `${price}`;
   }
 
-  const games = useMemo(() => {
-    const map = new Map<string, any>();
-    for (const odd of odds) {
-      if (!map.has(odd.external_game_id)) {
-        map.set(odd.external_game_id, {
-          id: odd.external_game_id,
-          sportKey: odd.sport_key,
-          homeTeam: odd.home_team,
-          awayTeam: odd.away_team,
-          commenceTime: odd.commence_time,
-          odds: [],
-          signals: [],
-          consensus: null,
-        });
-      }
-      map.get(odd.external_game_id).odds.push(odd);
-    }
-    for (const s of signals ?? []) {
-      if (map.has(s.external_game_id)) {
-        map.get(s.external_game_id).signals.push(s);
-      }
-    }
-    for (const c of consensus) {
-      if (map.has(c.external_game_id)) {
-        map.get(c.external_game_id).consensus = c;
-      }
-    }
-    return Array.from(map.values())
-      .filter(g => activeSport === "all" || g.sportKey === activeSport)
-      .sort((a, b) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime());
-  }, [odds, signals, consensus, activeSport]);
+  const filteredGames = useMemo(() => {
+    return liveGames
+      .filter((g: any) => activeSport === "all" || g.sportKey === activeSport)
+      .map((g: any) => ({
+        ...g,
+        signals: (signals ?? []).filter((s: any) => s.espn_event_id === g.id || s.external_game_id === g.id),
+        consensus: consensus.find((c: any) => c.espn_event_id === g.id || c.external_game_id === g.id) ?? null,
+      }))
+      .sort((a: any, b: any) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime());
+  }, [liveGames, signals, consensus, activeSport]);
 
   const bySport = useMemo(() => {
     const groups: Record<string, any[]> = {};
-    for (const g of games) {
+    for (const g of filteredGames) {
       if (!groups[g.sportKey]) groups[g.sportKey] = [];
       groups[g.sportKey].push(g);
     }
     return groups;
-  }, [games]);
+  }, [filteredGames]);
 
   function getBookOdds(game: any, bookmaker: string) {
     return game.odds.find((o: any) => o.bookmaker === bookmaker && o.market_type === activeMarket);
@@ -154,39 +204,24 @@ export default function BettingSlateClient({
     return best;
   }
 
-  function getSignal(game: any, side: "home" | "away") {
-    return game.signals.find((s: any) => s.signal_type === "h2h" && s.side === side);
-  }
-
   function getTopSignal(game: any) {
-    const h = getSignal(game, "home");
-    const a = getSignal(game, "away");
-    if (!h && !a) return null;
-    if (!h) return a;
-    if (!a) return h;
-    return Math.abs(h.edge_pct) >= Math.abs(a.edge_pct) ? h : a;
+    if (!game.signals || game.signals.length === 0) return null;
+    return game.signals.reduce((a: any, b: any) =>
+      Math.abs(a.edge_pct) >= Math.abs(b.edge_pct) ? a : b
+    );
   }
 
-  function getMlbStarters(game: any) {
-    if (game.sportKey !== "mlb") return null;
-    const home = mlbStartersByTeam[game.homeTeam];
-    const away = mlbStartersByTeam[game.awayTeam];
-    if (!home && !away) return null;
-    return {
-      homePitcher: home?.pitcher ?? "TBD",
-      awayPitcher: away?.pitcher ?? "TBD",
-      homePitcherConfirmed: home?.confirmed ?? false,
-      awayPitcherConfirmed: away?.confirmed ?? false,
-    };
-  }
 
-  function getTeamLogo(teamName: string, sportKey: string): string | null {
+  function getTeamLogo(teamName: string, game: any, side: "home" | "away"): string | null {
+    if (side === "home" && game.homeLogo) return game.homeLogo;
+    if (side === "away" && game.awayLogo) return game.awayLogo;
+
     const team = teamLogos.find((t: any) => t.canonical_name === teamName);
     if (!team?.abbreviation) return null;
     const a = (team.abbreviation as string).toLowerCase();
+    const { sportKey } = game;
     if (sportKey === "nba") return `https://a.espncdn.com/i/teamlogos/nba/500/${a}.png`;
     if (sportKey === "mlb") return `https://a.espncdn.com/i/teamlogos/mlb/500/${a}.png`;
-    if (sportKey === "ncaab") return `https://a.espncdn.com/i/teamlogos/ncaa/500/${a}.png`;
     return null;
   }
 
@@ -254,7 +289,14 @@ export default function BettingSlateClient({
         <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
           {navLink("/betting", "Betting", true)}
           {navLink("/fantasy", "Fantasy", false)}
-          {user && navLink("/my-bets", "My Bets", false)}
+          {currentUser && navLink("/my-bets", "My Bets", false)}
+          {isRefreshing ? (
+            <span style={{ fontSize: "11px", color: "#4B5563" }}>updating...</span>
+          ) : (
+            <span style={{ fontSize: "11px", color: "#4B5563" }}>
+              Updated {lastUpdated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+            </span>
+          )}
           <AuthButton />
         </div>
       </div>
@@ -279,7 +321,7 @@ export default function BettingSlateClient({
       </div>
 
       {/* No games */}
-      {games.length === 0 && (
+      {filteredGames.length === 0 && (
         <div style={{ padding: "60px 0", textAlign: "center", color: "var(--color-text-secondary)" }}>
           No games found for this date.
         </div>
@@ -367,6 +409,10 @@ export default function BettingSlateClient({
             const dk = getBookOdds(game, "draftkings");
             const fd = getBookOdds(game, "fanduel");
             const topSignal = getTopSignal(game);
+            const awayWon = game.isFinal && game.awayScore !== null && game.homeScore !== null
+              && Number(game.awayScore) > Number(game.homeScore);
+            const homeWon = game.isFinal && game.awayScore !== null && game.homeScore !== null
+              && Number(game.homeScore) > Number(game.awayScore);
             return (
               <div key={game.id}>
                 <div
@@ -387,73 +433,88 @@ export default function BettingSlateClient({
                 >
                   {/* Matchup */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      {getTeamLogo(game.awayTeam, game.sportKey) && (
-                        <img
-                          src={getTeamLogo(game.awayTeam, game.sportKey)!}
-                          alt={game.awayTeam}
-                          width={16}
-                          height={16}
-                          style={{ objectFit: "contain", opacity: 0.9 }}
-                        />
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        {getTeamLogo(game.awayTeam, game, "away") && (
+                          <img src={getTeamLogo(game.awayTeam, game, "away")!} alt={game.awayTeam}
+                            width={16} height={16} style={{ objectFit: "contain" }} />
+                        )}
+                        <span style={{ color: "#94A3B8", fontWeight: 500, fontSize: "14px" }}>
+                          {game.awayTeam}
+                        </span>
+                        {game.awayRecord && (
+                          <span style={{ fontSize: "10px", color: "#4B5563" }}>{game.awayRecord}</span>
+                        )}
+                      </div>
+                      {(game.isLive || game.isFinal) && game.awayScore !== null && (
+                        <span style={{
+                          fontSize: "15px",
+                          fontWeight: 700,
+                          color: awayWon ? "#F1F3F5" : "#6B7280",
+                          minWidth: "24px",
+                          textAlign: "right",
+                        }}>{game.awayScore}</span>
                       )}
-                      <span style={{
-                        color: "#94A3B8",
-                        fontWeight: 500,
-                        fontSize: "14px",
-                        fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
-                      }}>
-                        {game.awayTeam}
-                      </span>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      {getTeamLogo(game.homeTeam, game.sportKey) && (
-                        <img
-                          src={getTeamLogo(game.homeTeam, game.sportKey)!}
-                          alt={game.homeTeam}
-                          width={16}
-                          height={16}
-                          style={{ objectFit: "contain", opacity: 0.9 }}
-                        />
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        {getTeamLogo(game.homeTeam, game, "home") && (
+                          <img src={getTeamLogo(game.homeTeam, game, "home")!} alt={game.homeTeam}
+                            width={16} height={16} style={{ objectFit: "contain" }} />
+                        )}
+                        <span style={{ fontWeight: 500, fontSize: "14px", color: "#F1F3F5" }}>
+                          {game.homeTeam}
+                        </span>
+                        {game.homeRecord && (
+                          <span style={{ fontSize: "10px", color: "#4B5563" }}>{game.homeRecord}</span>
+                        )}
+                      </div>
+                      {(game.isLive || game.isFinal) && game.homeScore !== null && (
+                        <span style={{
+                          fontSize: "15px",
+                          fontWeight: 700,
+                          color: homeWon ? "#F1F3F5" : "#6B7280",
+                          minWidth: "24px",
+                          textAlign: "right",
+                        }}>{game.homeScore}</span>
                       )}
-                      <span style={{
-                        fontWeight: 600,
-                        fontSize: "14px",
-                        color: "#F1F3F5",
-                        fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
-                      }}>
-                        {game.homeTeam}
-                      </span>
                     </div>
                     {game.sportKey === "mlb" && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "1px", marginTop: "3px" }}>
-                        <span style={{ fontSize: "11px", color: "#6B7280" }}>
-                          {(() => {
-                            const p = getMlbStarters(game);
-                            const away = p?.awayPitcher ?? "TBD";
-                            const home = p?.homePitcher ?? "TBD";
-                            const awayConfirmed = p?.awayPitcherConfirmed ?? false;
-                            const homeConfirmed = p?.homePitcherConfirmed ?? false;
-                            return (
-                              <>
-                                <span style={{ color: awayConfirmed ? "#9CA3AF" : "#D97706" }}>{away}</span>
-                                <span style={{ color: "#4B5563" }}> vs </span>
-                                <span style={{ color: homeConfirmed ? "#9CA3AF" : "#D97706" }}>{home}</span>
-                                {(!awayConfirmed || !homeConfirmed) && (
-                                  <span style={{ color: "#D97706" }}> · probable</span>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "1px", marginTop: "2px" }}>
+                        {(() => {
+                          const home = mlbStartersByTeam[game.homeTeam];
+                          const away = mlbStartersByTeam[game.awayTeam];
+                          if (!home && !away) return null;
+                          return (
+                            <span style={{ fontSize: "11px", color: "#6B7280" }}>
+                              <span style={{ color: away?.confirmed ? "#9CA3AF" : "#D97706" }}>
+                                {away?.pitcher ?? "TBD"}
+                              </span>
+                              <span style={{ color: "#4B5563" }}> vs </span>
+                              <span style={{ color: home?.confirmed ? "#9CA3AF" : "#D97706" }}>
+                                {home?.pitcher ?? "TBD"}
+                              </span>
+                            </span>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
 
                   {/* Time */}
-                  <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                    {formatTime(game.commenceTime)}
-                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                    {game.isFinal ? (
+                      <span style={{ fontSize: "11px", color: "#6B7280" }}>Final</span>
+                    ) : game.isLive ? (
+                      <span style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 500 }}>
+                        {game.statusDetail}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: "11px", color: "#6B7280" }}>
+                        {formatTime(game.commenceTime)}
+                      </span>
+                    )}
+                  </div>
 
                   {/* Best line */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
@@ -470,8 +531,26 @@ export default function BettingSlateClient({
                   {/* DraftKings */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "3px", alignItems: "center" }}>
                     {activeMarket === "h2h" && <>
-                      <span style={{ fontSize: "13px", fontWeight: 500 }}>{dk ? fmtOdds(dk.away_price) : "—"}</span>
-                      <span style={{ fontSize: "13px", fontWeight: 500 }}>{dk ? fmtOdds(dk.home_price) : "—"}</span>
+                      <span style={{
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: awayWon ? "#16A34A" : "var(--color-text-primary, #F1F3F5)",
+                      }}>
+                        {dk ? fmtOdds(dk.away_price) : "—"}
+                        {awayWon && dk?.away_price && (
+                          <span style={{ marginLeft: "3px", fontSize: "10px" }}>✓</span>
+                        )}
+                      </span>
+                      <span style={{
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: homeWon ? "#16A34A" : "var(--color-text-primary, #F1F3F5)",
+                      }}>
+                        {dk ? fmtOdds(dk.home_price) : "—"}
+                        {homeWon && dk?.home_price && (
+                          <span style={{ marginLeft: "3px", fontSize: "10px" }}>✓</span>
+                        )}
+                      </span>
                     </>}
                     {activeMarket === "spreads" && <>
                       <span style={{ fontSize: "13px", fontWeight: 500 }}>{dk ? (dk.spread_away !== null ? `${dk.spread_away > 0 ? "+" : ""}${dk.spread_away}` : "—") : "—"}</span>
@@ -541,9 +620,21 @@ export default function BettingSlateClient({
                     );
                   })()}
 
+                  {/* Closing lines indicator */}
+                  {game.isFinal && (
+                    <div style={{
+                      fontSize: "10px",
+                      color: "#16A34A",
+                      marginTop: "2px",
+                      textAlign: "center",
+                    }}>
+                      {awayWon ? "✓ Away" : "✓ Home"}
+                    </div>
+                  )}
+
                   {/* Edge */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-                    {user ? (
+                    {currentUser ? (
                       topSignal ? (
                         <>
                           <span style={{ fontSize: "13px", fontWeight: 500, color: TIER_CONFIG[topSignal.tier]?.color }}>
@@ -568,7 +659,7 @@ export default function BettingSlateClient({
 
                   {/* Actions */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "5px", alignItems: "flex-start" }}>
-                    {user && topSignal && (
+                    {currentUser && topSignal && (
                       <span style={{ fontSize: "11px", color: "#16A34A", fontWeight: 500, cursor: "pointer" }}
                         onClick={e => e.stopPropagation()}>
                         + Slip
@@ -592,7 +683,7 @@ export default function BettingSlateClient({
                       {/* Left: signal + probability */}
                       <div>
                         {/* Signal card */}
-                        {user ? (
+                        {currentUser ? (
                           topSignal ? (
                             <div style={{ marginBottom: "16px" }}>
                               <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-secondary)", marginBottom: "8px", fontWeight: 500 }}>
@@ -651,7 +742,7 @@ export default function BettingSlateClient({
                         )}
 
                         {/* Win probability */}
-                        {user && game.consensus && (
+                        {currentUser && game.consensus && (
                           <div>
                             <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-secondary)", marginBottom: "8px", fontWeight: 500 }}>
                               Win probability
@@ -749,16 +840,16 @@ export default function BettingSlateClient({
         </div>
       ))}
 
-      {golfLeaderboard.length > 0 && (
+      {liveGolf.length > 0 && (
         <GolfTournamentCard
           tournamentName={golfTournamentName}
           roundStatus={golfRoundStatus}
-          players={golfLeaderboard}
+          players={liveGolf}
         />
       )}
 
       {/* Footer CTA */}
-      {!user && games.length > 0 && (
+      {!currentUser && filteredGames.length > 0 && (
         <div style={{
           padding: "14px 0",
           borderTop: "0.5px solid var(--color-border-tertiary)",

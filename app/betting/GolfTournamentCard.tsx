@@ -3,11 +3,12 @@
 import { useState } from "react";
 
 interface GolfPlayer {
-  position: number;
+  position: number | string;
   name: string;
   totalVsPar: number | null;
   todayVsPar: number | null;
   thru: string;
+  teeTime?: string | null;
   r1: number | null;
   r2: number | null;
   r3: number | null;
@@ -88,20 +89,43 @@ export default function GolfTournamentCard({ tournamentName, roundStatus, player
           gap: "4px",
           background: idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)",
         }}>
-          <span style={{ fontSize: "12px", color: "#6B7280" }}>{player.position}</span>
-          <span style={{ fontSize: "13px", fontWeight: 500, color: "#F1F3F5" }}>{player.name}</span>
-          <span style={{ fontSize: "13px", fontWeight: 600, color: scoreColor(player.totalVsPar), textAlign: "center" }}>
-            {fmtScore(player.totalVsPar)}
+          <span style={{ fontSize: "12px", color: "#6B7280" }}>
+            {player.position === "—" || player.position === "--" ? "—" : player.position}
           </span>
-          <span style={{ fontSize: "12px", color: scoreColor(player.todayVsPar), textAlign: "center" }}>
-            {fmtScore(player.todayVsPar)}
+          <span style={{ fontSize: "13px", fontWeight: 500, color: "#F1F3F5" }}>
+            {player.name}
+            {player.teeTime && player.thru === "--" && (
+              <span style={{ fontSize: "10px", color: "#4B5563", marginLeft: "8px", fontWeight: 400 }}>
+                {player.teeTime}
+              </span>
+            )}
+          </span>
+          <span style={{
+            fontSize: "13px",
+            fontWeight: 600,
+            color: (player.totalVsPar === null || player.totalVsPar === undefined || isNaN(player.totalVsPar)) ? "#6B7280"
+              : player.totalVsPar < 0 ? "#EA6C0A"
+              : player.totalVsPar > 0 ? "#DC2626" : "#9CA3AF",
+            textAlign: "center",
+          }}>
+            {(player.totalVsPar === null || player.totalVsPar === undefined || isNaN(player.totalVsPar)) ? "--"
+              : player.totalVsPar === 0 ? "E"
+              : player.totalVsPar > 0 ? `+${player.totalVsPar}`
+              : `${player.totalVsPar}`}
+          </span>
+          <span style={{ fontSize: "12px", color: (player.todayVsPar === null || player.todayVsPar === undefined || isNaN(player.todayVsPar)) ? "#6B7280" : scoreColor(player.todayVsPar), textAlign: "center" }}>
+            {(player.todayVsPar === null || player.todayVsPar === undefined || isNaN(player.todayVsPar)) ? "--" : fmtScore(player.todayVsPar)}
           </span>
           <span style={{ fontSize: "11px", color: "#6B7280", textAlign: "center" }}>
             {player.thru}
           </span>
           {[player.r1, player.r2, player.r3, player.r4].map((r, i) => (
-            <span key={i} style={{ fontSize: "11px", color: "#9CA3AF", textAlign: "center" }}>
-              {r ?? "--"}
+            <span key={i} style={{
+              fontSize: "11px",
+              color: (r === null || r === undefined || isNaN(r as number)) ? "#4B5563" : "#9CA3AF",
+              textAlign: "center",
+            }}>
+              {(r === null || r === undefined || isNaN(r as number)) ? "--" : r}
             </span>
           ))}
         </div>
@@ -119,7 +143,7 @@ export default function GolfTournamentCard({ tournamentName, roundStatus, player
             borderBottom: "0.5px solid #1E2433",
           }}
         >
-          {expanded ? "Show less ↑" : `Show top 20 (${players.length - 10} more) ↓`}
+          {expanded ? "Show less ↑" : `Show full field (${players.length} players) ↓`}
         </div>
       )}
     </div>

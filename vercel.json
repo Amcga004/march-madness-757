@@ -1,20 +1,16 @@
 {
   "crons": [
     {
-      "path": "/api/cron/sync",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/golf/sync-live-cron",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/platform/lifecycle",
-      "schedule": "*/5 * * * *"
+      "path": "/api/betting/ingest",
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/platform/ingest-schedule",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/platform/lifecycle",
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/platform/golf-scoring-sync",
@@ -25,8 +21,8 @@
       "schedule": "*/5 * * * *"
     },
     {
-      "path": "/api/betting/ingest",
-      "schedule": "0 */4 * * *"
+      "path": "/api/golf/sync-live-cron",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

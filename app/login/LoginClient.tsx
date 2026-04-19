@@ -16,10 +16,11 @@ export default function LoginClient({
   const [err, setErr] = useState(error === "auth" ? "Authentication failed. Please try again." : "");
 
   const supabase = createClient();
-  const redirectTo = `${window.location.origin}/auth/callback?next=${next ?? "/"}`;
 
   async function signInWithGoogle() {
     setLoading(true);
+    setErr("");
+    const redirectTo = `${window.location.origin}/auth/callback?next=${next ?? "/"}`;
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo },
@@ -28,6 +29,8 @@ export default function LoginClient({
 
   async function signInWithApple() {
     setLoading(true);
+    setErr("");
+    const redirectTo = `${window.location.origin}/auth/callback?next=${next ?? "/"}`;
     await supabase.auth.signInWithOAuth({
       provider: "apple",
       options: { redirectTo },
@@ -39,6 +42,7 @@ export default function LoginClient({
     if (!email) return;
     setLoading(true);
     setErr("");
+    const redirectTo = `${window.location.origin}/auth/callback?next=${next ?? "/"}`;
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: redirectTo },

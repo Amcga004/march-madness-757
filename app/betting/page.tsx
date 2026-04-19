@@ -10,22 +10,95 @@ export default async function BettingPage({
   searchParams: Promise<{ date?: string; sport?: string }>;
 }) {
   const user = await getUser();
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "America/New_York",
+  }); // Returns YYYY-MM-DD in ET
   const params = await searchParams;
   const date = params.date ?? today;
   const sport = params.sport ?? "all";
 
   const supabase = createServiceClient();
 
+  // Fetch full schedule from ESPN for each sport
+  async function fetchEspnScoreboard(sportPath: string) {
+    try {
+      const res = await fetch(
+        `https://site.api.espn.com/apis/site/v2/sports/${sportPath}/scoreboard`,
+        { next: { revalidate: 60 } }
+      );
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.events ?? [];
+    } catch { return []; }
+  }
+
+  const [nbaEvents, mlbEvents2, ncaabEvents] = await Promise.all([
+    sport === "all" || sport === "nba" ? fetchEspnScoreboard("basketball/nba") : Promise.resolve([]),
+    sport === "all" || sport === "mlb" ? fetchEspnScoreboard("baseball/mlb") : Promise.resolve([]),
+    sport === "all" || sport === "ncaab" ? fetchEspnScoreboard("basketball/mens-college-basketball") : Promise.resolve([]),
+  ]);
+
+  // Normalize ESPN events into a consistent game format
+  function normalizeEspnGame(event: any, sportKey: string) {
+    const competition = event.competitions?.[0];
+    const home = competition?.competitors?.find((c: any) => c.homeAway === "home");
+    const away = competition?.competitors?.find((c: any) => c.homeAway === "away");
+    if (!home || !away) return null;
+
+    const statusType = event.status?.type;
+    const isLive = statusType?.state === "in";
+    const isFinal = statusType?.state === "post";
+    const statusDetail = statusType?.shortDetail ?? statusType?.description ?? "";
+
+    return {
+      id: event.id,
+      sportKey,
+      homeTeam: home.team?.displayName,
+      awayTeam: away.team?.displayName,
+      homeAbbr: home.team?.abbreviation,
+      awayAbbr: away.team?.abbreviation,
+      homeLogo: home.team?.logo ?? null,
+      awayLogo: away.team?.logo ?? null,
+      homeScore: isLive || isFinal ? home.score : null,
+      awayScore: isLive || isFinal ? away.score : null,
+      commenceTime: competition?.date,
+      isLive,
+      isFinal,
+      statusDetail,
+      homeRecord: home.records?.[0]?.summary ?? null,
+      awayRecord: away.records?.[0]?.summary ?? null,
+    };
+  }
+
+  const allEspnGames = [
+    ...nbaEvents.map((e: any) => normalizeEspnGame(e, "nba")),
+    ...mlbEvents2.map((e: any) => normalizeEspnGame(e, "mlb")),
+    ...ncaabEvents.map((e: any) => normalizeEspnGame(e, "ncaab")),
+  ].filter(Boolean);
+
+  // Fetch odds and index by team name for enrichment
   let oddsQuery = supabase
     .from("market_odds")
     .select("*")
     .gte("commence_time", `${date}T00:00:00Z`)
-    .lt("commence_time", `${date}T23:59:59Z`)
-    .order("commence_time");
+    .lt("commence_time", `${date}T23:59:59Z`);
 
-  if (sport !== "all") oddsQuery = oddsQuery.eq("sport_key", sport);
-  const { data: odds } = await oddsQuery;
+  const { data: oddsData } = await oddsQuery;
+
+  // Build odds lookup by home+away team name
+  const oddsMap = new Map<string, any[]>();
+  for (const odd of oddsData ?? []) {
+    const key = `${odd.away_team}|${odd.home_team}`;
+    if (!oddsMap.has(key)) oddsMap.set(key, []);
+    oddsMap.get(key)!.push(odd);
+  }
+
+  // Merge ESPN games with odds
+  const enrichedGames = allEspnGames.map((game: any) => {
+    const key = `${game.awayTeam}|${game.homeTeam}`;
+    const gameOdds = oddsMap.get(key) ?? [];
+    return { ...game, odds: gameOdds };
+  });
 
   let signals = null;
   if (user) {
@@ -79,58 +152,91 @@ export default async function BettingPage({
   let golfRoundStatus = "";
 
   if (activeTournament) {
-    const tournamentId = (activeTournament.metadata as any)?.tournamentId;
-    if (tournamentId) {
-      const key = process.env.SPORTS_DATA_IO_KEY;
-      const lbRes = await fetch(
-        `https://api.sportsdata.io/golf/v2/json/Leaderboard/${tournamentId}?key=${key}`,
-        { next: { revalidate: 120 } }
-      ).then(r => r.json()).catch(() => null);
+    try {
+      const res = await fetch(
+        `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard`,
+        { cache: "no-store" }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const event = data.events?.[0];
+        const competition = event?.competitions?.[0];
 
-      console.log("[golf] tournament:", activeTournament?.name, "players:", lbRes?.Players?.length ?? 0);
+        golfRoundStatus = event?.status?.type?.shortDetail ?? "";
 
-      if (lbRes?.Players) {
-        golfRoundStatus = lbRes.Name ?? activeTournament.name;
+        if (competition) {
+          golfLeaderboard = (competition.competitors ?? [])
+            .sort((a: any, b: any) => {
+              const posA = parseInt(a.status?.position?.id ?? "999");
+              const posB = parseInt(b.status?.position?.id ?? "999");
+              return posA - posB;
+            })
+            .map((comp: any) => {
+              const athlete = comp.athlete;
+              const linescores = comp.linescores ?? [];
+              const totalVsParStr = comp.score ?? "--";
+              const totalVsPar = totalVsParStr === "E" ? 0
+                : totalVsParStr === "--" ? null
+                : parseInt(totalVsParStr);
 
-        golfLeaderboard = lbRes.Players
-          .sort((a: any, b: any) => (a.Rank ?? 999) - (b.Rank ?? 999))
-          .slice(0, 20)
-          .map((p: any) => {
-            const fullName = [p.FirstName, p.LastName].filter(Boolean).join(" ").trim()
-              || [p.firstName, p.lastName].filter(Boolean).join(" ").trim()
-              || p.Name
-              || p.PlayerName
-              || "Unknown";
-            const rounds = p.Rounds ?? [];
-            const getScore = (roundNum: number) => {
-              const r = rounds.find((r: any) => r.Number === roundNum);
-              return r?.Strokes ?? null;
-            };
-            return {
-              position: p.Rank ?? "—",
-              name: fullName,
-              totalVsPar: p.TotalScore !== null && p.TotalScore !== undefined
-                ? Math.round(Number(p.TotalScore))
-                : null,
-              todayVsPar: (() => {
-                const lastRound = rounds[rounds.length - 1];
-                if (!lastRound?.Strokes || !lastRound?.Par) return null;
-                return lastRound.Strokes - lastRound.Par;
-              })(),
-              thru: (() => {
-                const lastRound = rounds[rounds.length - 1];
-                if (!lastRound) return "--";
-                if (lastRound.HolesCompleted === 18) return "F";
-                if (lastRound.HolesCompleted > 0) return `${lastRound.HolesCompleted}`;
+              const activeLS = [...linescores].reverse().find((ls: any) =>
+                ls.displayValue && ls.displayValue !== "-" && ls.displayValue !== "--"
+              );
+
+              const todayVsPar = (() => {
+                if (!activeLS) return null;
+                const v = activeLS.displayValue;
+                if (!v || v === "-" || v === "--") return null;
+                return v === "E" ? 0 : parseInt(v);
+              })();
+
+              const thru = (() => {
+                if (!activeLS) return "--";
+                const nested = activeLS.linescores?.length ?? 0;
+                if (nested === 0 && (!activeLS.displayValue || activeLS.displayValue === "-" || activeLS.displayValue === "--")) return "--";
+                if (nested === 0 && activeLS.value > 0) return "F";
+                if (nested >= 18) return "F";
+                if (nested > 0) return `${nested}`;
                 return "--";
-              })(),
-              r1: getScore(1),
-              r2: getScore(2),
-              r3: getScore(3),
-              r4: getScore(4),
-            };
-          });
+              })();
+
+              const getRound = (num: number): number | null => {
+                const ls = linescores[num - 1];
+                if (!ls || !ls.value || ls.value === 0) return null;
+                return ls.value;
+              };
+
+              const r3LS = linescores[2];
+              const teeTime = (() => {
+                if (!r3LS || r3LS.value > 0) return null;
+                const stats = r3LS.statistics?.categories?.[0]?.stats;
+                const teeStat = stats?.[stats.length - 1]?.displayValue;
+                if (!teeStat || !teeStat.includes("Apr")) return null;
+                try {
+                  const d = new Date(teeStat);
+                  return d.toLocaleTimeString("en-US", {
+                    hour: "numeric", minute: "2-digit", timeZone: "America/New_York"
+                  }) + " ET";
+                } catch { return null; }
+              })();
+
+              return {
+                position: comp.status?.position?.displayName ?? "—",
+                name: athlete?.displayName ?? "Unknown",
+                totalVsPar,
+                todayVsPar,
+                thru,
+                teeTime,
+                r1: getRound(1),
+                r2: getRound(2),
+                r3: getRound(3),
+                r4: getRound(4),
+              };
+            });
+        }
       }
+    } catch (e) {
+      console.error("[golf-espn] error:", e);
     }
   }
 
@@ -143,14 +249,15 @@ export default async function BettingPage({
     <BettingSlateClient
       date={date}
       sport={sport}
-      odds={odds ?? []}
+      games={enrichedGames}
       signals={signals}
       consensus={consensus ?? []}
+      teamLogos={teamLogos ?? []}
       mlbStartersByTeam={mlbStartersByTeam}
       golfLeaderboard={golfLeaderboard}
       golfTournamentName={activeTournament?.name ?? ""}
+      golfTournamentId={String((activeTournament?.metadata as any)?.tournamentId ?? "")}
       golfRoundStatus={golfRoundStatus}
-      teamLogos={teamLogos ?? []}
       user={user ? { id: user.id, email: user.email } : null}
     />
   );
