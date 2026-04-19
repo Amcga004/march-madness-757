@@ -651,29 +651,29 @@ export default function BettingSlateClient({
 
                   {/* Edge */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-                    {currentUser && !game.isLive && !game.isFinal ? (
-                      topSignal ? (
-                        <>
-                          <span style={{ fontSize: "13px", fontWeight: 500, color: TIER_CONFIG[topSignal.tier]?.color }}>
-                            {topSignal.edge_pct > 0 ? "+" : ""}{topSignal.edge_pct}%
-                          </span>
-                          <span style={{ fontSize: "10px", color: "var(--color-text-secondary)" }}>
-                            {TIER_CONFIG[topSignal.tier]?.label} · {topSignal.side === "home" ? game.homeTeam.split(" ").pop() : game.awayTeam.split(" ").pop()}
-                          </span>
-                        </>
+                    {game.isLive || game.isFinal ? null
+                      : currentUser ? (
+                        topSignal ? (
+                          <>
+                            <span style={{ fontSize: "13px", fontWeight: 500, color: TIER_CONFIG[topSignal.tier]?.color }}>
+                              {topSignal.edge_pct > 0 ? "+" : ""}{topSignal.edge_pct}%
+                            </span>
+                            <span style={{ fontSize: "10px", color: "var(--color-text-secondary)" }}>
+                              {TIER_CONFIG[topSignal.tier]?.label} · {topSignal.side === "home" ? game.homeTeam.split(" ").pop() : game.awayTeam.split(" ").pop()}
+                            </span>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: "10px", color: "#4B5563" }}>No edge</span>
+                        )
                       ) : (
-                        <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>—</span>
+                        <a href="/login" style={{
+                          fontSize: "11px", color: "var(--color-text-secondary)",
+                          textDecoration: "none", display: "flex", alignItems: "center", gap: "3px",
+                        }}>
+                          <span>🔒</span> Sign in
+                        </a>
                       )
-                    ) : game.isLive || game.isFinal ? (
-                      <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>—</span>
-                    ) : (
-                      <a href="/login" style={{
-                        fontSize: "11px", color: "var(--color-text-secondary)",
-                        textDecoration: "none", display: "flex", alignItems: "center", gap: "3px",
-                      }}>
-                        <span>🔒</span> Sign in
-                      </a>
-                    )}
+                    }
                   </div>
 
                   {/* Actions */}
