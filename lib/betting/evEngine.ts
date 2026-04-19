@@ -166,9 +166,13 @@ export async function generateSignalsForDate(date: string) {
       (o) => o.external_game_id === consensus.external_game_id
     );
 
-    // If all remaining odds are closing-line snapshots, the game has started — suppress
-    const currentOdds = gameOdds.filter((o) => !o.closing_line);
-    if (currentOdds.length === 0 && gameOdds.length > 0) {
+    // Prefer closing-line odds (game has started); fall back to live pre-game odds
+    const closingOdds = gameOdds.filter((o) => o.closing_line === true);
+    const liveOdds = gameOdds.filter((o) => !o.closing_line);
+    const oddsForSignals = closingOdds.length > 0 ? closingOdds : liveOdds;
+
+    // If no odds at all, game has started without closing snapshot — suppress
+    if (oddsForSignals.length === 0 && gameOdds.length > 0) {
       await supabase
         .from("signals")
         .update({ suppressed: true, suppression_reason: "game_live", updated_at: new Date().toISOString() })
@@ -177,15 +181,21 @@ export async function generateSignalsForDate(date: string) {
       continue;
     }
 
-    // Generate H2H signals using current (non-closing) odds only
-    const bestHome = findBestOdds(currentOdds, consensus.external_game_id, "h2h", "home");
-    const bestAway = findBestOdds(currentOdds, consensus.external_game_id, "h2h", "away");
+    const bestHome = findBestOdds(oddsForSignals, consensus.external_game_id, "h2h", "home");
+    const bestAway = findBestOdds(oddsForSignals, consensus.external_game_id, "h2h", "away");
 
-    if (bestHome) {
-      const marketImplied = americanToImpliedProb(bestHome.price);
-      const edgePct = (consensus.consensus_home_win_prob - marketImplied) * 100;
-      const evValue = computeEV(consensus.consensus_home_win_prob, bestHome.price);
-      const tier = getSignalTier(edgePct);
+    if (bestHome && bestAway) {
+      // Devig both sides together so edge is against the fair no-vig line
+      const rawHome = americanToImpliedProb(bestHome.price);
+      const rawAway = americanToImpliedProb(bestAway.price);
+      const vigTotal = rawHome + rawAway;
+      const fairHomeProb = rawHome / vigTotal;
+      const fairAwayProb = rawAway / vigTotal;
+
+      const rawHomeEdge = (consensus.consensus_home_win_prob - fairHomeProb) * 100;
+      const homeEdgePct = Math.max(-25, Math.min(25, Math.round(rawHomeEdge * 10) / 10));
+      const homeEvValue = computeEV(consensus.consensus_home_win_prob, bestHome.price);
+      const homeTier = getSignalTier(homeEdgePct);
 
       await supabase
         .from("signals")
@@ -198,13 +208,13 @@ export async function generateSignalsForDate(date: string) {
             away_team: consensus.away_team,
             signal_type: "h2h",
             side: "home",
-            edge_pct: Math.round(edgePct * 10) / 10,
-            ev_value: evValue,
+            edge_pct: homeEdgePct,
+            ev_value: homeEvValue,
             consensus_prob: consensus.consensus_home_win_prob,
-            market_implied_prob: marketImplied,
+            market_implied_prob: fairHomeProb,
             best_price: bestHome.price,
             best_bookmaker: bestHome.bookmaker,
-            tier,
+            tier: homeTier,
             is_visible: true,
             suppressed: consensus.confidence_tier === "insufficient",
             suppression_reason: consensus.confidence_tier === "insufficient"
@@ -219,13 +229,11 @@ export async function generateSignalsForDate(date: string) {
         );
 
       generated++;
-    }
 
-    if (bestAway) {
-      const marketImplied = americanToImpliedProb(bestAway.price);
-      const edgePct = (consensus.consensus_away_win_prob - marketImplied) * 100;
-      const evValue = computeEV(consensus.consensus_away_win_prob, bestAway.price);
-      const tier = getSignalTier(edgePct);
+      const rawAwayEdge = (consensus.consensus_away_win_prob - fairAwayProb) * 100;
+      const awayEdgePct = Math.max(-25, Math.min(25, Math.round(rawAwayEdge * 10) / 10));
+      const awayEvValue = computeEV(consensus.consensus_away_win_prob, bestAway.price);
+      const awayTier = getSignalTier(awayEdgePct);
 
       await supabase
         .from("signals")
@@ -238,13 +246,13 @@ export async function generateSignalsForDate(date: string) {
             away_team: consensus.away_team,
             signal_type: "h2h",
             side: "away",
-            edge_pct: Math.round(edgePct * 10) / 10,
-            ev_value: evValue,
+            edge_pct: awayEdgePct,
+            ev_value: awayEvValue,
             consensus_prob: consensus.consensus_away_win_prob,
-            market_implied_prob: marketImplied,
+            market_implied_prob: fairAwayProb,
             best_price: bestAway.price,
             best_bookmaker: bestAway.bookmaker,
-            tier,
+            tier: awayTier,
             is_visible: true,
             suppressed: consensus.confidence_tier === "insufficient",
             suppression_reason: consensus.confidence_tier === "insufficient"
