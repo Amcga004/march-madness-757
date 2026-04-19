@@ -166,13 +166,10 @@ export async function generateSignalsForDate(date: string) {
       (o) => o.external_game_id === consensus.external_game_id
     );
 
-    // Prefer closing-line odds (game has started); fall back to live pre-game odds
-    const closingOdds = gameOdds.filter((o) => o.closing_line === true);
-    const liveOdds = gameOdds.filter((o) => !o.closing_line);
-    const oddsForSignals = closingOdds.length > 0 ? closingOdds : liveOdds;
-
-    // If no odds at all, game has started without closing snapshot — suppress
-    if (oddsForSignals.length === 0 && gameOdds.length > 0) {
+    // closing_line = true rows only exist once a game has gone live (snapshotted at start)
+    // If any exist, the game has already started — suppress signals and skip
+    const hasClosingLine = gameOdds.some((o) => o.closing_line === true);
+    if (hasClosingLine) {
       await supabase
         .from("signals")
         .update({ suppressed: true, suppression_reason: "game_live", updated_at: new Date().toISOString() })
@@ -181,8 +178,12 @@ export async function generateSignalsForDate(date: string) {
       continue;
     }
 
-    const bestHome = findBestOdds(oddsForSignals, consensus.external_game_id, "h2h", "home");
-    const bestAway = findBestOdds(oddsForSignals, consensus.external_game_id, "h2h", "away");
+    // Pre-game: only closing_line = false rows exist — use these for signal generation
+    const oddsToUse = gameOdds.filter((o) => o.closing_line === false);
+    if (oddsToUse.length === 0) continue;
+
+    const bestHome = findBestOdds(oddsToUse, consensus.external_game_id, "h2h", "home");
+    const bestAway = findBestOdds(oddsToUse, consensus.external_game_id, "h2h", "away");
 
     if (bestHome && bestAway) {
       // Devig both sides together so edge is against the fair no-vig line
