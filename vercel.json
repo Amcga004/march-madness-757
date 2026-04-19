@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/betting/ingest",
-      "schedule": "*/15 * * * *"
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/platform/ingest-schedule",

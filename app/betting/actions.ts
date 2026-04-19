@@ -60,7 +60,6 @@ export async function fetchSlateData(date: string, sport: string, userId: string
     ...mlbEventsRaw.map((e: any) => normalizeGame(e, "mlb")),
     ...ncaabEvents.map((e: any) => normalizeGame(e, "ncaab")),
   ].filter(Boolean);
-  console.log("[game-keys]", allGames.slice(0, 5).map((g: any) => `${g.awayTeam}|${g.homeTeam}`));
 
   function normalizeTeam(name: string) {
     return name.toLowerCase().trim()
@@ -94,14 +93,11 @@ export async function fetchSlateData(date: string, sport: string, userId: string
       .select("*")
       .eq("game_date", date)
       .eq("suppressed", false);
-    console.log("[signals-debug] userId:", userId, "count:", signalsData?.length ?? 0);
     for (const s of signalsData ?? []) {
       const key = `${normalizeTeam(s.away_team)}|${normalizeTeam(s.home_team)}`;
       if (!signalsMap.has(key)) signalsMap.set(key, []);
       signalsMap.get(key)!.push(s);
     }
-    console.log("[signals-keys]", Array.from(signalsMap.keys()).slice(0, 5));
-    console.log("[signals-map-size]", signalsMap.size);
   }
 
   // Enrich with consensus
@@ -115,10 +111,8 @@ export async function fetchSlateData(date: string, sport: string, userId: string
     consensusMap.set(`${normalizeTeam(c.away_team)}|${normalizeTeam(c.home_team)}`, c);
   }
 
-  console.log('[DEBUG signals-keys]', Array.from(signalsMap.keys()));
   const enrichedGames = allGames.map((game: any) => {
     const key = `${normalizeTeam(game.awayTeam)}|${normalizeTeam(game.homeTeam)}`;
-    console.log('[DEBUG game-key]', key, 'found:', signalsMap.has(key));
     return {
       ...game,
       odds: oddsMap.get(key) ?? [],
@@ -126,8 +120,6 @@ export async function fetchSlateData(date: string, sport: string, userId: string
       consensus: consensusMap.get(key) ?? null,
     };
   });
-  const gamesWithSignals = enrichedGames.filter((g: any) => g.signals?.length > 0);
-  console.log("[games-with-signals]", gamesWithSignals.length, gamesWithSignals.map((g: any) => `${g.awayTeam}|${g.homeTeam}`));
 
   // MLB probable starters
   const startersResult = await fetch(
@@ -164,16 +156,6 @@ export async function fetchGolfLeaderboard(tournamentId: string) {
 
     const competition = event.competitions?.[0];
     if (!competition) return [];
-
-    if (competition?.competitors?.[0]) {
-      const c = competition.competitors[0];
-      console.log("[espn-golf-stats]", JSON.stringify({
-        name: c.athlete?.displayName,
-        stats: c.statistics,
-        linescores: c.linescores?.slice(0, 3),
-        score: c.score,
-      }));
-    }
 
     return (competition.competitors ?? [])
       .sort((a: any, b: any) => {

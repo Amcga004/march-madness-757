@@ -166,9 +166,20 @@ export async function generateSignalsForDate(date: string) {
       (o) => o.external_game_id === consensus.external_game_id
     );
 
-    // Generate H2H signals
-    const bestHome = findBestOdds(gameOdds, consensus.external_game_id, "h2h", "home");
-    const bestAway = findBestOdds(gameOdds, consensus.external_game_id, "h2h", "away");
+    // If all remaining odds are closing-line snapshots, the game has started — suppress
+    const currentOdds = gameOdds.filter((o) => !o.closing_line);
+    if (currentOdds.length === 0 && gameOdds.length > 0) {
+      await supabase
+        .from("signals")
+        .update({ suppressed: true, suppression_reason: "game_live", updated_at: new Date().toISOString() })
+        .eq("external_game_id", consensus.external_game_id)
+        .eq("suppressed", false);
+      continue;
+    }
+
+    // Generate H2H signals using current (non-closing) odds only
+    const bestHome = findBestOdds(currentOdds, consensus.external_game_id, "h2h", "home");
+    const bestAway = findBestOdds(currentOdds, consensus.external_game_id, "h2h", "away");
 
     if (bestHome) {
       const marketImplied = americanToImpliedProb(bestHome.price);

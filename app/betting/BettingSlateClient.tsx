@@ -98,13 +98,11 @@ export default function BettingSlateClient({
 
     try {
       setIsRefreshing(true);
-      console.log('[CLIENT refresh] userId:', userRef.current?.id ?? 'null');
       const [slateData, golfData] = await Promise.all([
         fetchSlateData(todayET, activeSport, userRef.current?.id ?? null),
         golfTournamentId ? fetchGolfLeaderboard(golfTournamentId) : Promise.resolve(liveGolf),
       ]);
       const enriched = slateData.enrichedGames;
-      console.log('[CLIENT liveGames update]', enriched.length, 'games, signals:', enriched.filter((g: any) => g.signals?.length > 0).length);
       setLiveGames(enriched);
       if (golfData.length > 0) setLiveGolf(golfData);
       setLastUpdated(new Date());
@@ -629,7 +627,7 @@ export default function BettingSlateClient({
 
                   {/* Edge */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-                    {currentUser ? (
+                    {currentUser && !game.isLive && !game.isFinal ? (
                       topSignal ? (
                         <>
                           <span style={{ fontSize: "13px", fontWeight: 500, color: TIER_CONFIG[topSignal.tier]?.color }}>
@@ -642,6 +640,8 @@ export default function BettingSlateClient({
                       ) : (
                         <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>—</span>
                       )
+                    ) : game.isLive || game.isFinal ? (
+                      <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>—</span>
                     ) : (
                       <a href="/login" style={{
                         fontSize: "11px", color: "var(--color-text-secondary)",
