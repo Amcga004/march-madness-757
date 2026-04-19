@@ -268,6 +268,7 @@ export default async function BettingPage({
   return (
     <BettingSlateClient
       date={date}
+      todayET={today}
       sport={sport}
       games={enrichedGames}
       teamLogos={teamLogos ?? []}

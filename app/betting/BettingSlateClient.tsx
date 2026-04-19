@@ -57,6 +57,7 @@ const MODEL_LABELS: Record<string, string> = {
 
 interface Props {
   date: string;
+  todayET: string;
   sport: string;
   games: any[];
   mlbStartersByTeam: Record<string, { pitcher: string; confirmed: boolean }>;
@@ -69,14 +70,14 @@ interface Props {
 }
 
 export default function BettingSlateClient({
-  date, sport, games, mlbStartersByTeam, golfLeaderboard, golfTournamentName, golfTournamentId, golfRoundStatus, teamLogos, user,
+  date, todayET, sport, games, mlbStartersByTeam, golfLeaderboard, golfTournamentName, golfTournamentId, golfRoundStatus, teamLogos, user,
 }: Props) {
   const [activeSport, setActiveSport] = useState(sport);
   const [activeMarket, setActiveMarket] = useState("h2h");
   const [expandedGame, setExpandedGame] = useState<string | null>(null);
   const [liveGames, setLiveGames] = useState(games);
   const [liveGolf, setLiveGolf] = useState(golfLeaderboard);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentUser, setCurrentUser] = useState(user);
   const userRef = useRef(currentUser);
@@ -150,7 +151,7 @@ export default function BettingSlateClient({
     }
   }, [liveGames]);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayET;
   const prev = new Date(new Date(date + "T12:00:00").getTime() - 86400000).toISOString().split("T")[0];
   const next = new Date(new Date(date + "T12:00:00").getTime() + 86400000).toISOString().split("T")[0];
 
@@ -308,11 +309,11 @@ export default function BettingSlateClient({
           {currentUser && navLink("/my-bets", "My Bets", false)}
           {isRefreshing ? (
             <span style={{ fontSize: "11px", color: "#4B5563" }}>updating...</span>
-          ) : (
+          ) : lastUpdated ? (
             <span style={{ fontSize: "11px", color: "#4B5563" }}>
               Updated {lastUpdated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
             </span>
-          )}
+          ) : null}
           <AuthButton />
         </div>
       </div>
