@@ -51,8 +51,6 @@ interface Props {
   date: string;
   sport: string;
   games: any[];
-  signals: any[] | null;
-  consensus: any[];
   mlbStartersByTeam: Record<string, { pitcher: string; confirmed: boolean }>;
   golfLeaderboard: any[];
   golfTournamentName: string;
@@ -63,7 +61,7 @@ interface Props {
 }
 
 export default function BettingSlateClient({
-  date, sport, games, signals, consensus, mlbStartersByTeam, golfLeaderboard, golfTournamentName, golfTournamentId, golfRoundStatus, teamLogos, user,
+  date, sport, games, mlbStartersByTeam, golfLeaderboard, golfTournamentName, golfTournamentId, golfRoundStatus, teamLogos, user,
 }: Props) {
   const [activeSport, setActiveSport] = useState(sport);
   const [activeMarket, setActiveMarket] = useState("h2h");
@@ -100,11 +98,14 @@ export default function BettingSlateClient({
 
     try {
       setIsRefreshing(true);
+      console.log('[CLIENT refresh] userId:', userRef.current?.id ?? 'null');
       const [slateData, golfData] = await Promise.all([
         fetchSlateData(todayET, activeSport, userRef.current?.id ?? null),
         golfTournamentId ? fetchGolfLeaderboard(golfTournamentId) : Promise.resolve(liveGolf),
       ]);
-      setLiveGames(slateData.enrichedGames);
+      const enriched = slateData.enrichedGames;
+      console.log('[CLIENT liveGames update]', enriched.length, 'games, signals:', enriched.filter((g: any) => g.signals?.length > 0).length);
+      setLiveGames(enriched);
       if (golfData.length > 0) setLiveGolf(golfData);
       setLastUpdated(new Date());
     } catch (e) {
@@ -153,13 +154,8 @@ export default function BettingSlateClient({
   const filteredGames = useMemo(() => {
     return liveGames
       .filter((g: any) => activeSport === "all" || g.sportKey === activeSport)
-      .map((g: any) => ({
-        ...g,
-        signals: (signals ?? []).filter((s: any) => s.espn_event_id === g.id || s.external_game_id === g.id),
-        consensus: consensus.find((c: any) => c.espn_event_id === g.id || c.external_game_id === g.id) ?? null,
-      }))
       .sort((a: any, b: any) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime());
-  }, [liveGames, signals, consensus, activeSport]);
+  }, [liveGames, activeSport]);
 
   const bySport = useMemo(() => {
     const groups: Record<string, any[]> = {};

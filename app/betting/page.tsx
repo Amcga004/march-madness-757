@@ -85,22 +85,22 @@ export default async function BettingPage({
 
   const { data: oddsData } = await oddsQuery;
 
-  // Build odds lookup by home+away team name
+  function normalizeTeam(name: string) {
+    return name.toLowerCase().trim()
+      .replace(/[^a-z0-9 ]/g, '')
+      .replace(/\s+/g, ' ');
+  }
+
+  // Build odds lookup by normalized team names
   const oddsMap = new Map<string, any[]>();
   for (const odd of oddsData ?? []) {
-    const key = `${odd.away_team}|${odd.home_team}`;
+    const key = `${normalizeTeam(odd.away_team)}|${normalizeTeam(odd.home_team)}`;
     if (!oddsMap.has(key)) oddsMap.set(key, []);
     oddsMap.get(key)!.push(odd);
   }
 
-  // Merge ESPN games with odds
-  const enrichedGames = allEspnGames.map((game: any) => {
-    const key = `${game.awayTeam}|${game.homeTeam}`;
-    const gameOdds = oddsMap.get(key) ?? [];
-    return { ...game, odds: gameOdds };
-  });
-
-  let signals = null;
+  // Fetch signals and join onto games directly
+  const signalsMap = new Map<string, any[]>();
   if (user) {
     let sigQuery = supabase
       .from("signals")
@@ -109,16 +109,36 @@ export default async function BettingPage({
       .eq("suppressed", false)
       .order("edge_pct", { ascending: false });
     if (sport !== "all") sigQuery = sigQuery.eq("sport_key", sport);
-    const { data } = await sigQuery;
-    signals = data;
+    const { data: sigData } = await sigQuery;
+    for (const s of sigData ?? []) {
+      const key = `${normalizeTeam(s.away_team)}|${normalizeTeam(s.home_team)}`;
+      if (!signalsMap.has(key)) signalsMap.set(key, []);
+      signalsMap.get(key)!.push(s);
+    }
   }
 
+  // Fetch consensus and join onto games directly
+  const consensusMap = new Map<string, any>();
   let consensusQuery = supabase
     .from("consensus")
     .select("*")
     .eq("game_date", date);
   if (sport !== "all") consensusQuery = consensusQuery.eq("sport_key", sport);
-  const { data: consensus } = await consensusQuery;
+  const { data: consensusData } = await consensusQuery;
+  for (const c of consensusData ?? []) {
+    consensusMap.set(`${normalizeTeam(c.away_team)}|${normalizeTeam(c.home_team)}`, c);
+  }
+
+  // Merge ESPN games with odds, signals, and consensus
+  const enrichedGames = allEspnGames.map((game: any) => {
+    const key = `${normalizeTeam(game.awayTeam)}|${normalizeTeam(game.homeTeam)}`;
+    return {
+      ...game,
+      odds: oddsMap.get(key) ?? [],
+      signals: signalsMap.get(key) ?? [],
+      consensus: consensusMap.get(key) ?? null,
+    };
+  });
 
   const startersResult = await fetch(
     `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=probablePitcher`,
@@ -250,8 +270,6 @@ export default async function BettingPage({
       date={date}
       sport={sport}
       games={enrichedGames}
-      signals={signals}
-      consensus={consensus ?? []}
       teamLogos={teamLogos ?? []}
       mlbStartersByTeam={mlbStartersByTeam}
       golfLeaderboard={golfLeaderboard}
