@@ -78,6 +78,52 @@ export async function ingestOddsForSport(sport: keyof typeof SPORT_MAP) {
     const games = await fetchOdds(oddsApiSportKey);
     await saveSnapshot(sourceKey, sport, "odds", { gameCount: games.length });
 
+    const incomingGameIds = new Set(games.map((g: any) => g.id));
+
+    // Detect games that have vanished from the feed (game started) and snapshot their closing lines
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    const { data: existingOdds } = await supabase
+      .from("market_odds")
+      .select("*")
+      .eq("sport_key", sport)
+      .eq("closing_line", false)
+      .gte("commence_time", `${today}T00:00:00Z`)
+      .lt("commence_time", `${today}T23:59:59Z`);
+
+    const vanishedGameIds = new Set(
+      (existingOdds ?? [])
+        .map((r: any) => r.external_game_id)
+        .filter((id: string) => !incomingGameIds.has(id))
+    );
+
+    if (vanishedGameIds.size > 0) {
+      // Check which vanished games already have closing_line rows
+      const { data: existingClosing } = await supabase
+        .from("market_odds")
+        .select("external_game_id")
+        .eq("sport_key", sport)
+        .eq("closing_line", true)
+        .in("external_game_id", Array.from(vanishedGameIds));
+
+      const alreadySnapshotted = new Set((existingClosing ?? []).map((r: any) => r.external_game_id));
+
+      const rowsToSnapshot = (existingOdds ?? []).filter(
+        (r: any) => vanishedGameIds.has(r.external_game_id) && !alreadySnapshotted.has(r.external_game_id)
+      );
+
+      if (rowsToSnapshot.length > 0) {
+        const closingRows = rowsToSnapshot.map(({ id: _id, created_at: _ca, ...row }: any) => ({
+          ...row,
+          closing_line: true,
+          fetched_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+        await supabase
+          .from("market_odds")
+          .upsert(closingRows, { onConflict: "external_game_id,bookmaker,market_type,closing_line", ignoreDuplicates: true });
+      }
+    }
+
     let upserted = 0;
 
     for (const game of games) {
@@ -151,10 +197,11 @@ export async function ingestOddsForSport(sport: keyof typeof SPORT_MAP) {
                 spread_home: spreadHome,
                 spread_away: spreadAway,
                 line_value: lineValue,
+                closing_line: false,
                 fetched_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
               },
-              { onConflict: "external_game_id,bookmaker,market_type" }
+              { onConflict: "external_game_id,bookmaker,market_type,closing_line" }
             );
 
           upserted++;
@@ -163,7 +210,7 @@ export async function ingestOddsForSport(sport: keyof typeof SPORT_MAP) {
     }
 
     await recordSyncSuccess(sourceKey);
-    return { ok: true, sport, gamesFound: games.length, oddsUpserted: upserted };
+    return { ok: true, sport, gamesFound: games.length, oddsUpserted: upserted, closingLineSnapshots: vanishedGameIds.size };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     await recordSyncFailure(sourceKey, message);

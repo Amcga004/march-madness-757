@@ -170,19 +170,27 @@ export default function BettingSlateClient({
     return groups;
   }, [filteredGames]);
 
+  function preferClosing(odds: any[], game: any) {
+    if (!game.isLive && !game.isFinal) return odds;
+    const closing = odds.filter((o: any) => o.closing_line === true);
+    return closing.length > 0 ? closing : odds;
+  }
+
   function getBookOdds(game: any, bookmaker: string) {
-    return game.odds.find((o: any) => o.bookmaker === bookmaker && o.market_type === activeMarket);
+    const pool = preferClosing(game.odds, game);
+    return pool.find((o: any) => o.bookmaker === bookmaker && o.market_type === activeMarket);
   }
 
   function getRivers(game: any) {
-    return game.odds.find((o: any) =>
+    const pool = preferClosing(game.odds, game);
+    return pool.find((o: any) =>
       (o.bookmaker === "betrivers" || o.bookmaker === "rivers") &&
       o.market_type === activeMarket
     );
   }
 
   function getBest(game: any, side: "home" | "away" | "over" | "under") {
-    const relevant = game.odds.filter((o: any) => o.market_type === activeMarket);
+    const relevant = preferClosing(game.odds, game).filter((o: any) => o.market_type === activeMarket);
     let best: { price: number; bookmaker: string } | null = null;
     for (const o of relevant) {
       const price = side === "home" ? o.home_price
