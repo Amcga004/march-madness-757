@@ -396,6 +396,18 @@ export default function BettingSlateClient({
 
           {/* Rows */}
           {bySport[sportKey].map(game => {
+            if (game.awayTeam?.includes("Orlando") || game.homeTeam?.includes("Orlando") ||
+                game.awayTeam?.includes("Detroit") || game.homeTeam?.includes("Detroit")) {
+              console.log("[ORL/DET debug]", {
+                awayTeam: game.awayTeam,
+                homeTeam: game.homeTeam,
+                isLive: game.isLive,
+                isFinal: game.isFinal,
+                statusDetail: game.statusDetail,
+                signalsCount: game.signals?.length ?? 0,
+                signals: game.signals,
+              });
+            }
             const expanded = expandedGame === game.id;
             const bestAway = getBest(game, "away");
             const bestHome = getBest(game, "home");
