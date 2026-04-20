@@ -58,8 +58,8 @@ export async function getDraftRoomData(leagueId: string): Promise<DraftRoomData>
 
   if (league?.event_id) {
     const { data: eventData } = await supabase
-      .from('events')
-      .select('id, name, season')
+      .from('platform_events')
+      .select('id, name, starts_at')
       .eq('id', league.event_id)
       .maybeSingle()
 
@@ -67,7 +67,7 @@ export async function getDraftRoomData(leagueId: string): Promise<DraftRoomData>
       ? {
           id: eventData.id,
           name: eventData.name,
-          season: eventData.season ?? null,
+          season: eventData.starts_at ? new Date(eventData.starts_at).getFullYear() : null,
           sport: null,
         }
       : null
