@@ -1,5 +1,48 @@
 import { createClient } from '@/lib/supabase/server'
 
+type ScoringConfig = {
+  round_multiplier: number
+  cut_bonus: number
+  cut_penalty: number
+  finish_bonuses: number[]
+  bogey_free_bonus: number
+  best_round_bonus: number
+  eagle_bonus: number
+  hole_in_one_bonus: number
+  birdie_streak_bonus: number
+  birdie_streak_min: number
+}
+
+const DEFAULT_SCORING_CONFIG: ScoringConfig = {
+  round_multiplier: 1,
+  cut_bonus: 2,
+  cut_penalty: -2,
+  finish_bonuses: [5, 4, 3, 2, 1],
+  bogey_free_bonus: 1,
+  best_round_bonus: 1,
+  eagle_bonus: 0,
+  hole_in_one_bonus: 5,
+  birdie_streak_bonus: 1,
+  birdie_streak_min: 3,
+}
+
+function parseScoringConfig(raw: unknown): ScoringConfig {
+  if (!raw || typeof raw !== 'object') return DEFAULT_SCORING_CONFIG
+  const r = raw as Record<string, unknown>
+  return {
+    round_multiplier: typeof r.round_multiplier === 'number' ? r.round_multiplier : DEFAULT_SCORING_CONFIG.round_multiplier,
+    cut_bonus: typeof r.cut_bonus === 'number' ? r.cut_bonus : DEFAULT_SCORING_CONFIG.cut_bonus,
+    cut_penalty: typeof r.cut_penalty === 'number' ? r.cut_penalty : DEFAULT_SCORING_CONFIG.cut_penalty,
+    finish_bonuses: Array.isArray(r.finish_bonuses) ? (r.finish_bonuses as number[]) : DEFAULT_SCORING_CONFIG.finish_bonuses,
+    bogey_free_bonus: typeof r.bogey_free_bonus === 'number' ? r.bogey_free_bonus : DEFAULT_SCORING_CONFIG.bogey_free_bonus,
+    best_round_bonus: typeof r.best_round_bonus === 'number' ? r.best_round_bonus : DEFAULT_SCORING_CONFIG.best_round_bonus,
+    eagle_bonus: typeof r.eagle_bonus === 'number' ? r.eagle_bonus : DEFAULT_SCORING_CONFIG.eagle_bonus,
+    hole_in_one_bonus: typeof r.hole_in_one_bonus === 'number' ? r.hole_in_one_bonus : DEFAULT_SCORING_CONFIG.hole_in_one_bonus,
+    birdie_streak_bonus: typeof r.birdie_streak_bonus === 'number' ? r.birdie_streak_bonus : DEFAULT_SCORING_CONFIG.birdie_streak_bonus,
+    birdie_streak_min: typeof r.birdie_streak_min === 'number' ? r.birdie_streak_min : DEFAULT_SCORING_CONFIG.birdie_streak_min,
+  }
+}
+
 type LiveStateRow = {
   competitor_id: string
   total_to_par: number | null
@@ -101,6 +144,7 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
   const supabase = await createClient()
 
   const [
+    { data: leagueRow },
     { data: eventRow, error: eventError },
     { data: draftBoardRaw, error: draftBoardError },
     { data: orderRows, error: orderError },
@@ -109,6 +153,7 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
     { data: eventResultsRows, error: eventResultsError },
     { data: liveScoreRows },
   ] = await Promise.all([
+    supabase.from('leagues_v2').select('scoring_config').eq('id', leagueId).maybeSingle(),
     supabase.from('platform_events').select('id, status').eq('id', eventId).maybeSingle(),
 
     supabase
@@ -154,6 +199,7 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
   if (eventResultsError) throw new Error(`Unable to load event results: ${eventResultsError.message}`)
 
   const eventStatus = (eventRow as EventRow | null)?.status ?? null
+  const cfg = parseScoringConfig((leagueRow as { scoring_config?: unknown } | null)?.scoring_config)
 
   // Build lookup maps
   const liveMap = new Map<string, LiveStateRow>()
@@ -269,21 +315,22 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
     // Base round points + daily bonuses per finalized round
     const roundPointMap = new Map<number, number>()
     for (const round of finalizedRounds) {
-      let pts = roundFantasyPoints(round.score_to_par)
+      let pts = roundFantasyPoints(round.score_to_par) * cfg.round_multiplier
 
-      // Best round of the day bonus: +1 if this player's score matches the field's best
+      // Best round of the day bonus
       const dayBest = bestScorePerRound.get(round.round_number)
       if (
+        cfg.best_round_bonus !== 0 &&
         round.score_to_par != null &&
         dayBest !== undefined &&
         round.score_to_par === dayBest
       ) {
-        pts += 1
+        pts += cfg.best_round_bonus
       }
 
-      // Bogey-free bonus: +1 if no holes over par (data from golf_live_scores)
-      if (bogeyFreeSet.has(bogeyFreeKey(competitorId, round.round_number))) {
-        pts += 1
+      // Bogey-free bonus
+      if (cfg.bogey_free_bonus !== 0 && bogeyFreeSet.has(bogeyFreeKey(competitorId, round.round_number))) {
+        pts += cfg.bogey_free_bonus
       }
 
       roundPointMap.set(round.round_number, pts)
@@ -300,7 +347,7 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
       currentRound <= 4 &&
       !roundPointMap.has(currentRound)
     ) {
-      liveCurrentRoundPoints = roundFantasyPoints(live?.today_to_par ?? 0)
+      liveCurrentRoundPoints = roundFantasyPoints(live?.today_to_par ?? 0) * cfg.round_multiplier
     }
 
     const round1Points = roundPointMap.get(1) ?? 0
@@ -310,10 +357,21 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
 
     const appliedCutBonus =
       finalizedRoundCount >= 2 || eventResult?.made_cut != null
-        ? cutBonus(eventResult?.made_cut)
+        ? (eventResult?.made_cut === true ? cfg.cut_bonus : eventResult?.made_cut === false ? cfg.cut_penalty : 0)
         : 0
 
-    const appliedFinishBonus = finishBonus(eventResult?.position, eventStatus)
+    const appliedFinishBonus = (() => {
+      if ((eventStatus ?? '').toLowerCase() !== 'completed') return 0
+      const pos = eventResult?.position
+      if (pos == null) return 0
+      const tiers = cfg.finish_bonuses
+      if (pos === 1) return tiers[0] ?? 0
+      if (pos === 2) return tiers[1] ?? 0
+      if (pos >= 3 && pos <= 5) return tiers[2] ?? 0
+      if (pos >= 6 && pos <= 10) return tiers[3] ?? 0
+      if (pos >= 11 && pos <= 20) return tiers[4] ?? 0
+      return 0
+    })()
 
     const totalFantasyPoints =
       round1Points +

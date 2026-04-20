@@ -34,8 +34,8 @@ const items = [
   },
   {
     key: 'rules',
-    label: 'Rules',
-    shortLabel: 'Rules',
+    label: 'Settings',
+    shortLabel: 'Settings',
     getHref: (leagueId: string) => `/masters/${leagueId}/rules`,
   },
 ]

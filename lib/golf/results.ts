@@ -3,7 +3,7 @@ import type { ProviderPlayerRow } from './providers/types'
 
 type EventRow = {
   id: string
-  course_par: number | null
+  course_par?: number | null
   status: string | null
 }
 
@@ -54,8 +54,8 @@ export async function upsertRoundAndEventResults(params: {
   const supabase = await createClient()
 
   const { data: eventRow, error: eventError } = await supabase
-    .from('events')
-    .select('id, course_par, status')
+    .from('platform_events')
+    .select('id, status')
     .eq('id', eventId)
     .maybeSingle()
 

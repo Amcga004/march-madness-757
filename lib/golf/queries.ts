@@ -59,9 +59,16 @@ export type EventHubData = {
     name: string
     event_id: string | null
     roster_size: number | null
+    max_members: number | null
     draft_status: string | null
     created_by: string | null
   } | null
+  platformEvent: {
+    id: string
+    name: string
+    starts_at: string | null
+  } | null
+  memberCount: number
   livePlayers: LeaderboardRow[]
   fantasyStandings: FantasyStandingRow[]
   topContributors: {
@@ -189,13 +196,19 @@ export async function getEventHubData(leagueId: string): Promise<EventHubData> {
 
   const { data: league } = await supabase
     .from('leagues_v2')
-    .select('id, name, event_id, roster_size, draft_status, created_by')
+    .select('id, name, event_id, roster_size, max_members, draft_status, created_by')
     .eq('id', leagueId)
     .maybeSingle()
 
   if (!league?.event_id) {
+    const { count: memberCount } = await supabase
+      .from('league_draft_order_v2')
+      .select('*', { count: 'exact', head: true })
+      .eq('league_id', leagueId)
     return {
       league: league ?? null,
+      platformEvent: null,
+      memberCount: memberCount ?? 0,
       livePlayers: [],
       fantasyStandings: [],
       topContributors: [],
@@ -210,11 +223,22 @@ export async function getEventHubData(leagueId: string): Promise<EventHubData> {
   }
 
   const [
+    { data: platformEvent },
+    { count: memberCount },
     { data: competitors },
     { data: liveRows },
     { data: fantasyStandings },
     { data: playerFantasyRows },
   ] = await Promise.all([
+    supabase
+      .from('platform_events')
+      .select('id, name, starts_at')
+      .eq('id', league.event_id)
+      .maybeSingle(),
+    supabase
+      .from('league_draft_order_v2')
+      .select('*', { count: 'exact', head: true })
+      .eq('league_id', leagueId),
     supabase.from('competitors').select('id, name').order('name', { ascending: true }),
     supabase
       .from('golf_live_player_state')
@@ -262,6 +286,8 @@ export async function getEventHubData(leagueId: string): Promise<EventHubData> {
 
   return {
     league,
+    platformEvent: platformEvent ?? null,
+    memberCount: memberCount ?? 0,
     livePlayers,
     fantasyStandings: standings,
     topContributors,
