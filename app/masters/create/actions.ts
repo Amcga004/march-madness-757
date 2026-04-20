@@ -4,83 +4,78 @@ import { redirect } from "next/navigation";
 import { getUser } from "@/lib/auth/authHelpers";
 import { createServiceClient } from "@/lib/supabase/service";
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 export async function createLeague(formData: {
-  platformEventId: string; // platform_events.id (used for display/ingest system)
+  platformEventId: string;
   name: string;
   maxManagers: number;
   rosterSize: number;
 }): Promise<{ error: string } | never> {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  try {
+    const user = await getUser();
+    if (!user) redirect("/login");
 
-  if (!formData.name.trim()) return { error: "League name is required" };
-  if (!formData.platformEventId) return { error: "Please select a tournament" };
+    if (!formData.name.trim()) return { error: "League name is required" };
+    if (!formData.platformEventId) return { error: "Please select a tournament" };
 
-  const supabase = createServiceClient();
+    const supabase = createServiceClient();
 
-  // Fetch the platform_event so we have name/season for the events table lookup
-  const { data: platformEvent } = await supabase
-    .from("platform_events")
-    .select("id, name, starts_at, metadata")
-    .eq("id", formData.platformEventId)
-    .maybeSingle();
+    // Verify the tournament exists
+    const { data: platformEvent, error: eventFetchError } = await withTimeout(
+      supabase
+        .from("platform_events")
+        .select("id, name")
+        .eq("id", formData.platformEventId)
+        .maybeSingle(),
+      5000
+    );
 
-  if (!platformEvent) return { error: "Tournament not found" };
-
-  const season = platformEvent.starts_at
-    ? String(new Date(platformEvent.starts_at).getFullYear())
-    : "2026";
-
-  // Resolve leagues_v2.event_id → must point to the `events` table (FK constraint).
-  // The `events` table is the golf draft system's event store; platform_events is the
-  // ingest system. They are separate. Find or create a stub in events.
-  let eventsTableId: string | null = null;
-
-  const { data: existingEvent } = await supabase
-    .from("events")
-    .select("id")
-    .ilike("name", platformEvent.name)
-    .maybeSingle();
-
-  if (existingEvent) {
-    eventsTableId = existingEvent.id;
-  } else {
-    // Insert a minimal stub so the FK is satisfied. The draft room will show this
-    // event's name correctly. course_par and detailed fields can be filled later.
-    const { data: newEvent, error: eventInsertError } = await supabase
-      .from("events")
-      .insert({
-        name: platformEvent.name,
-        season: Number(season),
-        status: "scheduled",
-      })
-      .select("id")
-      .maybeSingle();
-
-    if (eventInsertError || !newEvent) {
-      return { error: `Could not register tournament: ${eventInsertError?.message ?? "unknown error"}` };
+    if (eventFetchError) {
+      console.error("[createLeague] platform_events fetch error:", eventFetchError);
+      return { error: `Could not load tournament: ${eventFetchError.message}` };
     }
-    eventsTableId = newEvent.id;
+    if (!platformEvent) return { error: "Tournament not found" };
+
+    // FK constraint on leagues_v2.event_id has been dropped — store platform_events.id directly.
+    const { data: league, error: insertError } = await withTimeout(
+      supabase
+        .from("leagues_v2")
+        .insert({
+          event_id: formData.platformEventId,
+          name: formData.name.trim(),
+          roster_size: formData.rosterSize,
+          max_members: formData.maxManagers,
+          draft_status: "predraft",
+          created_by: user.id,
+          metadata: { platform_event_id: formData.platformEventId },
+        })
+        .select("id")
+        .maybeSingle(),
+      5000
+    );
+
+    if (insertError) {
+      console.error("[createLeague] leagues_v2 insert error:", insertError);
+      return { error: insertError.message };
+    }
+    if (!league) {
+      console.error("[createLeague] insert returned no row");
+      return { error: "League was not created — no row returned" };
+    }
+
+    redirect(`/masters/${league.id}/hub`);
+  } catch (err) {
+    // redirect() throws internally — let it propagate
+    if (err instanceof Error && err.message === "NEXT_REDIRECT") throw err;
+    console.error("[createLeague] unexpected error:", err);
+    return { error: err instanceof Error ? err.message : "Unexpected error" };
   }
-
-  const { data: league, error } = await supabase
-    .from("leagues_v2")
-    .insert({
-      event_id: eventsTableId,
-      name: formData.name.trim(),
-      roster_size: formData.rosterSize,
-      max_members: formData.maxManagers,
-      draft_status: "predraft",
-      created_by: user.id,
-      // Store platform_events.id in metadata so scoring/ingest pipelines can link back
-      metadata: { platform_event_id: formData.platformEventId },
-    })
-    .select("id")
-    .maybeSingle();
-
-  if (error || !league) {
-    return { error: error?.message ?? "Failed to create league" };
-  }
-
-  redirect(`/masters/${league.id}/hub`);
 }

@@ -204,12 +204,9 @@ export default function CreateLeagueWizard({ tournaments }: Props) {
               <p className="mt-0.5 text-sm font-semibold text-[#162317]">
                 {rosterSize} starters + 1 bench · {rounds}-round snake draft · {totalPicks} total picks
               </p>
-              <div className="mt-2 space-y-0.5 text-[11px] text-[#6f7a67]">
-                <p>Rounds: –1 pt per stroke over par, +1 per stroke under par (no cap)</p>
-                <p>Daily bonuses: +1 low round of day · +1 bogey-free round</p>
-                <p>Cut: made +2 · missed –2</p>
-                <p>Finish: 1st +5 · 2nd +4 · 3rd–5th +3 · 6th–10th +2 · 11th–20th +1</p>
-              </div>
+              <p className="mt-1.5 text-[11px] text-[#6f7a67]">
+                –1 pt/stroke under par · Cut: +2/–2 · Finish: 1st+5, 2nd+4, 3–5+3, 6–10+2, 11–20+1 · Bogey-free round +1 · Best round +1
+              </p>
             </div>
 
             <button
@@ -246,10 +243,7 @@ export default function CreateLeagueWizard({ tournaments }: Props) {
             <Row label="Managers" value={String(maxManagers)} />
             <Row label="Roster size" value={`${rosterSize} players`} />
             <Row label="Draft format" value={`${rosterSize}+1 bench · ${rounds}-round snake · ${totalPicks} picks`} />
-            <Row label="Round scoring" value="+1 per stroke under par, –1 over (no cap)" />
-            <Row label="Daily bonuses" value="+1 low round of day · +1 bogey-free" />
-            <Row label="Cut" value="Made +2 · Missed –2" />
-            <Row label="Finish bonus" value="1st +5 · 2nd +4 · 3–5 +3 · 6–10 +2 · 11–20 +1" />
+            <Row label="Scoring" value="–1 pt/stroke under par · Cut: +2/–2 · Finish: 1st+5, 2nd+4, 3–5+3, 6–10+2, 11–20+1 · Bogey-free +1 · Best round +1" />
           </div>
 
           {error && (
