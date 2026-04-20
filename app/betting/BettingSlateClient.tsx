@@ -316,7 +316,16 @@ export default function BettingSlateClient({
         <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
           {navLink("/betting", "Betting", true)}
           {navLink("/fantasy", "Fantasy", false)}
-          {currentUser && navLink("/my-bets", "My Bets", false)}
+          {currentUser && (
+            <button onClick={() => setActiveTab(t => t === "picks" ? "slate" : "picks")} style={{
+              fontSize: "13px",
+              color: activeTab === "picks" ? "#EA6C0A" : "var(--color-text-secondary)",
+              fontWeight: activeTab === "picks" ? 500 : 400,
+              background: "transparent", border: "none", cursor: "pointer", padding: 0,
+            }}>
+              My Picks
+            </button>
+          )}
           {isRefreshing ? (
             <span style={{ fontSize: "11px", color: "#4B5563" }}>updating...</span>
           ) : lastUpdated ? (
