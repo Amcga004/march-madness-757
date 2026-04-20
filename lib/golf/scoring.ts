@@ -27,6 +27,15 @@ type EventRow = {
   status: string | null
 }
 
+type LiveScoreRow = {
+  canonical_player_id: string
+  round_number: number
+  is_bogey_free: boolean | null
+  is_best_round_of_day: boolean | null
+}
+
+// ─── Scoring helpers ──────────────────────────────────────────────────────────
+
 function normalizeThruValue(value: string | number | null | undefined): string | null {
   if (value == null) return null
   if (typeof value === 'number') return String(value)
@@ -40,7 +49,6 @@ function isFinished(
 ): boolean {
   const normalizedStatus = status?.toLowerCase() ?? ''
   const normalizedThru = normalizeThruValue(thru)?.toLowerCase() ?? ''
-
   return (
     normalizedStatus.includes('final') ||
     normalizedStatus.includes('finished') ||
@@ -49,8 +57,7 @@ function isFinished(
 }
 
 function isThrough(thru: string | number | null | undefined): boolean {
-  const normalizedThru = normalizeThruValue(thru)
-  return !!normalizedThru
+  return !!normalizeThruValue(thru)
 }
 
 function deriveCutStatus(madeCut: boolean | null | undefined): string | null {
@@ -59,28 +66,36 @@ function deriveCutStatus(madeCut: boolean | null | undefined): string | null {
   return null
 }
 
+// Round points: invert score_to_par, no floor or cap.
+// -4 (under par) → +4, 0 → 0, +2 (over par) → -2
 function roundFantasyPoints(scoreToPar: number | null | undefined): number {
   if (scoreToPar == null) return 0
-  const pts = -1 * scoreToPar
-  return pts < -5 ? -5 : pts
+  return -1 * scoreToPar
 }
 
-function finishBonus(position: number | null | undefined, eventStatus: string | null | undefined) {
+// Cut bonus: +2 made, -2 missed (applied once after R2 is known)
+function cutBonus(madeCut: boolean | null | undefined): number {
+  if (madeCut === true) return 2
+  if (madeCut === false) return -2
+  return 0
+}
+
+// Finish bonus: applied only when event status = 'completed'
+function finishBonus(
+  position: number | null | undefined,
+  eventStatus: string | null | undefined
+): number {
   if ((eventStatus ?? '').toLowerCase() !== 'completed') return 0
   if (position == null) return 0
-  if (position === 1) return 20
-  if (position === 2) return 15
-  if (position >= 3 && position <= 5) return 10
-  if (position >= 6 && position <= 10) return 5
-  if (position >= 11 && position <= 20) return 3
+  if (position === 1) return 5
+  if (position === 2) return 4
+  if (position >= 3 && position <= 5) return 3
+  if (position >= 6 && position <= 10) return 2
+  if (position >= 11 && position <= 20) return 1
   return 0
 }
 
-function cutBonus(madeCut: boolean | null | undefined) {
-  if (madeCut === true) return 2
-  if (madeCut === false) return -3
-  return 0
-}
+// ─── Main scoring function ────────────────────────────────────────────────────
 
 export async function refreshLiveManagerScores(leagueId: string, eventId: string) {
   const supabase = await createClient()
@@ -92,8 +107,9 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
     { data: liveRows, error: liveRowsError },
     { data: roundRows, error: roundRowsError },
     { data: eventResultsRows, error: eventResultsError },
+    { data: liveScoreRows },
   ] = await Promise.all([
-    supabase.from('events').select('id, status').eq('id', eventId).maybeSingle(),
+    supabase.from('platform_events').select('id, status').eq('id', eventId).maybeSingle(),
 
     supabase
       .from('drafted_board_v2')
@@ -120,6 +136,14 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
       .from('golf_event_results')
       .select('competitor_id, position, made_cut')
       .eq('event_id', eventId),
+
+    // Bogey-free and best-round flags written by the live scoring ingestor.
+    // canonical_player_id is assumed to match competitor_id (both from source_identity_map).
+    supabase
+      .from('golf_live_scores')
+      .select('canonical_player_id, round_number, is_bogey_free, is_best_round_of_day')
+      .eq('event_id', eventId)
+      .eq('is_round_complete', true),
   ])
 
   if (eventError) throw new Error(`Unable to load event: ${eventError.message}`)
@@ -127,12 +151,11 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
   if (orderError) throw new Error(`Unable to load draft order: ${orderError.message}`)
   if (liveRowsError) throw new Error(`Unable to load live rows: ${liveRowsError.message}`)
   if (roundRowsError) throw new Error(`Unable to load round rows: ${roundRowsError.message}`)
-  if (eventResultsError) {
-    throw new Error(`Unable to load event results: ${eventResultsError.message}`)
-  }
+  if (eventResultsError) throw new Error(`Unable to load event results: ${eventResultsError.message}`)
 
   const eventStatus = (eventRow as EventRow | null)?.status ?? null
 
+  // Build lookup maps
   const liveMap = new Map<string, LiveStateRow>()
   for (const row of (liveRows ?? []) as LiveStateRow[]) {
     liveMap.set(row.competitor_id, row)
@@ -143,6 +166,7 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
     eventResultMap.set(row.competitor_id, row)
   }
 
+  // All finalized round results (all players in field, not just drafted)
   const finalizedRoundsMap = new Map<string, RoundResultRow[]>()
   for (const row of (roundRows ?? []) as RoundResultRow[]) {
     if (!row.is_final) continue
@@ -151,6 +175,30 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
     finalizedRoundsMap.set(row.competitor_id, existing)
   }
 
+  // Best round of the day: minimum score_to_par per round across all field players.
+  // Computed from golf_round_results (all finalized rounds, all players).
+  const bestScorePerRound = new Map<number, number>()
+  for (const rows of finalizedRoundsMap.values()) {
+    for (const row of rows) {
+      if (row.score_to_par == null) continue
+      const current = bestScorePerRound.get(row.round_number)
+      if (current === undefined || row.score_to_par < current) {
+        bestScorePerRound.set(row.round_number, row.score_to_par)
+      }
+    }
+  }
+
+  // Bogey-free flags from golf_live_scores (keyed by canonical_player_id, round_number).
+  // Key format: `${competitorId}:${roundNumber}`
+  const bogeyFreeKey = (playerId: string, round: number) => `${playerId}:${round}`
+  const bogeyFreeSet = new Set<string>()
+  for (const row of (liveScoreRows ?? []) as LiveScoreRow[]) {
+    if (row.is_bogey_free) {
+      bogeyFreeSet.add(bogeyFreeKey(row.canonical_player_id, row.round_number))
+    }
+  }
+
+  // Manager structures
   const managerMap = new Map<
     string,
     {
@@ -170,7 +218,6 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
       user_id: row.user_id,
       display_name: row.display_name,
     })
-
     managerMap.set(row.user_id, {
       league_id: leagueId,
       member_id: row.user_id,
@@ -219,11 +266,30 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
       (a, b) => a.round_number - b.round_number
     )
 
+    // Base round points + daily bonuses per finalized round
     const roundPointMap = new Map<number, number>()
     for (const round of finalizedRounds) {
-      roundPointMap.set(round.round_number, roundFantasyPoints(round.score_to_par))
+      let pts = roundFantasyPoints(round.score_to_par)
+
+      // Best round of the day bonus: +1 if this player's score matches the field's best
+      const dayBest = bestScorePerRound.get(round.round_number)
+      if (
+        round.score_to_par != null &&
+        dayBest !== undefined &&
+        round.score_to_par === dayBest
+      ) {
+        pts += 1
+      }
+
+      // Bogey-free bonus: +1 if no holes over par (data from golf_live_scores)
+      if (bogeyFreeSet.has(bogeyFreeKey(competitorId, round.round_number))) {
+        pts += 1
+      }
+
+      roundPointMap.set(round.round_number, pts)
     }
 
+    // Live (in-progress) round points: base only, no daily bonuses until finalized
     const currentRound = live?.current_round ?? null
     const finalizedRoundCount = finalizedRounds.length
 
@@ -243,7 +309,9 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
     const round4Points = roundPointMap.get(4) ?? 0
 
     const appliedCutBonus =
-      finalizedRoundCount >= 2 || eventResult?.made_cut != null ? cutBonus(eventResult?.made_cut) : 0
+      finalizedRoundCount >= 2 || eventResult?.made_cut != null
+        ? cutBonus(eventResult?.made_cut)
+        : 0
 
     const appliedFinishBonus = finishBonus(eventResult?.position, eventStatus)
 
@@ -290,7 +358,6 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
     if (isThrough(live?.thru)) {
       manager.golfers_thru += 1
     }
-
     if (isFinished(live?.status, live?.thru)) {
       manager.golfers_finished += 1
     }
@@ -301,6 +368,7 @@ export async function refreshLiveManagerScores(leagueId: string, eventId: string
     updated_at: new Date().toISOString(),
   }))
 
+  // Replace scores atomically: delete then insert
   const { error: deletePlayerError } = await supabase
     .from('golf_live_player_fantasy_scores')
     .delete()

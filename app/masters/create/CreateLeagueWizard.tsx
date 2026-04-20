@@ -38,14 +38,14 @@ export default function CreateLeagueWizard({ tournaments }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const totalPicks = maxManagers * rosterSize;
-  const rounds = rosterSize;
+  const rounds = rosterSize + 1; // +1 bench round
+  const totalPicks = maxManagers * rounds;
 
   function handleSubmit() {
     setError(null);
     startTransition(async () => {
       const result = await createLeague({
-        eventId: selectedEvent!.id,
+        platformEventId: selectedEvent!.id,
         name: leagueName,
         maxManagers,
         rosterSize,
@@ -202,11 +202,14 @@ export default function CreateLeagueWizard({ tournaments }: Props) {
             <div className="rounded-xl border border-[#d9ddcf] bg-[#f6f4ed] px-4 py-3">
               <p className="text-xs font-semibold text-[#6f7a67]">Draft format</p>
               <p className="mt-0.5 text-sm font-semibold text-[#162317]">
-                {rounds}-round snake draft · {totalPicks} total picks
+                {rosterSize} starters + 1 bench · {rounds}-round snake draft · {totalPicks} total picks
               </p>
-              <p className="mt-2 text-[11px] text-[#6f7a67]">
-                Scoring: –1 pt/stroke under par per round · +2 cut bonus · Finish: 20/15/10/5/3
-              </p>
+              <div className="mt-2 space-y-0.5 text-[11px] text-[#6f7a67]">
+                <p>Rounds: –1 pt per stroke over par, +1 per stroke under par (no cap)</p>
+                <p>Daily bonuses: +1 low round of day · +1 bogey-free round</p>
+                <p>Cut: made +2 · missed –2</p>
+                <p>Finish: 1st +5 · 2nd +4 · 3rd–5th +3 · 6th–10th +2 · 11th–20th +1</p>
+              </div>
             </div>
 
             <button
@@ -242,11 +245,11 @@ export default function CreateLeagueWizard({ tournaments }: Props) {
             <Row label="League name" value={leagueName} />
             <Row label="Managers" value={String(maxManagers)} />
             <Row label="Roster size" value={`${rosterSize} players`} />
-            <Row label="Draft format" value={`${rounds}-round snake · ${totalPicks} picks`} />
-            <Row
-              label="Scoring"
-              value="–1 pt/stroke under par · +2 cut · 20/15/10/5/3 finish"
-            />
+            <Row label="Draft format" value={`${rosterSize}+1 bench · ${rounds}-round snake · ${totalPicks} picks`} />
+            <Row label="Round scoring" value="+1 per stroke under par, –1 over (no cap)" />
+            <Row label="Daily bonuses" value="+1 low round of day · +1 bogey-free" />
+            <Row label="Cut" value="Made +2 · Missed –2" />
+            <Row label="Finish bonus" value="1st +5 · 2nd +4 · 3–5 +3 · 6–10 +2 · 11–20 +1" />
           </div>
 
           {error && (
