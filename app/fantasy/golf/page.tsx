@@ -5,6 +5,22 @@ import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
+const LIVE_WINDOW_DAYS = 7;
+
+function getTrueStatus(event: { status: string; starts_at: string | null }): "live" | "upcoming" | "completed" {
+  if (event.status === "scheduled") return "upcoming";
+  if (event.status === "active") {
+    if (!event.starts_at) return "live";
+    const startsAt = new Date(event.starts_at);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const daysAgo = (today.getTime() - startsAt.getTime()) / msPerDay;
+    return daysAgo <= LIVE_WINDOW_DAYS ? "live" : "completed";
+  }
+  return "completed";
+}
+
 function formatDate(dateStr: string) {
   try {
     return new Date(dateStr).toLocaleDateString("en-US", {
@@ -18,7 +34,7 @@ function formatDate(dateStr: string) {
   }
 }
 
-function StatusBadge({ status }: { status: string | null }) {
+function LeagueBadge({ status }: { status: string | null }) {
   const s = status ?? "unknown";
   const styles: Record<string, string> = {
     live: "bg-[#0B5D3B]/10 text-[#0B5D3B] border border-[#0B5D3B]/20",
@@ -28,7 +44,7 @@ function StatusBadge({ status }: { status: string | null }) {
   };
   const label: Record<string, string> = {
     live: "Live",
-    completed: "Complete",
+    completed: "Season Ended",
     draft: "Drafting",
     predraft: "Pre-Draft",
   };
@@ -46,7 +62,7 @@ export default async function FantasyGolfPage() {
 
   const supabase = createServiceClient();
 
-  const [{ data: leagues }, { data: tournaments }] = await Promise.all([
+  const [{ data: leagues }, { data: rawTournaments }] = await Promise.all([
     supabase
       .from("leagues_v2")
       .select("id, name, draft_status, created_at")
@@ -60,8 +76,14 @@ export default async function FantasyGolfPage() {
       .order("starts_at", { ascending: true }),
   ]);
 
-  const activeTournaments = (tournaments ?? []).filter((e) => e.status === "active");
-  const scheduledTournaments = (tournaments ?? []).filter((e) => e.status === "scheduled");
+  const tournaments = (rawTournaments ?? []).map((e) => ({
+    ...e,
+    trueStatus: getTrueStatus(e),
+  }));
+
+  const liveTournaments = tournaments.filter((e) => e.trueStatus === "live");
+  const upcomingTournaments = tournaments.filter((e) => e.trueStatus === "upcoming");
+  const completedTournaments = tournaments.filter((e) => e.trueStatus === "completed");
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 md:py-14">
@@ -109,7 +131,7 @@ export default async function FantasyGolfPage() {
                 href={`/masters/${league.id}/hub`}
                 className="flex items-center gap-4 rounded-xl border border-[#d9ddcf] bg-white px-5 py-4 transition-colors hover:border-[#0B5D3B]/30 hover:bg-[#f6f4ed]"
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0B5D3B]/8 text-lg">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0B5D3B]/10 text-lg">
                   ⛳
                 </div>
                 <div className="flex-1 min-w-0">
@@ -119,7 +141,7 @@ export default async function FantasyGolfPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <StatusBadge status={league.draft_status} />
+                  <LeagueBadge status={league.draft_status} />
                   <svg
                     className="h-4 w-4 text-[#6f7a67]"
                     fill="none"
@@ -136,34 +158,42 @@ export default async function FantasyGolfPage() {
         )}
       </section>
 
-      {/* Current Tournament */}
-      {activeTournaments.length > 0 && (
+      {/* Live / Current Tournament */}
+      {liveTournaments.length > 0 && (
         <section className="mb-10">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-[#6f7a67]">
             Current Tournament
           </h2>
           <div className="flex flex-col gap-2">
-            {activeTournaments.map((event) => (
+            {liveTournaments.map((event) => (
               <div
                 key={event.id}
-                className="flex items-center gap-4 rounded-xl border border-[#0B5D3B]/25 bg-white px-5 py-4"
+                className="rounded-xl border border-[#0B5D3B]/25 bg-white px-5 py-4"
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0B5D3B]/10 text-lg">
-                  🏆
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-[#162317] truncate">{event.name}</p>
-                  <p className="text-xs text-[#6f7a67]">
-                    {event.starts_at ? formatDate(event.starts_at) : "Date TBD"}
-                  </p>
-                </div>
-                <span className="flex items-center gap-1.5 text-xs font-semibold text-[#0B5D3B]">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#0B5D3B] opacity-60" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[#0B5D3B]" />
+                <div className="flex items-center gap-4">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0B5D3B]/10 text-lg">
+                    🏆
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-[#162317] truncate">{event.name}</p>
+                    <p className="text-xs text-[#6f7a67]">
+                      {event.starts_at ? formatDate(event.starts_at) : "Date TBD"}
+                    </p>
+                  </div>
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-[#0B5D3B]">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#0B5D3B] opacity-60" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-[#0B5D3B]" />
+                    </span>
+                    Live
                   </span>
-                  Live
-                </span>
+                </div>
+                <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-[#6f7a67]">
+                  <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  Registration closed — league entries locked at tee time Thursday
+                </p>
               </div>
             ))}
           </div>
@@ -171,18 +201,18 @@ export default async function FantasyGolfPage() {
       )}
 
       {/* Upcoming Tournaments */}
-      <section>
+      <section className="mb-10">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-[#6f7a67]">
           Upcoming Tournaments
         </h2>
 
-        {scheduledTournaments.length === 0 ? (
+        {upcomingTournaments.length === 0 ? (
           <div className="rounded-xl border border-[#d9ddcf] bg-white px-5 py-8 text-center">
             <p className="text-sm text-[#6f7a67]">No upcoming tournaments found.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {scheduledTournaments.map((event) => (
+            {upcomingTournaments.map((event) => (
               <div
                 key={event.id}
                 className="flex items-center gap-4 rounded-xl border border-[#d9ddcf] bg-white px-5 py-4"
@@ -196,12 +226,51 @@ export default async function FantasyGolfPage() {
                     {event.starts_at ? formatDate(event.starts_at) : "Date TBD"}
                   </p>
                 </div>
-                <span className="text-xs text-[#6f7a67]">Upcoming</span>
+                <span className="text-xs font-medium text-[#C9A84C]">Registration open</span>
               </div>
             ))}
           </div>
         )}
       </section>
+
+      {/* Completed Tournaments — collapsible */}
+      {completedTournaments.length > 0 && (
+        <section>
+          <details className="group">
+            <summary className="mb-3 flex cursor-pointer list-none items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[#6f7a67] hover:text-[#162317]">
+              <svg
+                className="h-3 w-3 transition-transform group-open:rotate-90"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              Past Tournaments ({completedTournaments.length})
+            </summary>
+            <div className="flex flex-col gap-2">
+              {completedTournaments.map((event) => (
+                <div
+                  key={event.id}
+                  className="flex items-center gap-4 rounded-xl border border-[#d9ddcf] bg-white px-5 py-4 opacity-60"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#d9ddcf]/40 text-lg">
+                    🏆
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-[#162317] truncate">{event.name}</p>
+                    <p className="text-xs text-[#6f7a67]">
+                      {event.starts_at ? formatDate(event.starts_at) : "Date TBD"}
+                    </p>
+                  </div>
+                  <span className="text-xs text-[#6f7a67]">Completed</span>
+                </div>
+              ))}
+            </div>
+          </details>
+        </section>
+      )}
     </main>
   );
 }
