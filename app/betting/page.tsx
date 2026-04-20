@@ -35,10 +35,11 @@ export default async function BettingPage({
     } catch { return []; }
   }
 
-  const [nbaEvents, mlbEvents2, ncaabEvents] = await Promise.all([
+  const [nbaEvents, mlbEvents2, ncaabEvents, nhlEvents] = await Promise.all([
     sport === "all" || sport === "nba" ? fetchEspnScoreboard("basketball/nba") : Promise.resolve([]),
     sport === "all" || sport === "mlb" ? fetchEspnScoreboard("baseball/mlb") : Promise.resolve([]),
     sport === "all" || sport === "ncaab" ? fetchEspnScoreboard("basketball/mens-college-basketball") : Promise.resolve([]),
+    sport === "all" || sport === "nhl" ? fetchEspnScoreboard("hockey/nhl") : Promise.resolve([]),
   ]);
 
   // Normalize ESPN events into a consistent game format
@@ -76,6 +77,7 @@ export default async function BettingPage({
   const allEspnGames = [
     ...nbaEvents.map((e: any) => normalizeEspnGame(e, "nba")),
     ...mlbEvents2.map((e: any) => normalizeEspnGame(e, "mlb")),
+    ...nhlEvents.map((e: any) => normalizeEspnGame(e, "nhl")),
     ...ncaabEvents.map((e: any) => normalizeEspnGame(e, "ncaab")),
   ].filter(Boolean);
 

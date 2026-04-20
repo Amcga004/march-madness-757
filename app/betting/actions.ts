@@ -18,10 +18,11 @@ export async function fetchSlateData(date: string, sport: string, userId: string
     } catch { return []; }
   }
 
-  const [nbaEvents, mlbEventsRaw, ncaabEvents] = await Promise.all([
+  const [nbaEvents, mlbEventsRaw, ncaabEvents, nhlEvents] = await Promise.all([
     sport === "all" || sport === "nba" ? fetchEspn("basketball/nba") : Promise.resolve([]),
     sport === "all" || sport === "mlb" ? fetchEspn("baseball/mlb") : Promise.resolve([]),
     sport === "all" || sport === "ncaab" ? fetchEspn("basketball/mens-college-basketball") : Promise.resolve([]),
+    sport === "all" || sport === "nhl" ? fetchEspn("hockey/nhl") : Promise.resolve([]),
   ]);
 
   function normalizeGame(event: any, sportKey: string) {
@@ -58,6 +59,7 @@ export async function fetchSlateData(date: string, sport: string, userId: string
   const allGames = [
     ...nbaEvents.map((e: any) => normalizeGame(e, "nba")),
     ...mlbEventsRaw.map((e: any) => normalizeGame(e, "mlb")),
+    ...nhlEvents.map((e: any) => normalizeGame(e, "nhl")),
     ...ncaabEvents.map((e: any) => normalizeGame(e, "ncaab")),
   ].filter(Boolean);
 

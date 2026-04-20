@@ -7,6 +7,7 @@ const SPORT_MAP = {
   nba: "basketball_nba",
   mlb: "baseball_mlb",
   ncaab: "basketball_ncaab",
+  nhl: "icehockey_nhl",
 } as const;
 
 const BOOKMAKERS = "draftkings,fanduel,betmgm,caesars,williamhill_us,pointsbetus,betrivers";

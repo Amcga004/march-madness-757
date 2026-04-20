@@ -18,6 +18,7 @@ import { fetchSlateData, fetchGolfLeaderboard, savePick, fetchMyPicks } from "./
 const SPORT_LABELS: Record<string, string> = {
   nba: "NBA",
   mlb: "MLB",
+  nhl: "NHL",
   ncaab: "CBB",
   pga: "Golf",
 };
@@ -344,6 +345,7 @@ export default function BettingSlateClient({
       <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "14px", flexWrap: "wrap", background: "#0D1117" }}>
         {pill("All", activeSport === "all", () => setActiveSport("all"))}
         {pill("NBA", activeSport === "nba", () => setActiveSport("nba"))}
+        {pill("NHL", activeSport === "nhl", () => setActiveSport("nhl"))}
         {pill("MLB", activeSport === "mlb", () => setActiveSport("mlb"))}
         {pill("CBB", activeSport === "ncaab", () => setActiveSport("ncaab"))}
         <div style={{ width: "1px", height: "16px", background: "var(--color-border-tertiary)", margin: "0 2px" }} />
