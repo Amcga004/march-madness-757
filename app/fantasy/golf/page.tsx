@@ -56,8 +56,12 @@ export default async function FantasyGolfPage() {
       .from("platform_events")
       .select("id, name, starts_at, status, metadata")
       .in("sport_key", ["pga", "golf"])
+      .in("status", ["active", "scheduled"])
       .order("starts_at", { ascending: true }),
   ]);
+
+  const activeTournaments = (tournaments ?? []).filter((e) => e.status === "active");
+  const scheduledTournaments = (tournaments ?? []).filter((e) => e.status === "scheduled");
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 md:py-14">
@@ -132,40 +136,69 @@ export default async function FantasyGolfPage() {
         )}
       </section>
 
-      {/* Available Tournaments */}
+      {/* Current Tournament */}
+      {activeTournaments.length > 0 && (
+        <section className="mb-10">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-[#6f7a67]">
+            Current Tournament
+          </h2>
+          <div className="flex flex-col gap-2">
+            {activeTournaments.map((event) => (
+              <div
+                key={event.id}
+                className="flex items-center gap-4 rounded-xl border border-[#0B5D3B]/25 bg-white px-5 py-4"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0B5D3B]/10 text-lg">
+                  🏆
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-[#162317] truncate">{event.name}</p>
+                  <p className="text-xs text-[#6f7a67]">
+                    {event.starts_at ? formatDate(event.starts_at) : "Date TBD"}
+                  </p>
+                </div>
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-[#0B5D3B]">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#0B5D3B] opacity-60" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[#0B5D3B]" />
+                  </span>
+                  Live
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Upcoming Tournaments */}
       <section>
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-[#6f7a67]">
-          Available Tournaments
+          Upcoming Tournaments
         </h2>
 
-        {!tournaments || tournaments.length === 0 ? (
+        {scheduledTournaments.length === 0 ? (
           <div className="rounded-xl border border-[#d9ddcf] bg-white px-5 py-8 text-center">
             <p className="text-sm text-[#6f7a67]">No upcoming tournaments found.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {tournaments.map((event) => {
-              const isPast = event.starts_at && new Date(event.starts_at) < new Date();
-              return (
-                <div
-                  key={event.id}
-                  className={`flex items-center gap-4 rounded-xl border border-[#d9ddcf] bg-white px-5 py-4 ${isPast ? "opacity-50" : ""}`}
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#C9A84C]/10 text-lg">
-                    🏆
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-[#162317] truncate">{event.name}</p>
-                    <p className="text-xs text-[#6f7a67]">
-                      {event.starts_at ? formatDate(event.starts_at) : "Date TBD"}
-                    </p>
-                  </div>
-                  <span className="text-xs text-[#6f7a67]">
-                    {isPast ? "Completed" : "Upcoming"}
-                  </span>
+            {scheduledTournaments.map((event) => (
+              <div
+                key={event.id}
+                className="flex items-center gap-4 rounded-xl border border-[#d9ddcf] bg-white px-5 py-4"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#C9A84C]/10 text-lg">
+                  🏆
                 </div>
-              );
-            })}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-[#162317] truncate">{event.name}</p>
+                  <p className="text-xs text-[#6f7a67]">
+                    {event.starts_at ? formatDate(event.starts_at) : "Date TBD"}
+                  </p>
+                </div>
+                <span className="text-xs text-[#6f7a67]">Upcoming</span>
+              </div>
+            ))}
           </div>
         )}
       </section>
