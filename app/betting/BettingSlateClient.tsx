@@ -588,7 +588,7 @@ export default function BettingSlateClient({
                       }
                       const lineValue = bestOverRow?.line_value ?? bestUnderRow?.line_value ?? totalsPool[0]?.line_value ?? null;
                       return <>
-                        {lineValue != null && <span style={{ fontSize: "11px", color: "var(--color-text-secondary)", fontWeight: 500 }}>O/U {lineValue}</span>}
+                        {lineValue != null && <span style={{ fontSize: "13px", color: "#EA6C0A", fontWeight: 600 }}>O/U {lineValue}</span>}
                         <span style={{ fontSize: "12px" }}>
                           <strong>O {fmtOdds(bestOverRow?.over_price ?? null)}</strong>
                           {bestOverRow && <span style={{ color: "var(--color-text-secondary)", fontSize: "10px" }}> {BOOK_LABELS[bestOverRow.bookmaker] ?? bestOverRow.bookmaker}</span>}
