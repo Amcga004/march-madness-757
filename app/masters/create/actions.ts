@@ -4,15 +4,6 @@ import { redirect } from "next/navigation";
 import { getUser } from "@/lib/auth/authHelpers";
 import { createServiceClient } from "@/lib/supabase/service";
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms)
-    ),
-  ]);
-}
-
 export async function createLeague(formData: {
   platformEventId: string;
   name: string;
@@ -28,15 +19,11 @@ export async function createLeague(formData: {
 
     const supabase = createServiceClient();
 
-    // Verify the tournament exists
-    const { data: platformEvent, error: eventFetchError } = await withTimeout(
-      supabase
-        .from("platform_events")
-        .select("id, name")
-        .eq("id", formData.platformEventId)
-        .maybeSingle() as Promise<{ data: { id: string; name: string } | null; error: any }>,
-      5000
-    );
+    const { data: platformEvent, error: eventFetchError } = await supabase
+      .from("platform_events")
+      .select("id, name")
+      .eq("id", formData.platformEventId)
+      .maybeSingle();
 
     if (eventFetchError) {
       console.error("[createLeague] platform_events fetch error:", eventFetchError);
@@ -45,22 +32,18 @@ export async function createLeague(formData: {
     if (!platformEvent) return { error: "Tournament not found" };
 
     // FK constraint on leagues_v2.event_id has been dropped — store platform_events.id directly.
-    const { data: league, error: insertError } = await withTimeout(
-      supabase
-        .from("leagues_v2")
-        .insert({
-          event_id: formData.platformEventId,
-          name: formData.name.trim(),
-          roster_size: formData.rosterSize,
-          max_members: formData.maxManagers,
-          draft_status: "predraft",
-          created_by: user.id,
-          metadata: { platform_event_id: formData.platformEventId },
-        })
-        .select("id")
-        .maybeSingle() as Promise<{ data: { id: string } | null; error: any }>,
-      5000
-    );
+    const { data: league, error: insertError } = await supabase
+      .from("leagues_v2")
+      .insert({
+        event_id: formData.platformEventId,
+        name: formData.name.trim(),
+        roster_size: formData.rosterSize,
+        max_members: formData.maxManagers,
+        draft_status: "predraft",
+        created_by: user.id,
+      })
+      .select("id")
+      .maybeSingle();
 
     if (insertError) {
       console.error("[createLeague] leagues_v2 insert error:", insertError);
