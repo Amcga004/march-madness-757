@@ -278,7 +278,7 @@ export async function fetchMyPicks(userId: string) {
 
   // Fetch ESPN final scores for each unique past game date
   const uniqueDates = [...new Set(picks.map((p: any) => p.game_date as string))].filter(d => d <= todayET);
-  const scoresByGame: Record<string, { homeScore: number; awayScore: number; isFinal: boolean }> = {};
+  const scoresByGame: Record<string, { homeScore: number; awayScore: number; isFinal: boolean; isLive: boolean }> = {};
 
   for (const d of uniqueDates) {
     const dateStr = d.replace(/-/g, "");
