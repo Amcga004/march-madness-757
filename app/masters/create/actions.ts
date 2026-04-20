@@ -34,7 +34,7 @@ export async function createLeague(formData: {
         .from("platform_events")
         .select("id, name")
         .eq("id", formData.platformEventId)
-        .maybeSingle(),
+        .maybeSingle() as Promise<{ data: { id: string; name: string } | null; error: any }>,
       5000
     );
 
@@ -58,7 +58,7 @@ export async function createLeague(formData: {
           metadata: { platform_event_id: formData.platformEventId },
         })
         .select("id")
-        .maybeSingle(),
+        .maybeSingle() as Promise<{ data: { id: string } | null; error: any }>,
       5000
     );
 
