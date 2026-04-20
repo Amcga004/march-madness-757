@@ -5,7 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
-const LIVE_WINDOW_DAYS = 7;
+const LIVE_WINDOW_DAYS = 1;
 
 function getTrueStatus(event: { status: string; starts_at: string | null }): "live" | "upcoming" | "completed" {
   if (event.status === "scheduled") return "upcoming";
@@ -81,6 +81,8 @@ export default async function FantasyGolfPage() {
     trueStatus: getTrueStatus(e),
   }));
 
+  const allLeaguesCompleted = (leagues ?? []).length > 0 && (leagues ?? []).every((l) => l.draft_status === "completed");
+
   const liveTournaments = tournaments.filter((e) => e.trueStatus === "live");
   const upcomingTournaments = tournaments.filter((e) => e.trueStatus === "upcoming");
   const completedTournaments = tournaments.filter((e) => e.trueStatus === "completed");
@@ -101,60 +103,95 @@ export default async function FantasyGolfPage() {
           </h1>
         </div>
 
-        <button
-          disabled
-          className="shrink-0 rounded-lg bg-[#0B5D3B] px-4 py-2 text-sm font-semibold text-white opacity-60 cursor-not-allowed"
-          title="Coming soon"
+        <Link
+          href="/masters/create"
+          className="shrink-0 rounded-lg bg-[#0B5D3B] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#0a4f32]"
         >
           + Create League
-        </button>
+        </Link>
       </div>
 
       {/* My Leagues */}
       <section className="mb-10">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-[#6f7a67]">
-          My Leagues
-        </h2>
-
         {!leagues || leagues.length === 0 ? (
-          <div className="rounded-xl border border-[#d9ddcf] bg-white px-5 py-8 text-center">
-            <p className="text-sm font-medium text-[#162317]">No leagues yet</p>
-            <p className="mt-1 text-xs text-[#6f7a67]">
-              Create a league for an upcoming tournament to get started.
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {leagues.map((league) => (
-              <Link
-                key={league.id}
-                href={`/masters/${league.id}/hub`}
-                className="flex items-center gap-4 rounded-xl border border-[#d9ddcf] bg-white px-5 py-4 transition-colors hover:border-[#0B5D3B]/30 hover:bg-[#f6f4ed]"
+          <>
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-[#6f7a67]">
+              My Leagues
+            </h2>
+            <div className="rounded-xl border border-[#d9ddcf] bg-white px-5 py-8 text-center">
+              <p className="text-sm font-medium text-[#162317]">No leagues yet</p>
+              <p className="mt-1 text-xs text-[#6f7a67]">
+                Create a league for an upcoming tournament to get started.
+              </p>
+            </div>
+          </>
+        ) : allLeaguesCompleted ? (
+          <details>
+            <summary className="mb-3 flex cursor-pointer list-none items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[#6f7a67] hover:text-[#162317]">
+              <svg
+                className="h-3 w-3 transition-transform group-open:rotate-90"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0B5D3B]/10 text-lg">
-                  ⛳
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-[#162317] truncate">{league.name}</p>
-                  <p className="text-xs text-[#6f7a67]">
-                    Created {formatDate(league.created_at)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <LeagueBadge status={league.draft_status} />
-                  <svg
-                    className="h-4 w-4 text-[#6f7a67]"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </Link>
-            ))}
-          </div>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              Past Leagues ({leagues.length})
+            </summary>
+            <div className="flex flex-col gap-2">
+              {leagues.map((league) => (
+                <Link
+                  key={league.id}
+                  href={`/masters/${league.id}/hub`}
+                  className="flex items-center gap-4 rounded-xl border border-[#d9ddcf] bg-white px-5 py-4 opacity-70 transition-colors hover:opacity-100"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#d9ddcf]/40 text-lg">
+                    ⛳
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-[#162317] truncate">{league.name}</p>
+                    <p className="text-xs text-[#6f7a67]">Created {formatDate(league.created_at)}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <LeagueBadge status={league.draft_status} />
+                    <svg className="h-4 w-4 text-[#6f7a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </details>
+        ) : (
+          <>
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-[#6f7a67]">
+              My Leagues
+            </h2>
+            <div className="flex flex-col gap-2">
+              {leagues.map((league) => (
+                <Link
+                  key={league.id}
+                  href={`/masters/${league.id}/hub`}
+                  className="flex items-center gap-4 rounded-xl border border-[#d9ddcf] bg-white px-5 py-4 transition-colors hover:border-[#0B5D3B]/30 hover:bg-[#f6f4ed]"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0B5D3B]/10 text-lg">
+                    ⛳
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-[#162317] truncate">{league.name}</p>
+                    <p className="text-xs text-[#6f7a67]">Created {formatDate(league.created_at)}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <LeagueBadge status={league.draft_status} />
+                    <svg className="h-4 w-4 text-[#6f7a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </>
         )}
       </section>
 
