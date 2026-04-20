@@ -60,6 +60,7 @@ export type EventHubData = {
     event_id: string | null
     roster_size: number | null
     draft_status: string | null
+    created_by: string | null
   } | null
   livePlayers: LeaderboardRow[]
   fantasyStandings: FantasyStandingRow[]
@@ -188,7 +189,7 @@ export async function getEventHubData(leagueId: string): Promise<EventHubData> {
 
   const { data: league } = await supabase
     .from('leagues_v2')
-    .select('id, name, event_id, roster_size, draft_status')
+    .select('id, name, event_id, roster_size, draft_status, created_by')
     .eq('id', leagueId)
     .maybeSingle()
 

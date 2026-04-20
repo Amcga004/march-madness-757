@@ -7,6 +7,8 @@ import SyncLiveButton from '@/app/components/masters/SyncLiveButton'
 import LeaguePulseCard from '@/app/components/masters/LeaguePulseCard'
 import TopContributorsCard from '@/app/components/masters/TopContributorsCard'
 import { getEventHubData } from '@/lib/golf/queries'
+import { getUser } from '@/lib/auth/authHelpers'
+import InviteCopyButton from '@/app/components/masters/InviteCopyButton'
 
 type PageProps = {
   params: Promise<{ leagueId: string }>
@@ -14,13 +16,8 @@ type PageProps = {
 
 export default async function MastersHubPage({ params }: PageProps) {
   const { leagueId } = await params
-  const {
-    league,
-    livePlayers,
-    fantasyStandings,
-    topContributors,
-    leaguePulse,
-  } = await getEventHubData(leagueId)
+  const [user, { league, livePlayers, fantasyStandings, topContributors, leaguePulse }] =
+    await Promise.all([getUser(), getEventHubData(leagueId)])
 
   if (!league) {
     redirect('/')
@@ -52,6 +49,24 @@ export default async function MastersHubPage({ params }: PageProps) {
         <LiveTournamentCard rows={livePlayers} />
 
         <SyncLiveButton leagueId={leagueId} />
+
+        {/* Invite link — visible to commissioner only */}
+        {user?.id === league.created_by && (
+          <div className="rounded-2xl border border-[#d9ddcf] bg-white p-5 shadow-[0_4px_12px_rgba(16,24,40,0.04)]">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#6f7a67]">
+              Invite Link
+            </p>
+            <p className="mb-3 text-sm text-[#162317]">
+              Share this link with your managers to let them join.
+            </p>
+            <div className="flex items-center gap-2 rounded-xl border border-[#d9ddcf] bg-[#f6f4ed] px-4 py-2.5">
+              <span className="flex-1 truncate font-mono text-[13px] text-[#162317]">
+                edgepulse.ai/join/{leagueId}
+              </span>
+              <InviteCopyButton url={`https://edgepulse.ai/join/${leagueId}`} />
+            </div>
+          </div>
+        )}
       </div>
 
       <EventHubNav leagueId={leagueId} />
