@@ -296,10 +296,12 @@ export async function fetchMyPicks(userId: string) {
           const home = comp?.competitors?.find((c: any) => c.homeAway === "home");
           const away = comp?.competitors?.find((c: any) => c.homeAway === "away");
           if (!home || !away) continue;
+          const state = event.status?.type?.state;
           scoresByGame[event.id] = {
             homeScore: Number(home.score ?? 0),
             awayScore: Number(away.score ?? 0),
-            isFinal: event.status?.type?.state === "post",
+            isFinal: state === "post",
+            isLive: state === "in",
           };
         }
       } catch {}
@@ -308,8 +310,10 @@ export async function fetchMyPicks(userId: string) {
 
   return picks.map((pick: any) => {
     const scores = pick.external_game_id ? scoresByGame[pick.external_game_id] : null;
-    let result: "win" | "loss" | "pending" = "pending";
-    if (scores?.isFinal) {
+    let result: "win" | "loss" | "live" | "pending" = "pending";
+    if (scores?.isLive) {
+      result = "live";
+    } else if (scores?.isFinal) {
       const pickedHome = pick.picked_team === pick.home_team;
       result = pickedHome
         ? scores.homeScore > scores.awayScore ? "win" : "loss"

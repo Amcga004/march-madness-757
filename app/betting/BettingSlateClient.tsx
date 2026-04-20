@@ -9,6 +9,7 @@
 // useEffect runs client-side only after hydration — no mismatch possible.
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import AuthButton from "@/app/components/AuthButton";
 import GolfTournamentCard from "./GolfTournamentCard";
@@ -74,6 +75,7 @@ export default function BettingSlateClient({
 }: Props) {
   const [activeSport, setActiveSport] = useState(sport);
   const [activeMarket, setActiveMarket] = useState("h2h");
+  const pathname = usePathname();
   const [expandedGame, setExpandedGame] = useState<string | null>(null);
   const [liveGames, setLiveGames] = useState(games);
   const [liveGolf, setLiveGolf] = useState(golfLeaderboard);
@@ -85,6 +87,7 @@ export default function BettingSlateClient({
   const [slipModal, setSlipModal] = useState<{ game: any; selectedSide: "home" | "away" } | null>(null);
   const [myPicks, setMyPicks] = useState<any[] | null>(null);
   const [savingPick, setSavingPick] = useState(false);
+  const [picksDateFilter, setPicksDateFilter] = useState("all");
   useEffect(() => { userRef.current = currentUser; }, [currentUser]);
 
   useEffect(() => {
@@ -314,8 +317,8 @@ export default function BettingSlateClient({
           </span>
         </a>
         <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-          {navLink("/betting", "Betting", true)}
-          {navLink("/fantasy", "Fantasy", false)}
+          {navLink("/betting", "Betting", pathname === "/betting")}
+          {navLink("/fantasy", "Fantasy", pathname === "/fantasy")}
           {currentUser && (
             <button onClick={() => setActiveTab(t => t === "picks" ? "slate" : "picks")} style={{
               fontSize: "13px",
@@ -575,14 +578,32 @@ export default function BettingSlateClient({
 
                   {/* Best line */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-                    <span style={{ fontSize: "12px" }}>
-                      <strong>{fmtOdds(bestAway?.price ?? null)}</strong>
-                      {bestAway && <span style={{ color: "var(--color-text-secondary)", fontSize: "10px" }}> {BOOK_LABELS[bestAway.bookmaker] ?? bestAway.bookmaker}</span>}
-                    </span>
-                    <span style={{ fontSize: "12px" }}>
-                      <strong>{fmtOdds(bestHome?.price ?? null)}</strong>
-                      {bestHome && <span style={{ color: "var(--color-text-secondary)", fontSize: "10px" }}> {BOOK_LABELS[bestHome.bookmaker] ?? bestHome.bookmaker}</span>}
-                    </span>
+                    {activeMarket === "totals" ? (() => {
+                      const totalsOdds = preferClosing(game.odds, game).filter((o: any) => o.market_type === "totals" && o.line_value != null);
+                      const lineValue = totalsOdds[0]?.line_value ?? null;
+                      const bestOver = getBest(game, "over");
+                      const bestUnder = getBest(game, "under");
+                      return <>
+                        {lineValue != null && <span style={{ fontSize: "11px", color: "var(--color-text-secondary)", fontWeight: 500 }}>O/U {lineValue}</span>}
+                        <span style={{ fontSize: "12px" }}>
+                          <strong>O {fmtOdds(bestOver?.price ?? null)}</strong>
+                          {bestOver && <span style={{ color: "var(--color-text-secondary)", fontSize: "10px" }}> {BOOK_LABELS[bestOver.bookmaker] ?? bestOver.bookmaker}</span>}
+                        </span>
+                        <span style={{ fontSize: "12px" }}>
+                          <strong>U {fmtOdds(bestUnder?.price ?? null)}</strong>
+                          {bestUnder && <span style={{ color: "var(--color-text-secondary)", fontSize: "10px" }}> {BOOK_LABELS[bestUnder.bookmaker] ?? bestUnder.bookmaker}</span>}
+                        </span>
+                      </>;
+                    })() : <>
+                      <span style={{ fontSize: "12px" }}>
+                        <strong>{fmtOdds(bestAway?.price ?? null)}</strong>
+                        {bestAway && <span style={{ color: "var(--color-text-secondary)", fontSize: "10px" }}> {BOOK_LABELS[bestAway.bookmaker] ?? bestAway.bookmaker}</span>}
+                      </span>
+                      <span style={{ fontSize: "12px" }}>
+                        <strong>{fmtOdds(bestHome?.price ?? null)}</strong>
+                        {bestHome && <span style={{ color: "var(--color-text-secondary)", fontSize: "10px" }}> {BOOK_LABELS[bestHome.bookmaker] ?? bestHome.bookmaker}</span>}
+                      </span>
+                    </>}
                   </div>
 
                   {/* DraftKings */}
@@ -934,39 +955,56 @@ export default function BettingSlateClient({
             <div style={{ padding: "60px 0", textAlign: "center", color: "var(--color-text-secondary)", fontSize: "13px" }}>
               No picks yet. Click "+ Slip" on any pre-game matchup to add one.
             </div>
-          ) : (
-            <div>
-              {/* Header row */}
-              <div style={{ display: "grid", gridTemplateColumns: "90px 1fr 1fr 70px 70px", gap: "8px", padding: "5px 8px 4px", borderBottom: "0.5px solid var(--color-border-tertiary)" }}>
-                {["Date", "Matchup", "Pick", "Odds", "Result"].map((h, i) => (
-                  <span key={i} style={{ fontSize: "10px", color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
-                ))}
+          ) : (() => {
+            const pickDates = [...new Set(myPicks.map((p: any) => p.game_date as string))].sort((a, b) => b.localeCompare(a));
+            const filteredPicks = picksDateFilter === "all" ? myPicks : myPicks.filter((p: any) => p.game_date === picksDateFilter);
+            const resultMeta: Record<string, { color: string; label: string }> = {
+              win:     { color: "#16A34A", label: "Win" },
+              loss:    { color: "#DC2626", label: "Loss" },
+              live:    { color: "#EA6C0A", label: "Live" },
+              pending: { color: "#6B7280", label: "Pending" },
+            };
+            return (
+              <div>
+                {/* Date filter */}
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "11px", color: "#6B7280" }}>Filter:</span>
+                  {["all", ...pickDates].map(d => (
+                    <button key={d} onClick={() => setPicksDateFilter(d)} style={{
+                      padding: "3px 10px", borderRadius: "5px", fontSize: "11px", cursor: "pointer",
+                      border: `0.5px solid ${picksDateFilter === d ? "#EA6C0A80" : "var(--color-border-secondary)"}`,
+                      background: picksDateFilter === d ? "#EA6C0A12" : "transparent",
+                      color: picksDateFilter === d ? "#EA6C0A" : "var(--color-text-secondary)",
+                    }}>
+                      {d === "all" ? "All" : new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </button>
+                  ))}
+                </div>
+                {/* Header */}
+                <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 70px 80px", gap: "8px", padding: "5px 8px 4px", borderBottom: "0.5px solid var(--color-border-tertiary)" }}>
+                  {["Date", "Matchup", "Pick", "Odds", "Status"].map((h, i) => (
+                    <span key={i} style={{ fontSize: "10px", color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
+                  ))}
+                </div>
+                {filteredPicks.map((pick: any) => {
+                  const meta = resultMeta[pick.result] ?? resultMeta.pending;
+                  return (
+                    <div key={pick.id} style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 70px 80px", gap: "8px", padding: "10px 8px", borderBottom: "0.5px solid var(--color-border-tertiary)", alignItems: "center" }}>
+                      <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+                        {new Date(pick.game_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                      <span style={{ fontSize: "12px" }}>{pick.away_team} @ {pick.home_team}</span>
+                      <span style={{ fontSize: "12px", fontWeight: 500 }}>{pick.picked_team}</span>
+                      <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+                        {pick.pick_odds > 0 ? `+${pick.pick_odds}` : pick.pick_odds}
+                      </span>
+                      <span style={{ fontSize: "12px", fontWeight: 500, color: meta.color }}>{meta.label}</span>
+                    </div>
+                  );
+                })}
               </div>
-              {myPicks.map((pick: any) => {
-                const resultColor = pick.result === "win" ? "#16A34A" : pick.result === "loss" ? "#DC2626" : "#6B7280";
-                const resultLabel = pick.result === "win" ? "Win" : pick.result === "loss" ? "Loss" : "Pending";
-                return (
-                  <div key={pick.id} style={{ display: "grid", gridTemplateColumns: "90px 1fr 1fr 70px 70px", gap: "8px", padding: "10px 8px", borderBottom: "0.5px solid var(--color-border-tertiary)", alignItems: "center" }}>
-                    <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                      {new Date(pick.game_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </span>
-                    <span style={{ fontSize: "12px" }}>
-                      {pick.away_team} @ {pick.home_team}
-                    </span>
-                    <span style={{ fontSize: "12px", fontWeight: 500 }}>
-                      {pick.picked_team}
-                    </span>
-                    <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                      {pick.pick_odds > 0 ? `+${pick.pick_odds}` : pick.pick_odds}
-                    </span>
-                    <span style={{ fontSize: "12px", fontWeight: 500, color: resultColor }}>
-                      {resultLabel}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
