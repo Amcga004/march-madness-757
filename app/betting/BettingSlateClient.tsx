@@ -579,19 +579,23 @@ export default function BettingSlateClient({
                   {/* Best line */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
                     {activeMarket === "totals" ? (() => {
-                      const totalsOdds = preferClosing(game.odds, game).filter((o: any) => o.market_type === "totals" && o.line_value != null);
-                      const lineValue = totalsOdds[0]?.line_value ?? null;
-                      const bestOver = getBest(game, "over");
-                      const bestUnder = getBest(game, "under");
+                      const totalsPool = preferClosing(game.odds, game).filter((o: any) => o.market_type === "totals");
+                      let bestOverRow: any = null;
+                      let bestUnderRow: any = null;
+                      for (const o of totalsPool) {
+                        if (o.over_price != null && (!bestOverRow || o.over_price > bestOverRow.over_price)) bestOverRow = o;
+                        if (o.under_price != null && (!bestUnderRow || o.under_price > bestUnderRow.under_price)) bestUnderRow = o;
+                      }
+                      const lineValue = bestOverRow?.line_value ?? bestUnderRow?.line_value ?? totalsPool[0]?.line_value ?? null;
                       return <>
                         {lineValue != null && <span style={{ fontSize: "11px", color: "var(--color-text-secondary)", fontWeight: 500 }}>O/U {lineValue}</span>}
                         <span style={{ fontSize: "12px" }}>
-                          <strong>O {fmtOdds(bestOver?.price ?? null)}</strong>
-                          {bestOver && <span style={{ color: "var(--color-text-secondary)", fontSize: "10px" }}> {BOOK_LABELS[bestOver.bookmaker] ?? bestOver.bookmaker}</span>}
+                          <strong>O {fmtOdds(bestOverRow?.over_price ?? null)}</strong>
+                          {bestOverRow && <span style={{ color: "var(--color-text-secondary)", fontSize: "10px" }}> {BOOK_LABELS[bestOverRow.bookmaker] ?? bestOverRow.bookmaker}</span>}
                         </span>
                         <span style={{ fontSize: "12px" }}>
-                          <strong>U {fmtOdds(bestUnder?.price ?? null)}</strong>
-                          {bestUnder && <span style={{ color: "var(--color-text-secondary)", fontSize: "10px" }}> {BOOK_LABELS[bestUnder.bookmaker] ?? bestUnder.bookmaker}</span>}
+                          <strong>U {fmtOdds(bestUnderRow?.under_price ?? null)}</strong>
+                          {bestUnderRow && <span style={{ color: "var(--color-text-secondary)", fontSize: "10px" }}> {BOOK_LABELS[bestUnderRow.bookmaker] ?? bestUnderRow.bookmaker}</span>}
                         </span>
                       </>;
                     })() : <>
