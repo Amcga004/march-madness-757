@@ -121,35 +121,47 @@ export default async function MastersRulesPage({ params }: PageProps) {
 
             <div className="mt-4 space-y-3">
               <div className="rounded-xl border border-[#e2e6dc] bg-white px-4 py-3">
-                <p className="text-sm font-semibold text-[#162317]">Example 1</p>
+                <p className="text-sm font-semibold text-[#162317]">Example 1 — Strong finish</p>
                 <p className="mt-2 text-sm text-[#667065]">
-                  A golfer finishes the tournament at <span className="font-semibold text-[#162317]">-8</span>,
-                  makes the cut, and finishes <span className="font-semibold text-[#162317]">T18</span>.
+                  Golfer finishes at <span className="font-semibold text-[#162317]">−8</span>, makes the cut, finishes <span className="font-semibold text-[#162317]">T18</span>.
                 </p>
-                <div className="mt-3 rounded-lg bg-[#f8faf6] px-3 py-3 text-sm text-[#243126]">
+                <div className="mt-3 rounded-lg bg-[#f8faf6] px-3 py-3 text-sm font-mono text-[#243126]">
                   <p>Round points: +8</p>
-                  <p>Cut bonus: +2</p>
-                  <p>Finish bonus: +3</p>
-                  <p className="mt-2 font-semibold text-[#162317]">Total fantasy points: 13</p>
+                  <p>Cut bonus: &nbsp;+2</p>
+                  <p>Finish (11–20th): +1</p>
+                  <p className="mt-2 font-semibold not-italic text-[#162317]">Total: +11</p>
                 </div>
               </div>
 
               <div className="rounded-xl border border-[#e2e6dc] bg-white px-4 py-3">
-                <p className="text-sm font-semibold text-[#162317]">Example 2</p>
+                <p className="text-sm font-semibold text-[#162317]">Example 2 — Missed cut</p>
                 <p className="mt-2 text-sm text-[#667065]">
-                  A golfer finishes at <span className="font-semibold text-[#162317]">+6</span> and misses the cut.
+                  Golfer finishes at <span className="font-semibold text-[#162317]">+6</span> over two rounds, misses the cut.
                 </p>
-                <div className="mt-3 rounded-lg bg-[#f8faf6] px-3 py-3 text-sm text-[#243126]">
-                  <p>Round points: -5 cap applies</p>
-                  <p>Cut penalty: -3</p>
-                  <p className="mt-2 font-semibold text-[#162317]">Total fantasy points: -8</p>
+                <div className="mt-3 rounded-lg bg-[#f8faf6] px-3 py-3 text-sm font-mono text-[#243126]">
+                  <p>Round points: −6 (no cap)</p>
+                  <p>Cut penalty: −2</p>
+                  <p className="mt-2 font-semibold not-italic text-[#162317]">Total: −8</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[#e2e6dc] bg-white px-4 py-3">
+                <p className="text-sm font-semibold text-[#162317]">Example 3 — Daily bonuses</p>
+                <p className="mt-2 text-sm text-[#667065]">
+                  Golfer shoots a bogey-free <span className="font-semibold text-[#162317]">65 (−7)</span> in R1, the best round of the day.
+                </p>
+                <div className="mt-3 rounded-lg bg-[#f8faf6] px-3 py-3 text-sm font-mono text-[#243126]">
+                  <p>Round points: +7</p>
+                  <p>Bogey-free: &nbsp;+1</p>
+                  <p>Best round: &nbsp;+1</p>
+                  <p className="mt-2 font-semibold not-italic text-[#162317]">R1 total: +9</p>
                 </div>
               </div>
 
               <div className="rounded-xl border border-[#e2e6dc] bg-white px-4 py-3">
                 <p className="text-sm font-semibold text-[#162317]">Manager Total</p>
                 <p className="mt-2 text-sm text-[#667065]">
-                  A manager’s fantasy score is the sum of all drafted golfers on that roster.
+                  A manager’s fantasy score is the sum of fantasy points across all golfers on their roster.
                 </p>
               </div>
             </div>
