@@ -65,31 +65,50 @@ export default async function MastersRulesPage({ params }: PageProps) {
               <div className="rounded-xl border border-[#e2e6dc] bg-white px-4 py-3">
                 <p className="text-sm font-semibold text-[#162317]">Round Points</p>
                 <p className="mt-1 text-sm text-[#667065]">
-                  Golfers earn or lose points based on score relative to par.
+                  +1 per stroke under par, −1 per stroke over par. No floor, no cap.
                 </p>
-                <div className="mt-3 rounded-lg bg-[#f8faf6] px-3 py-3 text-sm text-[#243126]">
-                  <p>Under par: +1 point per stroke under par</p>
-                  <p>Even par: 0 points</p>
-                  <p>Over par: negative points, capped at -5</p>
+                <div className="mt-3 rounded-lg bg-[#f8faf6] px-3 py-3 text-sm font-mono text-[#243126]">
+                  <p>−4 under par → +4 pts</p>
+                  <p>Even par &nbsp;&nbsp;&nbsp;&nbsp;→ &nbsp;0 pts</p>
+                  <p>+3 over par &nbsp;→ −3 pts</p>
                 </div>
               </div>
 
               <div className="rounded-xl border border-[#e2e6dc] bg-white px-4 py-3">
                 <p className="text-sm font-semibold text-[#162317]">Cut Bonus / Penalty</p>
-                <div className="mt-3 rounded-lg bg-[#f8faf6] px-3 py-3 text-sm text-[#243126]">
+                <p className="mt-1 text-sm text-[#667065]">Applied once after Round 2 results are final.</p>
+                <div className="mt-3 rounded-lg bg-[#f8faf6] px-3 py-3 text-sm font-mono text-[#243126]">
                   <p>Made cut: +2</p>
-                  <p>Missed cut: -3</p>
+                  <p>Missed cut: −2</p>
                 </div>
               </div>
 
               <div className="rounded-xl border border-[#e2e6dc] bg-white px-4 py-3">
                 <p className="text-sm font-semibold text-[#162317]">Finish Bonus</p>
-                <div className="mt-3 rounded-lg bg-[#f8faf6] px-3 py-3 text-sm text-[#243126]">
-                  <p>Winner: +20</p>
-                  <p>2nd: +15</p>
-                  <p>3rd–5th: +10</p>
-                  <p>6th–10th: +5</p>
-                  <p>11th–20th: +3</p>
+                <p className="mt-1 text-sm text-[#667065]">Applied after the event is fully complete.</p>
+                <div className="mt-3 rounded-lg bg-[#f8faf6] px-3 py-3 text-sm font-mono text-[#243126]">
+                  <p>1st &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ +5</p>
+                  <p>2nd &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ +4</p>
+                  <p>3rd–5th &nbsp;→ +3</p>
+                  <p>6th–10th → +2</p>
+                  <p>11th–20th → +1</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[#e2e6dc] bg-white px-4 py-3">
+                <p className="text-sm font-semibold text-[#162317]">Daily Bonuses</p>
+                <p className="mt-1 text-sm text-[#667065]">Applied per finalized round.</p>
+                <div className="mt-3 rounded-lg bg-[#f8faf6] px-3 py-3 text-sm font-mono text-[#243126]">
+                  <p>Bogey-free round &nbsp;&nbsp;&nbsp;&nbsp;→ +1</p>
+                  <p>Best round of the day → +1</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[#e2e6dc] bg-white px-4 py-3">
+                <p className="text-sm font-semibold text-[#162317]">Special Bonuses</p>
+                <div className="mt-3 rounded-lg bg-[#f8faf6] px-3 py-3 text-sm font-mono text-[#243126]">
+                  <p>Hole-in-one &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ +5</p>
+                  <p>Birdie streak (3+ in a row) → +1</p>
                 </div>
               </div>
             </div>

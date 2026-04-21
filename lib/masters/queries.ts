@@ -151,6 +151,17 @@ export async function getDraftRoomData(leagueId: string): Promise<DraftRoomData>
       .map((row) => asString(row.competitor_id))
       .filter((value): value is string => !!value)
 
+    const draftedSet = new Set(draftedCompetitorIds)
+
+    let availablePlayers: Array<{
+      competitor_id: string
+      player_name: string
+      world_rank: number | null
+      fedex_points: number | null
+      top_10_finishes: number | null
+      country: string | null
+    }> = []
+
     if (fieldCompetitorIds.length > 0) {
       const { data: competitorRows } = await supabase
         .from('competitors')
@@ -161,9 +172,7 @@ export async function getDraftRoomData(leagueId: string): Promise<DraftRoomData>
         ((competitorRows ?? []) as GenericRow[]).map((row) => [String(row.id), row])
       )
 
-      const draftedSet = new Set(draftedCompetitorIds)
-
-      const availablePlayers = eventFieldRows
+      availablePlayers = eventFieldRows
         .filter((row) => {
           const competitorId = asString(row.competitor_id)
           if (!competitorId) return false
@@ -205,79 +214,99 @@ export async function getDraftRoomData(leagueId: string): Promise<DraftRoomData>
               null,
           }
         })
+    } else {
+      // event_competitors not populated for this event — fall back to full competitors table
+      const { data: globalPlayers } = await supabase
+        .from('competitors')
+        .select('id, name, world_rank, fedex_points, top_10_finishes, country')
+        .order('name', { ascending: true })
 
-      const recentPicks: DraftPick[] = draftedRows.slice(0, 10).map((row) => {
-        const competitorId = asString(row.competitor_id)
-        const overallPick = asNumber(row.overall_pick)
-        const roundNumber = asNumber(row.round_number)
-        const pickInRound = asNumber(row.pick_in_round)
-        const draftPosition = asNumber(row.draft_position)
-        const competitor = competitorId ? competitorMap.get(competitorId) : null
-
-        return {
-          id: buildDraftPickId(leagueId, overallPick, competitorId),
-          overall_pick: overallPick ?? 0,
-          round_number: roundNumber ?? 0,
-          round_pick: pickInRound ?? 0,
-          manager_name:
-            asString(row.display_name) ??
-            (draftPosition != null ? draftPositionNameMap.get(draftPosition) ?? null : null) ??
-            'Manager',
-          competitor_name:
-            asString(row.competitor_name) ??
-            asString(competitor?.name) ??
-            'Player',
-          competitor_id: competitorId ?? '',
-        }
-      })
-
-      for (const row of draftedRows) {
-        const competitorId = asString(row.competitor_id)
-        const draftPosition = asNumber(row.draft_position)
-
-        if (!competitorId || draftPosition == null) continue
-
-        const owner = draftOrder.find((item) => item.draft_position === draftPosition)
-        if (!owner) continue
-
-        const competitor = competitorMap.get(competitorId)
-        const playerName =
-          asString(row.competitor_name) ??
-          asString(competitor?.name) ??
-          'Player'
-
-        rosterMap.get(owner.user_id)?.players.push({
-          competitor_id: competitorId,
-          player_name: playerName,
+      availablePlayers = ((globalPlayers ?? []) as GenericRow[])
+        .filter((row) => {
+          const id = asString(row.id)
+          return !!id && !draftedSet.has(id)
         })
-      }
+        .map((row) => ({
+          competitor_id: asString(row.id)!,
+          player_name: asString(row.name) ?? 'Unknown Player',
+          world_rank: asNumber(row.world_rank),
+          fedex_points: asNumber(row.fedex_points),
+          top_10_finishes: asNumber(row.top_10_finishes),
+          country: asString(row.country),
+        }))
+    }
 
-      const rosters = Array.from(rosterMap.values()).sort((a, b) =>
-        a.display_name.localeCompare(b.display_name)
-      )
-
-      const isCommissioner =
-        !!currentUserId && !!league?.created_by && currentUserId === league.created_by
-
-      const upcomingPicks = buildUpcomingPicks({
-        currentTurn,
-        draftOrder,
-        rosterSize: league?.roster_size ?? 12,
-        count: 6,
-      })
+    const recentPicks: DraftPick[] = draftedRows.slice(0, 10).map((row) => {
+      const competitorId = asString(row.competitor_id)
+      const overallPick = asNumber(row.overall_pick)
+      const roundNumber = asNumber(row.round_number)
+      const pickInRound = asNumber(row.pick_in_round)
+      const draftPosition = asNumber(row.draft_position)
+      const competitor = competitorId ? competitorMap.get(competitorId) : null
 
       return {
-        league,
-        event,
-        currentTurn,
-        draftOrder,
-        availablePlayers,
-        recentPicks,
-        upcomingPicks,
-        rosters,
-        isCommissioner,
-        currentUserId,
+        id: buildDraftPickId(leagueId, overallPick, competitorId),
+        overall_pick: overallPick ?? 0,
+        round_number: roundNumber ?? 0,
+        round_pick: pickInRound ?? 0,
+        manager_name:
+          asString(row.display_name) ??
+          (draftPosition != null ? draftPositionNameMap.get(draftPosition) ?? null : null) ??
+          'Manager',
+        competitor_name:
+          asString(row.competitor_name) ??
+          asString(competitor?.name) ??
+          'Player',
+        competitor_id: competitorId ?? '',
       }
+    })
+
+    for (const row of draftedRows) {
+      const competitorId = asString(row.competitor_id)
+      const draftPosition = asNumber(row.draft_position)
+
+      if (!competitorId || draftPosition == null) continue
+
+      const owner = draftOrder.find((item) => item.draft_position === draftPosition)
+      if (!owner) continue
+
+      const competitor = competitorMap.get(competitorId)
+      const playerName =
+        asString(row.competitor_name) ??
+        asString(competitor?.name) ??
+        'Player'
+
+      rosterMap.get(owner.user_id)?.players.push({
+        competitor_id: competitorId,
+        player_name: playerName,
+      })
+    }
+
+    const rosters = Array.from(rosterMap.values()).sort((a, b) =>
+      a.display_name.localeCompare(b.display_name)
+    )
+
+    const isCommissioner =
+      !!currentUserId && !!league?.created_by && currentUserId === league.created_by
+
+    const upcomingPicks = buildUpcomingPicks({
+      currentTurn,
+      draftOrder,
+      rosterSize: league?.roster_size ?? 12,
+      count: 6,
+    })
+
+    return {
+      league,
+      event,
+      currentTurn,
+      draftOrder,
+      availablePlayers,
+      recentPicks,
+      upcomingPicks,
+      rosters,
+      isCommissioner,
+      currentUserId,
     }
   }
 
