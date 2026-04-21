@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { syncEventField, upsertNormalizedLiveState } from '@/lib/golf/normalize'
 import { resolveProviders } from '@/lib/golf/providers'
 import type { ProviderPlayerRow, SyncProviderMode } from '@/lib/golf/providers/types'
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'leagueId is required' }, { status: 400 })
     }
 
-    const { data: league, error: leagueError } = await supabase
+    const { data: league, error: leagueError } = await createServiceClient()
       .from('leagues_v2')
       .select('id, event_id')
       .eq('id', leagueId)
