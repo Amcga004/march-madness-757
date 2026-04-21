@@ -116,8 +116,7 @@ export async function ingestDunksAndThreesPredictions(date: string) {
         .eq("market_type", "h2h")
         .ilike("home_team", `%${game.home_team_name}%`)
         .ilike("away_team", `%${game.away_team_name}%`)
-        .gte("commence_time", `${date}T00:00:00Z`)
-        .lt("commence_time", `${date}T23:59:59Z`)
+        .gte("updated_at", `${date}T00:00:00Z`)
         .limit(1)
         .maybeSingle();
 
