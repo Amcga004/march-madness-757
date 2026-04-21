@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 
 export type LeaderboardRow = {
   competitor_id: string
@@ -192,7 +193,7 @@ function buildFullFieldRows(
 }
 
 export async function getEventHubData(leagueId: string): Promise<EventHubData> {
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   const { data: league } = await supabase
     .from('leagues_v2')
