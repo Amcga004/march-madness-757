@@ -8,7 +8,7 @@ type Props = {
   leagueId: string
 }
 
-type DraftAction = 'lottery' | 'start' | 'pause' | 'resume' | 'reset' | null
+type DraftAction = 'lottery' | 'start' | 'reset' | null
 
 export default function CommissionerControls({ visible, leagueId }: Props) {
   const router = useRouter()
@@ -44,8 +44,6 @@ export default function CommissionerControls({ visible, leagueId }: Props) {
       const successLabels: Record<Exclude<DraftAction, null>, string> = {
         lottery: 'Lottery completed',
         start: 'Draft started',
-        pause: 'Draft paused',
-        resume: 'Draft resumed',
         reset: 'Draft reset',
       }
 
@@ -90,7 +88,7 @@ export default function CommissionerControls({ visible, leagueId }: Props) {
         </div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-3">
         <button
           type="button"
           disabled={disabled}
@@ -107,24 +105,6 @@ export default function CommissionerControls({ visible, leagueId }: Props) {
           className="rounded-xl border border-[#d9ddcf] bg-white px-4 py-3 text-sm font-medium text-[#243126] transition hover:bg-[#f7f7f1] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {getButtonLabel('start', 'Start Draft')}
-        </button>
-
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => runAction('pause')}
-          className="rounded-xl border border-[#d9ddcf] bg-white px-4 py-3 text-sm font-medium text-[#243126] transition hover:bg-[#f7f7f1] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {getButtonLabel('pause', 'Pause')}
-        </button>
-
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => runAction('resume')}
-          className="rounded-xl border border-[#d9ddcf] bg-white px-4 py-3 text-sm font-medium text-[#243126] transition hover:bg-[#f7f7f1] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {getButtonLabel('resume', 'Resume')}
         </button>
 
         <button

@@ -3,6 +3,7 @@ import SportSwitcher from '@/app/components/SportSwitcher'
 import MastersTopNav from '@/app/components/masters/MastersTopNav'
 import HeaderMenu from '@/app/components/HeaderMenu'
 import LiveAutoRefresh from '@/app/components/masters/LiveAutoRefresh'
+import { createServiceClient } from '@/lib/supabase/service'
 
 type LayoutProps = {
   children: React.ReactNode
@@ -14,6 +15,15 @@ export default async function MastersLeagueLayout({
   params,
 }: LayoutProps) {
   const { leagueId } = await params
+
+  const supabase = createServiceClient()
+  const { data: leagueRow } = await supabase
+    .from('leagues_v2')
+    .select('name')
+    .eq('id', leagueId)
+    .maybeSingle()
+
+  const leagueName = leagueRow?.name ?? 'Golf League'
 
   return (
     <div className="min-h-screen bg-[#f3f1ea] text-[#162317] antialiased">
@@ -31,10 +41,10 @@ export default async function MastersLeagueLayout({
                       757 Fantasy
                     </p>
                     <h1 className="truncate text-[15px] font-semibold tracking-tight text-[#162317] md:text-[20px] md:font-extrabold">
-                      Masters Draft
+                      {leagueName}
                     </h1>
                     <p className="hidden text-xs text-[#788274] sm:block">
-                      Golf fantasy environment
+                      PGA Golf Fantasy
                     </p>
                   </div>
                 </div>

@@ -76,10 +76,13 @@ export default async function FantasyGolfPage() {
       .order("starts_at", { ascending: true }),
   ]);
 
-  const tournaments = (rawTournaments ?? []).map((e) => ({
-    ...e,
-    trueStatus: getTrueStatus(e),
-  }));
+  // TODO: add is_team_event flag to platform_events and filter on that instead
+  const tournaments = (rawTournaments ?? [])
+    .filter((e) => !e.name.toLowerCase().includes('zurich'))
+    .map((e) => ({
+      ...e,
+      trueStatus: getTrueStatus(e),
+    }));
 
   const allLeaguesCompleted = (leagues ?? []).length > 0 && (leagues ?? []).every((l) => l.draft_status === "completed");
 
