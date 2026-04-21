@@ -123,6 +123,12 @@ export async function ingestDunksAndThreesPredictions(date: string) {
 
       const externalGameId = oddsMatch?.external_game_id ?? String(game.game_id);
 
+      console.log('[D&T match]', {
+        home: game.home_team_name,
+        away: game.away_team_name,
+        matched: oddsMatch?.external_game_id ?? 'NO MATCH'
+      })
+
       await supabase
         .from("model_outputs")
         .upsert(
