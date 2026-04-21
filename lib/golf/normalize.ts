@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import type { ProviderFetchResult, ProviderPlayerRow } from './providers/types'
 
 type EventCompetitorRow = {
@@ -73,7 +74,7 @@ export async function syncEventField(eventId: string) {
   const typedAvailableRows = (availableRows ?? []) as AvailableEventCompetitorRow[]
 
   if (typedAvailableRows.length === 0) {
-    return { rowCount: 0 }
+    return syncEventFieldFromPlatformPlayers(eventId)
   }
 
   const { error: deactivateError } = await supabase
@@ -104,6 +105,67 @@ export async function syncEventField(eventId: string) {
   }
 
   return { rowCount: payload.length }
+}
+
+async function syncEventFieldFromPlatformPlayers(eventId: string) {
+  const supabase = createServiceClient()
+
+  const { data: players, error: playersError } = await supabase
+    .from('platform_players')
+    .select('id, canonical_name, first_name, last_name, metadata')
+    .eq('sport_key', 'pga')
+    .eq('is_active', true)
+    .order('canonical_name', { ascending: true })
+
+  if (playersError) {
+    throw new Error(`Unable to load platform_players: ${playersError.message}`)
+  }
+
+  if (!players || players.length === 0) {
+    return { rowCount: 0, source: 'platform_players' }
+  }
+
+  const competitorsPayload = players.map((p) => {
+    const meta = (p.metadata ?? {}) as Record<string, unknown>
+    const shortName =
+      p.first_name && p.last_name
+        ? `${p.first_name} ${String(p.last_name).charAt(0)}.`
+        : p.canonical_name
+    return {
+      id: p.id,
+      name: p.canonical_name,
+      short_name: shortName,
+      world_rank: null,
+      fedex_points: null,
+      top_10_finishes: null,
+      country: typeof meta.country === 'string' ? meta.country : null,
+    }
+  })
+
+  const { error: competitorsError } = await supabase
+    .from('competitors')
+    .upsert(competitorsPayload, { onConflict: 'id' })
+
+  if (competitorsError) {
+    throw new Error(`Unable to upsert competitors from platform_players: ${competitorsError.message}`)
+  }
+
+  const eventCompetitorsPayload = players.map((p, index) => ({
+    event_id: eventId,
+    competitor_id: p.id,
+    is_active: true,
+    seed_order: index + 1,
+  }))
+
+  const { error: eventCompetitorsError } = await supabase
+    .from('event_competitors')
+    .upsert(eventCompetitorsPayload, { onConflict: 'event_id,competitor_id' })
+
+  if (eventCompetitorsError) {
+    throw new Error(`Unable to upsert event_competitors from platform_players: ${eventCompetitorsError.message}`)
+  }
+
+  return { rowCount: players.length, source: 'platform_players' as const }
 }
 
 export async function upsertNormalizedLiveState(params: {

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import type {
   DraftRoomData,
   LeagueMeta,
@@ -28,11 +29,12 @@ function buildDraftPickId(
 }
 
 export async function getDraftRoomData(leagueId: string): Promise<DraftRoomData> {
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
+  const userClient = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await userClient.auth.getUser()
 
   const currentUserId = user?.id ?? null
 

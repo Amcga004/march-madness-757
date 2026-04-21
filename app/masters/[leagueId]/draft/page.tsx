@@ -96,9 +96,10 @@ export default async function MastersDraftPage({ params }: PageProps) {
     currentUserId === currentTurn.current_drafter_user_id
 
   const managerNames = draftOrder.map((m) => m.display_name)
+  const totalRounds = league.roster_size + 1
   const upcomingPicks = buildUpcomingPicks(
     managerNames,
-    league.roster_size,
+    totalRounds,
     fullDraftBoard.length,
     8
   )
@@ -168,7 +169,7 @@ export default async function MastersDraftPage({ params }: PageProps) {
           <div className="space-y-3">
             <DraftBoardGrid
               picks={fullDraftBoard}
-              rosterSize={league.roster_size}
+              rosterSize={totalRounds}
               managers={managerNames}
             />
           </div>
@@ -205,7 +206,7 @@ export default async function MastersDraftPage({ params }: PageProps) {
           <section id="draft-board">
             <DraftBoardGrid
               picks={fullDraftBoard}
-              rosterSize={league.roster_size}
+              rosterSize={totalRounds}
               managers={managerNames}
             />
           </section>
