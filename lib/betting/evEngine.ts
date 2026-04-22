@@ -58,6 +58,9 @@ export async function computeConsensusForDate(date: string) {
     .eq("game_date", date)
     .eq("is_stale", false);
 
+  // NOTE: Use nextDay+12h window, NOT date+23:59:59Z
+  // Late ET games (8pm-midnight ET) become next UTC day
+  // e.g. 10:30pm ET = 02:30 UTC next day — would be missed otherwise
   const nextDay = new Date(new Date(`${date}T12:00:00`).getTime() + 86400000).toISOString().split("T")[0];
   const { data: marketOdds } = await supabase
     .from("market_odds")
@@ -152,6 +155,9 @@ export async function generateSignalsForDate(date: string) {
     return { ok: true, signalsGenerated: 0, message: "No consensus data" };
   }
 
+  // NOTE: Use nextDay+12h window, NOT date+23:59:59Z
+  // Late ET games (8pm-midnight ET) become next UTC day
+  // e.g. 10:30pm ET = 02:30 UTC next day — would be missed otherwise
   const nextDay = new Date(new Date(`${date}T12:00:00`).getTime() + 86400000).toISOString().split("T")[0];
   const { data: marketOdds } = await supabase
     .from("market_odds")

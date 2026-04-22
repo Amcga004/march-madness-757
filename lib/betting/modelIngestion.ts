@@ -114,6 +114,9 @@ export async function ingestDunksAndThreesPredictions(date: string) {
         .select("external_game_id")
         .eq("sport_key", "nba")
         .eq("market_type", "h2h")
+        // NOTE: Use nextDay+12h window, NOT date+23:59:59Z
+        // Late ET games (8pm-midnight ET) become next UTC day
+        // e.g. 10:30pm ET = 02:30 UTC next day — would be missed otherwise
         .ilike("home_team", `%${game.home_team_name}%`)
         .ilike("away_team", `%${game.away_team_name}%`)
         .gte("updated_at", `${date}T00:00:00Z`)

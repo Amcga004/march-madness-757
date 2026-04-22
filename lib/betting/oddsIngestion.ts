@@ -83,6 +83,9 @@ export async function ingestOddsForSport(sport: keyof typeof SPORT_MAP) {
 
     // Detect games that have vanished from the feed (game started) and snapshot their closing lines
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    // NOTE: Use nextDay+12h window, NOT date+23:59:59Z
+    // Late ET games (8pm-midnight ET) become next UTC day
+    // e.g. 10:30pm ET = 02:30 UTC next day — would be missed otherwise
     const nextDay = new Date(new Date(`${today}T12:00:00`).getTime() + 86400000).toISOString().split("T")[0];
     const { data: existingOdds } = await supabase
       .from("market_odds")
