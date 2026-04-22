@@ -503,6 +503,7 @@ export default function BettingSlateClient({
                         )}
                         <span style={{ color: "#94A3B8", fontWeight: 500, fontSize: "14px" }}>
                           {game.awayTeam}
+                          {awayWon && <span style={{ marginLeft: "4px", fontSize: "11px", color: "#16A34A" }}>✓</span>}
                         </span>
                         {game.awayRecord && (
                           <span style={{ fontSize: "10px", color: "#4B5563" }}>{game.awayRecord}</span>
@@ -526,6 +527,7 @@ export default function BettingSlateClient({
                         )}
                         <span style={{ fontWeight: 500, fontSize: "14px", color: "#F1F3F5" }}>
                           {game.homeTeam}
+                          {homeWon && <span style={{ marginLeft: "4px", fontSize: "11px", color: "#16A34A" }}>✓</span>}
                         </span>
                         {game.homeRecord && (
                           <span style={{ fontSize: "10px", color: "#4B5563" }}>{game.homeRecord}</span>
@@ -615,25 +617,11 @@ export default function BettingSlateClient({
                   {/* DraftKings */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "3px", alignItems: "center" }}>
                     {activeMarket === "h2h" && <>
-                      <span style={{
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: awayWon ? "#16A34A" : "var(--color-text-primary, #F1F3F5)",
-                      }}>
+                      <span style={{ fontSize: "13px", fontWeight: 500 }}>
                         {dk ? fmtOdds(dk.away_price) : "—"}
-                        {awayWon && dk?.away_price && (
-                          <span style={{ marginLeft: "3px", fontSize: "10px" }}>✓</span>
-                        )}
                       </span>
-                      <span style={{
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: homeWon ? "#16A34A" : "var(--color-text-primary, #F1F3F5)",
-                      }}>
+                      <span style={{ fontSize: "13px", fontWeight: 500 }}>
                         {dk ? fmtOdds(dk.home_price) : "—"}
-                        {homeWon && dk?.home_price && (
-                          <span style={{ marginLeft: "3px", fontSize: "10px" }}>✓</span>
-                        )}
                       </span>
                     </>}
                     {activeMarket === "spreads" && <>
@@ -703,18 +691,6 @@ export default function BettingSlateClient({
                       </div>
                     );
                   })()}
-
-                  {/* Closing lines indicator */}
-                  {game.isFinal && (
-                    <div style={{
-                      fontSize: "10px",
-                      color: "#16A34A",
-                      marginTop: "2px",
-                      textAlign: "center",
-                    }}>
-                      {awayWon ? "✓ Away" : "✓ Home"}
-                    </div>
-                  )}
 
                   {/* Edge */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>

@@ -83,13 +83,14 @@ export async function ingestOddsForSport(sport: keyof typeof SPORT_MAP) {
 
     // Detect games that have vanished from the feed (game started) and snapshot their closing lines
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    const nextDay = new Date(new Date(`${today}T12:00:00`).getTime() + 86400000).toISOString().split("T")[0];
     const { data: existingOdds } = await supabase
       .from("market_odds")
       .select("*")
       .eq("sport_key", sport)
       .eq("closing_line", false)
       .gte("commence_time", `${today}T00:00:00Z`)
-      .lt("commence_time", `${today}T23:59:59Z`);
+      .lt("commence_time", `${nextDay}T12:00:00Z`);
 
     const vanishedGameIds = new Set(
       (existingOdds ?? [])
@@ -224,6 +225,7 @@ export async function ingestAllOdds() {
     ingestOddsForSport("nba"),
     ingestOddsForSport("mlb"),
     ingestOddsForSport("ncaab"),
+    ingestOddsForSport("nhl"),
   ]);
   return results;
 }

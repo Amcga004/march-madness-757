@@ -58,11 +58,12 @@ export async function computeConsensusForDate(date: string) {
     .eq("game_date", date)
     .eq("is_stale", false);
 
+  const nextDay = new Date(new Date(`${date}T12:00:00`).getTime() + 86400000).toISOString().split("T")[0];
   const { data: marketOdds } = await supabase
     .from("market_odds")
     .select("*")
     .gte("commence_time", `${date}T00:00:00Z`)
-    .lt("commence_time", `${date}T23:59:59Z`);
+    .lt("commence_time", `${nextDay}T12:00:00Z`);
 
   if (!modelOutputs || !marketOdds) return { ok: false, error: "No data found" };
 
@@ -151,11 +152,12 @@ export async function generateSignalsForDate(date: string) {
     return { ok: true, signalsGenerated: 0, message: "No consensus data" };
   }
 
+  const nextDay = new Date(new Date(`${date}T12:00:00`).getTime() + 86400000).toISOString().split("T")[0];
   const { data: marketOdds } = await supabase
     .from("market_odds")
     .select("*")
     .gte("commence_time", `${date}T00:00:00Z`)
-    .lt("commence_time", `${date}T23:59:59Z`);
+    .lt("commence_time", `${nextDay}T12:00:00Z`);
 
   let generated = 0;
 
