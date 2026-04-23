@@ -59,6 +59,7 @@ export default function GolfTournamentCard({ tournamentName, roundStatus, player
         </span>
       </div>
 
+      <div className="golf-table-wrap">
       {/* Column headers */}
       <div style={{
         display: "grid",
@@ -68,7 +69,7 @@ export default function GolfTournamentCard({ tournamentName, roundStatus, player
         borderBottom: "0.5px solid #1E2433",
       }}>
         {["POS", "PLAYER", "SCORE", "TODAY", "THRU", "R1", "R2", "R3", "R4"].map((col, i) => (
-          <span key={i} style={{
+          <span key={i} className={i === 6 ? "golf-col-r2" : i === 7 ? "golf-col-r3" : i === 8 ? "golf-col-r4" : undefined} style={{
             fontSize: "10px",
             color: "#6B7280",
             textTransform: "uppercase",
@@ -119,17 +120,21 @@ export default function GolfTournamentCard({ tournamentName, roundStatus, player
           <span style={{ fontSize: "11px", color: "#6B7280", textAlign: "center" }}>
             {player.thru}
           </span>
-          {[player.r1, player.r2, player.r3, player.r4].map((r, i) => (
-            <span key={i} style={{
-              fontSize: "11px",
-              color: (r === null || r === undefined || isNaN(r as number)) ? "#4B5563" : "#9CA3AF",
-              textAlign: "center",
-            }}>
-              {(r === null || r === undefined || isNaN(r as number)) ? "--" : r}
-            </span>
-          ))}
+          <span className="golf-col-r2" style={{ fontSize: "11px", color: (player.r1 === null || player.r1 === undefined || isNaN(player.r1)) ? "#4B5563" : "#9CA3AF", textAlign: "center" }}>
+            {(player.r1 === null || player.r1 === undefined || isNaN(player.r1)) ? "--" : player.r1}
+          </span>
+          <span className="golf-col-r2" style={{ fontSize: "11px", color: (player.r2 === null || player.r2 === undefined || isNaN(player.r2)) ? "#4B5563" : "#9CA3AF", textAlign: "center" }}>
+            {(player.r2 === null || player.r2 === undefined || isNaN(player.r2)) ? "--" : player.r2}
+          </span>
+          <span className="golf-col-r3" style={{ fontSize: "11px", color: (player.r3 === null || player.r3 === undefined || isNaN(player.r3)) ? "#4B5563" : "#9CA3AF", textAlign: "center" }}>
+            {(player.r3 === null || player.r3 === undefined || isNaN(player.r3)) ? "--" : player.r3}
+          </span>
+          <span className="golf-col-r4" style={{ fontSize: "11px", color: (player.r4 === null || player.r4 === undefined || isNaN(player.r4)) ? "#4B5563" : "#9CA3AF", textAlign: "center" }}>
+            {(player.r4 === null || player.r4 === undefined || isNaN(player.r4)) ? "--" : player.r4}
+          </span>
         </div>
       ))}
+      </div>
 
       {/* Expand button */}
       {players.length > 10 && (

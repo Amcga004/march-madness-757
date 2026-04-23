@@ -245,6 +245,10 @@ export default function BettingSlateClient({
   return (
     <>
     <style>{`
+      * { box-sizing: border-box; }
+      body { overflow-x: hidden; }
+      .betting-page-root { max-width: 100vw; overflow-x: hidden; }
+      .mobile-details-link { display: inline-block; font-size: 11px; color: #EA6C0A; margin-top: 4px; text-decoration: none; }
       .col-headers { display: grid; }
       .game-row-desktop { display: grid; }
       .game-row-mobile { display: none; }
@@ -253,8 +257,12 @@ export default function BettingSlateClient({
         .game-row-desktop { display: none !important; }
         .game-row-mobile { display: block !important; }
       }
+      @media (max-width: 767px) {
+        .golf-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .golf-col-r2, .golf-col-r3, .golf-col-r4 { display: none !important; }
+      }
     `}</style>
-    <div style={{
+    <div className="betting-page-root" style={{
       width: "100%",
       maxWidth: "1200px",
       margin: "0 auto",
@@ -553,7 +561,11 @@ export default function BettingSlateClient({
                             <a href="/login" style={{ fontSize: "11px", color: "var(--color-text-secondary)", textDecoration: "none" }}>🔒 Sign in</a>
                           )
                         )}
-                        <span style={{ fontSize: "11px", color: "#EA6C0A", marginTop: "4px" }}>{expanded ? "Close ↑" : "Details →"}</span>
+                        <a
+                          href={`/betting/game/${game.id}?sport=${game.sportKey}`}
+                          className="mobile-details-link"
+                          onClick={(e) => e.stopPropagation()}
+                        >Details →</a>
                       </div>
                     </div>
                   </div>
