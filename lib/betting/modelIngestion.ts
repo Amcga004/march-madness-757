@@ -436,13 +436,254 @@ export async function ingestNhlModel(date: string) {
   }
 }
 
+// ─── MLB FANGRAPHS MODEL ──────────────────────────────────────────────────────
+
+function stripHtml(s: string): string {
+  return s.replace(/<[^>]+>/g, "").trim();
+}
+
+function normalizePitcherName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function fuzzyMatchPitcher(target: string, map: Map<string, any>): any | null {
+  const t = normalizePitcherName(target);
+  if (map.has(t)) return map.get(t);
+  // Try last name only
+  const lastName = t.split(" ").pop() ?? "";
+  for (const [key, val] of map) {
+    if (key.endsWith(lastName) && lastName.length > 3) return val;
+  }
+  return null;
+}
+
+function normalizeTeamName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z ]/g, "").trim();
+}
+
+function fuzzyMatchTeam(target: string, map: Map<string, any>): any | null {
+  const t = normalizeTeamName(target);
+  if (map.has(t)) return map.get(t);
+  // Match on last word (city vs full name: "NYY" won't match, but "Yankees" will)
+  for (const [key, val] of map) {
+    if (key.includes(t) || t.includes(key)) return val;
+    const keyLast = key.split(" ").pop() ?? "";
+    const tLast = t.split(" ").pop() ?? "";
+    if (keyLast === tLast && keyLast.length > 3) return val;
+  }
+  return null;
+}
+
+export async function ingestMlbModel(date: string) {
+  const supabase = createServiceClient();
+  const sourceKey = "mlb_fangraphs_model";
+
+  try {
+    // Fetch all three data sources in parallel
+    const [fgRes, mlbStatsRes, scheduleRes] = await Promise.all([
+      fetch(
+        "https://www.fangraphs.com/api/leaders/major-league/data?age=0&pos=all&stats=pit&lg=all&qual=0&season=2025&season1=2025&ind=0&team=0&pageitems=500",
+        { next: { revalidate: 0 } }
+      ),
+      fetch(
+        "https://statsapi.mlb.com/api/v1/teams/stats?season=2025&group=hitting&stats=season&sportId=1",
+        { next: { revalidate: 0 } }
+      ),
+      fetch(
+        `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=probablePitcher`,
+        { next: { revalidate: 0 } }
+      ),
+    ]);
+
+    if (!fgRes.ok) throw new Error(`FanGraphs fetch failed: ${fgRes.status}`);
+    if (!mlbStatsRes.ok) throw new Error(`MLB Stats API fetch failed: ${mlbStatsRes.status}`);
+    if (!scheduleRes.ok) throw new Error(`MLB schedule fetch failed: ${scheduleRes.status}`);
+
+    const [fgData, mlbStatsData, scheduleData] = await Promise.all([
+      fgRes.json(),
+      mlbStatsRes.json(),
+      scheduleRes.json(),
+    ]);
+
+    // Build pitcher xFIP lookup: normalized name → stats
+    const pitcherMap = new Map<string, any>();
+    for (const p of fgData.data ?? []) {
+      const name = normalizePitcherName(stripHtml(p.Name ?? ""));
+      if (name) {
+        pitcherMap.set(name, {
+          xFIP: p["xFIP"] ?? null,
+          FIP: p["FIP"] ?? null,
+          WHIP: p["WHIP"] ?? null,
+          kPct: p["K%"] ?? null,
+          bbPct: p["BB%"] ?? null,
+        });
+      }
+    }
+
+    // Build team OPS lookup: normalized team name → OPS stats
+    const teamOpsMap = new Map<string, any>();
+    for (const split of mlbStatsData.stats?.[0]?.splits ?? []) {
+      const name = normalizeTeamName(split.team?.name ?? "");
+      if (name) {
+        teamOpsMap.set(name, {
+          teamName: split.team.name,
+          ops: parseFloat(split.stat?.ops ?? "0"),
+          obp: parseFloat(split.stat?.obp ?? "0"),
+          slg: parseFloat(split.stat?.slg ?? "0"),
+        });
+      }
+    }
+
+    // Build probable pitcher lookup: team name → { homePitcher, awayPitcher }
+    const startersByGame: Array<{
+      gameId: string;
+      homeTeam: string;
+      awayTeam: string;
+      homePitcher: string | null;
+      awayPitcher: string | null;
+    }> = [];
+
+    for (const dateEntry of scheduleData.dates ?? []) {
+      for (const game of dateEntry.games ?? []) {
+        startersByGame.push({
+          gameId: String(game.gamePk),
+          homeTeam: game.teams?.home?.team?.name ?? "",
+          awayTeam: game.teams?.away?.team?.name ?? "",
+          homePitcher: game.teams?.home?.probablePitcher?.fullName ?? null,
+          awayPitcher: game.teams?.away?.probablePitcher?.fullName ?? null,
+        });
+      }
+    }
+
+    // Get today's MLB games from market_odds
+    const { start: windowStart, end: windowEnd } = getLogicalDateWindow(date);
+    const { data: allOdds } = await supabase
+      .from("market_odds")
+      .select("external_game_id, home_team, away_team, home_price, away_price, bookmaker, commence_time")
+      .eq("sport_key", "mlb")
+      .eq("market_type", "h2h")
+      .eq("closing_line", false)
+      .gte("commence_time", windowStart)
+      .lt("commence_time", windowEnd)
+      .gte("updated_at", windowStart);
+
+    if (!allOdds || allOdds.length === 0) {
+      return { ok: true, gamesUpserted: 0, note: "No MLB games found in market_odds" };
+    }
+
+    // Deduplicate: prefer draftkings for market implied prob
+    const gameMap = new Map<string, typeof allOdds[0]>();
+    for (const row of allOdds) {
+      const existing = gameMap.get(row.external_game_id);
+      if (!existing || (existing.bookmaker !== "draftkings" && row.bookmaker === "draftkings")) {
+        gameMap.set(row.external_game_id, row);
+      }
+    }
+    const games = Array.from(gameMap.values());
+
+    let upserted = 0;
+    let noStarters = 0;
+
+    for (const game of games) {
+      // Match to MLB schedule entry by team name
+      const scheduleEntry = startersByGame.find(
+        (s) =>
+          normalizeTeamName(s.homeTeam).includes(normalizeTeamName(game.home_team).split(" ").pop() ?? "") ||
+          normalizeTeamName(game.home_team).includes(normalizeTeamName(s.homeTeam).split(" ").pop() ?? "")
+      );
+
+      const homePitcherName = scheduleEntry?.homePitcher ?? null;
+      const awayPitcherName = scheduleEntry?.awayPitcher ?? null;
+
+      // Look up pitcher stats — fall back to league-average xFIP (4.20) if not found
+      const LEAGUE_AVG_XFIP = 4.20;
+      const homePitcherStats = homePitcherName ? fuzzyMatchPitcher(homePitcherName, pitcherMap) : null;
+      const awayPitcherStats = awayPitcherName ? fuzzyMatchPitcher(awayPitcherName, pitcherMap) : null;
+      const homeXFIP = homePitcherStats?.xFIP ?? LEAGUE_AVG_XFIP;
+      const awayXFIP = awayPitcherStats?.xFIP ?? LEAGUE_AVG_XFIP;
+
+      // Team offense
+      const homeOpsStats = fuzzyMatchTeam(game.home_team, teamOpsMap);
+      const awayOpsStats = fuzzyMatchTeam(game.away_team, teamOpsMap);
+      const LEAGUE_AVG_OPS = 0.720;
+      const homeOPS = homeOpsStats?.ops ?? LEAGUE_AVG_OPS;
+      const awayOPS = awayOpsStats?.ops ?? LEAGUE_AVG_OPS;
+
+      // Model probability
+      const pitcherEdge = (awayXFIP - homeXFIP) * 0.08;
+      const offenseEdge = (homeOPS - awayOPS) * 0.40;
+      const rawModelProb = 0.54 + pitcherEdge + offenseEdge;
+      const modelProb = Math.max(0.30, Math.min(0.75, rawModelProb));
+
+      // Market implied prob (devigged)
+      let marketHomeProb = 0.54;
+      if (game.home_price && game.away_price) {
+        const rawHome = americanToImpliedProb(game.home_price);
+        const rawAway = americanToImpliedProb(game.away_price);
+        marketHomeProb = rawHome / (rawHome + rawAway);
+      }
+
+      const homeWinProb = Math.max(0.30, Math.min(0.75, modelProb * 0.55 + marketHomeProb * 0.45));
+      const awayWinProb = 1 - homeWinProb;
+
+      if (!homePitcherName && !awayPitcherName) noStarters++;
+
+      await supabase
+        .from("model_outputs")
+        .upsert(
+          {
+            sport_key: "mlb",
+            source_key: sourceKey,
+            external_game_id: game.external_game_id,
+            game_date: date,
+            home_team: game.home_team,
+            away_team: game.away_team,
+            home_win_probability: homeWinProb,
+            away_win_probability: awayWinProb,
+            predicted_home_score: null,
+            predicted_away_score: null,
+            predicted_total: null,
+            model_metadata: {
+              homePitcher: homePitcherName,
+              awayPitcher: awayPitcherName,
+              homeXFIP,
+              awayXFIP,
+              homeOPS,
+              awayOPS,
+              pitcherEdge,
+              offenseEdge,
+              modelProb,
+              marketHomeProb,
+              homePitcherFound: !!homePitcherStats,
+              awayPitcherFound: !!awayPitcherStats,
+            },
+            fetched_at: new Date().toISOString(),
+            is_stale: false,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "source_key,external_game_id,game_date" }
+        );
+
+      upserted++;
+    }
+
+    await recordSyncSuccess(sourceKey);
+    return { ok: true, gamesUpserted: upserted, noStartersFound: noStarters, date };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    await recordSyncFailure(sourceKey, message);
+    return { ok: false, error: message };
+  }
+}
+
 export async function ingestAllModelData(date: string) {
-  const [kenpom, dunksAndThrees, mlbProxy, nhlModel] = await Promise.all([
+  const [kenpom, dunksAndThrees, mlbProxy, mlbModel, nhlModel] = await Promise.all([
     ingestKenpomPredictions(date),
     ingestDunksAndThreesPredictions(date),
     ingestMlbMarketProxy(date),
+    ingestMlbModel(date),
     ingestNhlModel(date),
   ]);
 
-  return { kenpom, dunksAndThrees, mlbProxy, nhlModel };
+  return { kenpom, dunksAndThrees, mlbProxy, mlbModel, nhlModel };
 }
