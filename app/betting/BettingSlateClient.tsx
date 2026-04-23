@@ -8,12 +8,12 @@
 // For debugging: always use useEffect(() => { console.log(...) }, [dep])
 // useEffect runs client-side only after hydration — no mismatch possible.
 
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import AuthButton from "@/app/components/AuthButton";
 import GolfTournamentCard from "./GolfTournamentCard";
-import { fetchSlateData, fetchGolfLeaderboard, savePick, fetchMyPicks } from "./actions";
+import { savePick, fetchMyPicks } from "./actions";
 
 const SPORT_LABELS: Record<string, string> = {
   nba: "NBA",
@@ -80,8 +80,7 @@ export default function BettingSlateClient({
   const [expandedGame, setExpandedGame] = useState<string | null>(null);
   const [liveGames, setLiveGames] = useState(games);
   const [liveGolf, setLiveGolf] = useState(golfLeaderboard);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const [currentUser, setCurrentUser] = useState(user);
   const userRef = useRef(currentUser);
   const [activeTab, setActiveTab] = useState<"slate" | "picks">("slate");
@@ -108,49 +107,9 @@ export default function BettingSlateClient({
     return () => subscription.unsubscribe();
   }, []);
 
-  const refresh = useCallback(async () => {
-    const todayET = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-
-    if (date !== todayET) return;
-
-    try {
-      setIsRefreshing(true);
-      const [slateData, golfData] = await Promise.all([
-        fetchSlateData(todayET, activeSport, userRef.current?.id ?? null),
-        golfTournamentId ? fetchGolfLeaderboard(golfTournamentId) : Promise.resolve(liveGolf),
-      ]);
-      const enriched = slateData.enrichedGames;
-      setLiveGames(enriched);
-      if (golfData.length > 0) setLiveGolf(golfData);
-      setLastUpdated(new Date());
-    } catch (e) {
-      console.error("[refresh] failed:", e);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [date, activeSport, golfTournamentId]);
-
-  useEffect(() => {
-    const interval = setInterval(refresh, 60000);
-    return () => clearInterval(interval);
-  }, [refresh]);
-
-  // Bfcache guard: if browser restores a stale snapshot showing a past date,
-  // redirect to today so the server re-renders with fresh data.
-  useEffect(() => {
-    if (date < todayET) {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("date");
-      window.location.replace(url.toString());
-    }
-  }, [date, todayET]);
-
   useEffect(() => {
     if (currentUser?.id) {
-      const hasSignals = liveGames.some((g: any) => g.signals?.length > 0);
-      if (!hasSignals) {
-        setTimeout(() => refresh(), 500);
-      }
+      // intentionally empty — kept for future use
     }
   }, [currentUser?.id]);
 
@@ -340,13 +299,6 @@ export default function BettingSlateClient({
               My Picks
             </button>
           )}
-          {isRefreshing ? (
-            <span style={{ fontSize: "11px", color: "#4B5563" }}>updating...</span>
-          ) : lastUpdated ? (
-            <span style={{ fontSize: "11px", color: "#4B5563" }}>
-              Updated {lastUpdated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-            </span>
-          ) : null}
           <AuthButton />
         </div>
       </div>
