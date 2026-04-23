@@ -80,7 +80,6 @@ export default function BettingSlateClient({
   const [expandedGame, setExpandedGame] = useState<string | null>(null);
   const [liveGames, setLiveGames] = useState(games);
   const [liveGolf, setLiveGolf] = useState(golfLeaderboard);
-  const [isMobile, setIsMobile] = useState(false);
 
   const [currentUser, setCurrentUser] = useState(user);
   const userRef = useRef(currentUser);
@@ -106,13 +105,6 @@ export default function BettingSlateClient({
       }
     });
     return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
   }, []);
 
   useEffect(() => {
@@ -251,6 +243,17 @@ export default function BettingSlateClient({
   const gridCols = "minmax(160px, 1.8fr) 65px 120px 90px 90px 90px 90px 120px 80px";
 
   return (
+    <>
+    <style>{`
+      .col-headers { display: grid; }
+      .game-row-desktop { display: grid; }
+      .game-row-mobile { display: none; }
+      @media (max-width: 767px) {
+        .col-headers { display: none !important; }
+        .game-row-desktop { display: none !important; }
+        .game-row-mobile { display: block !important; }
+      }
+    `}</style>
     <div style={{
       width: "100%",
       maxWidth: "1200px",
@@ -374,8 +377,8 @@ export default function BettingSlateClient({
             {SPORT_LABELS[sportKey] ?? sportKey}
           </div>
 
-          {/* Column headers — desktop only */}
-          {!isMobile && <div style={{ display: "grid", gridTemplateColumns: gridCols, padding: "5px 8px 4px", gap: "8px", borderBottom: "0.5px solid var(--color-border-tertiary)" }}>
+          {/* Column headers — hidden on mobile via CSS */}
+          <div className="col-headers" style={{ display: "grid", gridTemplateColumns: gridCols, padding: "5px 8px 4px", gap: "8px", borderBottom: "0.5px solid var(--color-border-tertiary)" }}>
             {([
               { label: "Matchup" },
               { label: "Time" },
@@ -425,7 +428,7 @@ export default function BettingSlateClient({
                 )}
               </span>
             ))}
-          </div>}
+          </div>
 
           {/* Rows */}
           {bySport[sportKey].map(game => {
@@ -441,12 +444,12 @@ export default function BettingSlateClient({
               && Number(game.homeScore) > Number(game.awayScore);
             return (
               <div key={game.id}>
-                {isMobile ? (
-                  /* ── Mobile card ── */
-                  <div
-                    onClick={() => setExpandedGame(expanded ? null : game.id)}
-                    style={{
-                      background: "#161B22",
+                {/* ── Mobile card (hidden on desktop via CSS) ── */}
+                <div
+                  className="game-row-mobile"
+                  onClick={() => setExpandedGame(expanded ? null : game.id)}
+                  style={{
+                    background: "#161B22",
                       borderRadius: "10px",
                       padding: "12px 14px",
                       marginBottom: "8px",
@@ -554,9 +557,9 @@ export default function BettingSlateClient({
                       </div>
                     </div>
                   </div>
-                ) : (
-                /* ── Desktop grid row ── */
+                {/* ── Desktop grid row (hidden on mobile via CSS) ── */}
                 <div
+                  className="game-row-desktop"
                   onClick={() => setExpandedGame(expanded ? null : game.id)}
                   style={{
                     display: "grid",
@@ -814,7 +817,6 @@ export default function BettingSlateClient({
                     </span>
                   </div>
                 </div>
-                )}
 
                 {/* Expanded detail */}
                 {expanded && (
@@ -1150,5 +1152,6 @@ export default function BettingSlateClient({
         </div>
       )}
     </div>
+    </>
   );
 }
