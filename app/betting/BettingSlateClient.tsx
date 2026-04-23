@@ -9,7 +9,7 @@
 // useEffect runs client-side only after hydration — no mismatch possible.
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import AuthButton from "@/app/components/AuthButton";
 import GolfTournamentCard from "./GolfTournamentCard";

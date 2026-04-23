@@ -253,12 +253,187 @@ export async function ingestMlbMarketProxy(date: string) {
   }
 }
 
+// ─── NHL STATS API MODEL ─────────────────────────────────────────────────────
+
+const NHL_TEAM_ALIASES: Record<string, string> = {
+  "montreal canadiens": "canadiens",
+  "toronto maple leafs": "maple leafs",
+  "ottawa senators": "senators",
+  "buffalo sabres": "sabres",
+  "boston bruins": "bruins",
+  "florida panthers": "panthers",
+  "tampa bay lightning": "lightning",
+  "detroit red wings": "red wings",
+  "carolina hurricanes": "hurricanes",
+  "new jersey devils": "devils",
+  "new york islanders": "islanders",
+  "new york rangers": "rangers",
+  "philadelphia flyers": "flyers",
+  "pittsburgh penguins": "penguins",
+  "washington capitals": "capitals",
+  "columbus blue jackets": "blue jackets",
+  "nashville predators": "predators",
+  "chicago blackhawks": "blackhawks",
+  "st. louis blues": "blues",
+  "winnipeg jets": "jets",
+  "minnesota wild": "wild",
+  "dallas stars": "stars",
+  "colorado avalanche": "avalanche",
+  "arizona coyotes": "coyotes",
+  "utah hockey club": "utah",
+  "vegas golden knights": "golden knights",
+  "anaheim ducks": "ducks",
+  "los angeles kings": "kings",
+  "san jose sharks": "sharks",
+  "seattle kraken": "kraken",
+  "calgary flames": "flames",
+  "edmonton oilers": "oilers",
+  "vancouver canucks": "canucks",
+};
+
+function normalizeNhlTeam(name: string): string {
+  const lower = name.toLowerCase().trim();
+  return NHL_TEAM_ALIASES[lower] ?? lower;
+}
+
+function teamNamesMatch(nhlApiName: string, oddsApiName: string): boolean {
+  const a = normalizeNhlTeam(nhlApiName);
+  const b = normalizeNhlTeam(oddsApiName);
+  if (a === b) return true;
+  // Partial: one contains the other (handles "St. Louis Blues" vs "Blues")
+  return a.includes(b) || b.includes(a);
+}
+
+export async function ingestNhlModel(date: string) {
+  const supabase = createServiceClient();
+  const sourceKey = "nhl_stats_api";
+
+  try {
+    // Fetch all 32 teams' season stats from the free NHL Stats API
+    const res = await fetch(
+      "https://api.nhle.com/stats/rest/en/team/summary?gameTypeId=2&cayenneExp=seasonId=20242025",
+      { next: { revalidate: 0 } }
+    );
+    if (!res.ok) throw new Error(`NHL Stats API fetch failed: ${res.status}`);
+    const { data: teamStats } = await res.json() as { data: any[] };
+
+    // Build lookup by normalized team name
+    const statsMap = new Map<string, any>();
+    for (const t of teamStats) {
+      const key = normalizeNhlTeam(t.teamFullName);
+      const gp = t.gamesPlayed;
+      const saTotal = t.shotsAgainstPerGame * gp;
+      statsMap.set(key, {
+        teamFullName: t.teamFullName,
+        gfPct: t.goalsFor / (t.goalsFor + t.goalsAgainst),
+        savePct: saTotal > 0 ? 1 - (t.goalsAgainst / saTotal) : 0.9,
+        pointPct: t.pointPct,
+        goalsForPerGame: t.goalsForPerGame,
+        goalsAgainstPerGame: t.goalsAgainstPerGame,
+        gamesPlayed: gp,
+      });
+    }
+
+    // Get today's NHL games from market_odds
+    const { start: windowStart, end: windowEnd } = getLogicalDateWindow(date);
+    const { data: allOdds } = await supabase
+      .from("market_odds")
+      .select("external_game_id, home_team, away_team, commence_time")
+      .eq("sport_key", "nhl")
+      .eq("market_type", "h2h")
+      .eq("closing_line", false)
+      .gte("commence_time", windowStart)
+      .lt("commence_time", windowEnd)
+      .gte("updated_at", windowStart);
+
+    if (!allOdds || allOdds.length === 0) {
+      return { ok: true, gamesUpserted: 0, note: "No NHL games found for date" };
+    }
+
+    // Deduplicate to one row per game
+    const gameMap = new Map<string, typeof allOdds[0]>();
+    for (const row of allOdds) {
+      if (!gameMap.has(row.external_game_id)) gameMap.set(row.external_game_id, row);
+    }
+    const games = Array.from(gameMap.values());
+
+    let upserted = 0;
+
+    for (const game of games) {
+      // Find matching stats by name
+      let homeStats: any = null;
+      let awayStats: any = null;
+      for (const [, stats] of statsMap) {
+        if (teamNamesMatch(stats.teamFullName, game.home_team)) homeStats = stats;
+        if (teamNamesMatch(stats.teamFullName, game.away_team)) awayStats = stats;
+      }
+
+      if (!homeStats || !awayStats) {
+        console.log(`[nhl-model] no stats match: home="${game.home_team}" away="${game.away_team}"`);
+        continue;
+      }
+
+      // Home win probability formula:
+      //   Base: 54% home ice advantage
+      //   GF% differential: each 1% of GF% difference ≈ 0.3% win prob shift
+      //   Save% differential: each 0.001 save% ≈ 0.15% win prob shift
+      const gfDiff = homeStats.gfPct - awayStats.gfPct;
+      const saveDiff = homeStats.savePct - awayStats.savePct;
+      const rawHomeProb = 0.54 + gfDiff * 0.30 + saveDiff * 1.50;
+      const homeWinProb = Math.max(0.25, Math.min(0.80, rawHomeProb));
+      const awayWinProb = 1 - homeWinProb;
+
+      await supabase
+        .from("model_outputs")
+        .upsert(
+          {
+            sport_key: "nhl",
+            source_key: sourceKey,
+            external_game_id: game.external_game_id,
+            game_date: date,
+            home_team: game.home_team,
+            away_team: game.away_team,
+            home_win_probability: homeWinProb,
+            away_win_probability: awayWinProb,
+            predicted_home_score: homeStats.goalsForPerGame ?? null,
+            predicted_away_score: awayStats.goalsForPerGame ?? null,
+            predicted_total: (homeStats.goalsForPerGame ?? 0) + (awayStats.goalsForPerGame ?? 0) || null,
+            model_metadata: {
+              homeGfPct: homeStats.gfPct,
+              awayGfPct: awayStats.gfPct,
+              homeSavePct: homeStats.savePct,
+              awaySavePct: awayStats.savePct,
+              homePointPct: homeStats.pointPct,
+              awayPointPct: awayStats.pointPct,
+              gfDiff,
+              saveDiff,
+            },
+            fetched_at: new Date().toISOString(),
+            is_stale: false,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "source_key,external_game_id,game_date" }
+        );
+
+      upserted++;
+    }
+
+    await recordSyncSuccess(sourceKey);
+    return { ok: true, gamesUpserted: upserted, date, teamsLoaded: statsMap.size };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    await recordSyncFailure(sourceKey, message);
+    return { ok: false, error: message };
+  }
+}
+
 export async function ingestAllModelData(date: string) {
-  const [kenpom, dunksAndThrees, mlbProxy] = await Promise.all([
+  const [kenpom, dunksAndThrees, mlbProxy, nhlModel] = await Promise.all([
     ingestKenpomPredictions(date),
     ingestDunksAndThreesPredictions(date),
     ingestMlbMarketProxy(date),
+    ingestNhlModel(date),
   ]);
 
-  return { kenpom, dunksAndThrees, mlbProxy };
+  return { kenpom, dunksAndThrees, mlbProxy, nhlModel };
 }
