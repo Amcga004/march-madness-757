@@ -177,18 +177,33 @@ export async function ingestMlbMarketProxy(date: string) {
 
   try {
     // Use market odds as the model proxy for MLB
-    const { data: odds } = await supabase
+    // NOTE: Use nextDay+12h window, NOT date+23:59:59Z
+    // Late ET games (8pm-midnight ET) become next UTC day
+    // e.g. 10:30pm ET = 02:30 UTC next day — would be missed otherwise
+    const nextDay = new Date(new Date(`${date}T12:00:00`).getTime() + 86400000).toISOString().split("T")[0];
+    const { data: allOdds } = await supabase
       .from("market_odds")
-      .select("external_game_id, home_team, away_team, home_price, away_price, commence_time")
+      .select("external_game_id, home_team, away_team, home_price, away_price, commence_time, bookmaker")
       .eq("sport_key", "mlb")
       .eq("market_type", "h2h")
-      .eq("bookmaker", "draftkings")
+      .eq("closing_line", false)
+      .in("bookmaker", ["draftkings", "fanduel"])
       .gte("commence_time", `${date}T00:00:00Z`)
-      .lt("commence_time", `${date}T23:59:59Z`);
+      .lt("commence_time", `${nextDay}T12:00:00Z`);
 
-    if (!odds || odds.length === 0) {
+    if (!allOdds || allOdds.length === 0) {
       return { ok: true, gamesUpserted: 0, note: "No MLB odds found for date" };
     }
+
+    // Deduplicate: one row per game, prefer draftkings over fanduel
+    const gameMap = new Map<string, typeof allOdds[0]>();
+    for (const row of allOdds) {
+      const existing = gameMap.get(row.external_game_id);
+      if (!existing || (existing.bookmaker !== "draftkings" && row.bookmaker === "draftkings")) {
+        gameMap.set(row.external_game_id, row);
+      }
+    }
+    const odds = Array.from(gameMap.values());
 
     let upserted = 0;
 
@@ -220,7 +235,8 @@ export async function ingestMlbMarketProxy(date: string) {
             predicted_total: null,
             model_metadata: {
               proxy: true,
-              note: "Market-implied probability from DraftKings moneyline",
+              note: `Market-implied probability from ${game.bookmaker} moneyline`,
+              bookmaker: game.bookmaker,
               homePrice: game.home_price,
               awayPrice: game.away_price,
             },
