@@ -309,36 +309,31 @@ export async function ingestNhlModel(date: string) {
   const sourceKey = "nhl_stats_api";
 
   try {
-    // Fetch all 32 teams' season stats from the free NHL Stats API
+    // Fetch 5v5 percentages: satPctClose (score-adjusted Corsi%), savePct5v5, shootingPct5v5
     const res = await fetch(
-      "https://api.nhle.com/stats/rest/en/team/summary?gameTypeId=2&cayenneExp=seasonId=20242025",
+      "https://api.nhle.com/stats/rest/en/team/percentages?cayenneExp=seasonId=20242025&gameTypeId=2",
       { next: { revalidate: 0 } }
     );
     if (!res.ok) throw new Error(`NHL Stats API fetch failed: ${res.status}`);
     const { data: teamStats } = await res.json() as { data: any[] };
 
-    // Build lookup by normalized team name
     const statsMap = new Map<string, any>();
     for (const t of teamStats) {
       const key = normalizeNhlTeam(t.teamFullName);
-      const gp = t.gamesPlayed;
-      const saTotal = t.shotsAgainstPerGame * gp;
       statsMap.set(key, {
         teamFullName: t.teamFullName,
-        gfPct: t.goalsFor / (t.goalsFor + t.goalsAgainst),
-        savePct: saTotal > 0 ? 1 - (t.goalsAgainst / saTotal) : 0.9,
-        pointPct: t.pointPct,
-        goalsForPerGame: t.goalsForPerGame,
-        goalsAgainstPerGame: t.goalsAgainstPerGame,
-        gamesPlayed: gp,
+        satPctClose: t.satPctClose ?? 0.5,
+        savePct5v5: t.savePct5v5 ?? 0.9,
+        shootingPct5v5: t.shootingPct5v5 ?? 0.085,
+        goalsForPct: t.goalsForPct ?? 0.5,
       });
     }
 
-    // Get today's NHL games from market_odds
+    // Get today's NHL games from market_odds (h2h only, one row per game)
     const { start: windowStart, end: windowEnd } = getLogicalDateWindow(date);
     const { data: allOdds } = await supabase
       .from("market_odds")
-      .select("external_game_id, home_team, away_team, commence_time")
+      .select("external_game_id, home_team, away_team, home_price, away_price, bookmaker, commence_time")
       .eq("sport_key", "nhl")
       .eq("market_type", "h2h")
       .eq("closing_line", false)
@@ -350,17 +345,19 @@ export async function ingestNhlModel(date: string) {
       return { ok: true, gamesUpserted: 0, note: "No NHL games found for date" };
     }
 
-    // Deduplicate to one row per game
+    // Deduplicate: one row per game, prefer draftkings then fanduel for market implied prob
     const gameMap = new Map<string, typeof allOdds[0]>();
     for (const row of allOdds) {
-      if (!gameMap.has(row.external_game_id)) gameMap.set(row.external_game_id, row);
+      const existing = gameMap.get(row.external_game_id);
+      if (!existing || (existing.bookmaker !== "draftkings" && row.bookmaker === "draftkings")) {
+        gameMap.set(row.external_game_id, row);
+      }
     }
     const games = Array.from(gameMap.values());
 
     let upserted = 0;
 
     for (const game of games) {
-      // Find matching stats by name
       let homeStats: any = null;
       let awayStats: any = null;
       for (const [, stats] of statsMap) {
@@ -373,14 +370,23 @@ export async function ingestNhlModel(date: string) {
         continue;
       }
 
-      // Home win probability formula:
-      //   Base: 54% home ice advantage
-      //   GF% differential: each 1% of GF% difference ≈ 0.3% win prob shift
-      //   Save% differential: each 0.001 save% ≈ 0.15% win prob shift
-      const gfDiff = homeStats.gfPct - awayStats.gfPct;
-      const saveDiff = homeStats.savePct - awayStats.savePct;
-      const rawHomeProb = 0.54 + gfDiff * 0.30 + saveDiff * 1.50;
-      const homeWinProb = Math.max(0.25, Math.min(0.80, rawHomeProb));
+      // Model probability using score-adjusted Corsi%, save%, and shooting%
+      const satDiff = homeStats.satPctClose - awayStats.satPctClose;
+      const saveDiff = homeStats.savePct5v5 - awayStats.savePct5v5;
+      const shotDiff = homeStats.shootingPct5v5 - awayStats.shootingPct5v5;
+      const rawModelProb = 0.54 + satDiff * 0.60 + saveDiff * 2.50 + shotDiff * 1.50;
+      const modelProb = Math.max(0.25, Math.min(0.80, rawModelProb));
+
+      // Market implied probability (devigged) for blending
+      let marketHomeProb = 0.54; // fallback to neutral home advantage
+      if (game.home_price && game.away_price) {
+        const rawHome = americanToImpliedProb(game.home_price);
+        const rawAway = americanToImpliedProb(game.away_price);
+        marketHomeProb = rawHome / (rawHome + rawAway);
+      }
+
+      // Blend 55% model / 45% market to prevent extreme divergence
+      const homeWinProb = Math.max(0.25, Math.min(0.80, modelProb * 0.55 + marketHomeProb * 0.45));
       const awayWinProb = 1 - homeWinProb;
 
       await supabase
@@ -395,18 +401,21 @@ export async function ingestNhlModel(date: string) {
             away_team: game.away_team,
             home_win_probability: homeWinProb,
             away_win_probability: awayWinProb,
-            predicted_home_score: homeStats.goalsForPerGame ?? null,
-            predicted_away_score: awayStats.goalsForPerGame ?? null,
-            predicted_total: (homeStats.goalsForPerGame ?? 0) + (awayStats.goalsForPerGame ?? 0) || null,
+            predicted_home_score: null,
+            predicted_away_score: null,
+            predicted_total: null,
             model_metadata: {
-              homeGfPct: homeStats.gfPct,
-              awayGfPct: awayStats.gfPct,
-              homeSavePct: homeStats.savePct,
-              awaySavePct: awayStats.savePct,
-              homePointPct: homeStats.pointPct,
-              awayPointPct: awayStats.pointPct,
-              gfDiff,
+              homeSatPctClose: homeStats.satPctClose,
+              awaySatPctClose: awayStats.satPctClose,
+              homeSavePct5v5: homeStats.savePct5v5,
+              awaySavePct5v5: awayStats.savePct5v5,
+              homeShootingPct5v5: homeStats.shootingPct5v5,
+              awayShootingPct5v5: awayStats.shootingPct5v5,
+              modelProb,
+              marketHomeProb,
+              satDiff,
               saveDiff,
+              shotDiff,
             },
             fetched_at: new Date().toISOString(),
             is_stale: false,
