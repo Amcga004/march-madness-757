@@ -68,6 +68,26 @@ export async function computeConsensusForDate(date: string) {
 
   if (!modelOutputs || !marketOdds) return { ok: false, error: "No data found" };
 
+  // Priority order: prefer real models over market proxies for the same game
+  const SOURCE_PRIORITY: Record<string, number> = {
+    dunks_and_threes:    1,
+    mlb_fangraphs_model: 2,
+    nhl_stats_api:       3,
+    kenpom:              4,
+    baseball_savant:     5,
+  };
+
+  // Deduplicate: one model row per game, highest priority wins
+  const bestModelByGame = new Map<string, any>();
+  for (const model of modelOutputs) {
+    const existing = bestModelByGame.get(model.external_game_id);
+    const modelPriority = SOURCE_PRIORITY[model.source_key] ?? 99;
+    const existingPriority = existing ? (SOURCE_PRIORITY[existing.source_key] ?? 99) : Infinity;
+    if (modelPriority < existingPriority) {
+      bestModelByGame.set(model.external_game_id, model);
+    }
+  }
+
   // Group odds by game
   const oddsByGame = new Map<string, any[]>();
   for (const odd of marketOdds) {
@@ -78,7 +98,7 @@ export async function computeConsensusForDate(date: string) {
 
   let computed = 0;
 
-  for (const model of modelOutputs) {
+  for (const model of bestModelByGame.values()) {
     const gameOdds = oddsByGame.get(model.external_game_id) ?? [];
     const h2hOdds = gameOdds.filter((o) => o.market_type === "h2h");
 
@@ -98,7 +118,7 @@ export async function computeConsensusForDate(date: string) {
     const fairHomeProb = marketHomeProb / vigTotal;
     const fairAwayProb = marketAwayProb / vigTotal;
 
-    // Consensus = model probability (market proxy for MLB)
+    // Consensus = model probability (falls back to fair market prob if model has no prediction)
     const consensusHomeProb = model.home_win_probability ?? fairHomeProb;
     const consensusAwayProb = model.away_win_probability ?? fairAwayProb;
 
