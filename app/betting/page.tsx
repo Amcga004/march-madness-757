@@ -1,6 +1,7 @@
 import { getUser } from "@/lib/auth/authHelpers";
 import { createServiceClient } from "@/lib/supabase/service";
 import BettingSlateClient from "./BettingSlateClient";
+import { getLogicalGameDate } from "@/lib/utils/dateUtils";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +11,7 @@ export default async function BettingPage({
   searchParams: Promise<{ date?: string; sport?: string }>;
 }) {
   const user = await getUser();
-  const today = new Date().toLocaleDateString("en-CA", {
-    timeZone: "America/New_York",
-  }); // Returns YYYY-MM-DD in ET
+  const today = getLogicalGameDate();
   const params = await searchParams;
   const date = params.date ?? today;
   const sport = params.sport ?? "all";
