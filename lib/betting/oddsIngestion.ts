@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { recordSyncSuccess, recordSyncFailure, saveSnapshot } from "@/lib/platform/sourceRegistry";
+import { getLogicalGameDate, getLogicalDateWindow } from "@/lib/utils/dateUtils";
 
 const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
 
@@ -82,18 +83,15 @@ export async function ingestOddsForSport(sport: keyof typeof SPORT_MAP) {
     const incomingGameIds = new Set(games.map((g: any) => g.id));
 
     // Detect games that have vanished from the feed (game started) and snapshot their closing lines
-    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-    // NOTE: Use nextDay+12h window, NOT date+23:59:59Z
-    // Late ET games (8pm-midnight ET) become next UTC day
-    // e.g. 10:30pm ET = 02:30 UTC next day — would be missed otherwise
-    const nextDay = new Date(new Date(`${today}T12:00:00`).getTime() + 86400000).toISOString().split("T")[0];
+    const today = getLogicalGameDate();
+    const { start: windowStart, end: windowEnd } = getLogicalDateWindow(today);
     const { data: existingOdds } = await supabase
       .from("market_odds")
       .select("*")
       .eq("sport_key", sport)
       .eq("closing_line", false)
-      .gte("commence_time", `${today}T00:00:00Z`)
-      .lt("commence_time", `${nextDay}T12:00:00Z`);
+      .gte("commence_time", windowStart)
+      .lt("commence_time", windowEnd);
 
     const vanishedGameIds = new Set(
       (existingOdds ?? [])
@@ -214,10 +212,12 @@ export async function ingestOddsForSport(sport: keyof typeof SPORT_MAP) {
       }
     }
 
+    console.log(`[ingestOddsForSport] ${sport}: gamesFound=${games.length}, oddsUpserted=${upserted}, closingLineSnapshots=${vanishedGameIds.size}`);
     await recordSyncSuccess(sourceKey);
     return { ok: true, sport, gamesFound: games.length, oddsUpserted: upserted, closingLineSnapshots: vanishedGameIds.size };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[ingestOddsForSport] ${sport} FAILED:`, message);
     await recordSyncFailure(sourceKey, message);
     return { ok: false, sport, error: message };
   }

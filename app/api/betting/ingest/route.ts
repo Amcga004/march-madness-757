@@ -3,6 +3,7 @@ import { ingestAllOdds } from "@/lib/betting/oddsIngestion";
 import { ingestAllModelData } from "@/lib/betting/modelIngestion";
 import { ingestAllStats } from "@/lib/betting/statsIngestion";
 import { runFullBettingSync } from "@/lib/betting/evEngine";
+import { getLogicalGameDate } from "@/lib/utils/dateUtils";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     const odds = await ingestAllOdds();
 
     // Step 2 — Ingest models (MLB proxy reads from market_odds)
-    const today = new Date().toISOString().split("T")[0];
+    const today = getLogicalGameDate();
     const models = await ingestAllModelData(today);
 
     // Step 3 — Ingest stats in parallel (independent)

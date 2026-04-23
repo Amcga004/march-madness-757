@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { getLogicalGameDate } from "@/lib/utils/dateUtils";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const today = getLogicalGameDate();
   const dateStr = today.replace(/-/g, "");
 
   // Fetch all ESPN sports in parallel (free, no API key)

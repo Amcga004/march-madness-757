@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { recordSyncSuccess, recordSyncFailure } from "@/lib/platform/sourceRegistry";
 import { americanToImpliedProb } from "@/lib/betting/oddsIngestion";
+import { getLogicalDateWindow } from "@/lib/utils/dateUtils";
 
 // ─── KENPOM (CBB) ────────────────────────────────────────────────────────────
 
@@ -114,12 +115,9 @@ export async function ingestDunksAndThreesPredictions(date: string) {
         .select("external_game_id")
         .eq("sport_key", "nba")
         .eq("market_type", "h2h")
-        // NOTE: Use nextDay+12h window, NOT date+23:59:59Z
-        // Late ET games (8pm-midnight ET) become next UTC day
-        // e.g. 10:30pm ET = 02:30 UTC next day — would be missed otherwise
         .ilike("home_team", `%${game.home_team_name}%`)
         .ilike("away_team", `%${game.away_team_name}%`)
-        .gte("updated_at", `${date}T00:00:00Z`)
+        .gte("updated_at", getLogicalDateWindow(date).start)
         .limit(1)
         .maybeSingle();
 
@@ -177,10 +175,7 @@ export async function ingestMlbMarketProxy(date: string) {
 
   try {
     // Use market odds as the model proxy for MLB
-    // NOTE: Use nextDay+12h window, NOT date+23:59:59Z
-    // Late ET games (8pm-midnight ET) become next UTC day
-    // e.g. 10:30pm ET = 02:30 UTC next day — would be missed otherwise
-    const nextDay = new Date(new Date(`${date}T12:00:00`).getTime() + 86400000).toISOString().split("T")[0];
+    const { start: windowStart, end: windowEnd } = getLogicalDateWindow(date);
     const { data: allOdds } = await supabase
       .from("market_odds")
       .select("external_game_id, home_team, away_team, home_price, away_price, commence_time, bookmaker")
@@ -188,9 +183,9 @@ export async function ingestMlbMarketProxy(date: string) {
       .eq("market_type", "h2h")
       .eq("closing_line", false)
       .in("bookmaker", ["draftkings", "fanduel"])
-      .gte("commence_time", `${date}T00:00:00Z`)
-      .lt("commence_time", `${nextDay}T12:00:00Z`)
-      .gte("updated_at", `${date}T00:00:00Z`);
+      .gte("commence_time", windowStart)
+      .lt("commence_time", windowEnd)
+      .gte("updated_at", windowStart);
 
     if (!allOdds || allOdds.length === 0) {
       return { ok: true, gamesUpserted: 0, note: "No MLB odds found for date" };

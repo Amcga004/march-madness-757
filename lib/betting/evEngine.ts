@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { americanToImpliedProb } from "@/lib/betting/oddsIngestion";
+import { getLogicalDateWindow } from "@/lib/utils/dateUtils";
 
 type SignalTier = "strong_value" | "lean_value" | "fair" | "lean_avoid" | "avoid";
 
@@ -58,15 +59,12 @@ export async function computeConsensusForDate(date: string) {
     .eq("game_date", date)
     .eq("is_stale", false);
 
-  // NOTE: Use nextDay+12h window, NOT date+23:59:59Z
-  // Late ET games (8pm-midnight ET) become next UTC day
-  // e.g. 10:30pm ET = 02:30 UTC next day — would be missed otherwise
-  const nextDay = new Date(new Date(`${date}T12:00:00`).getTime() + 86400000).toISOString().split("T")[0];
+  const { start: windowStart, end: windowEnd } = getLogicalDateWindow(date);
   const { data: marketOdds } = await supabase
     .from("market_odds")
     .select("*")
-    .gte("commence_time", `${date}T00:00:00Z`)
-    .lt("commence_time", `${nextDay}T12:00:00Z`);
+    .gte("commence_time", windowStart)
+    .lt("commence_time", windowEnd);
 
   if (!modelOutputs || !marketOdds) return { ok: false, error: "No data found" };
 
@@ -155,15 +153,12 @@ export async function generateSignalsForDate(date: string) {
     return { ok: true, signalsGenerated: 0, message: "No consensus data" };
   }
 
-  // NOTE: Use nextDay+12h window, NOT date+23:59:59Z
-  // Late ET games (8pm-midnight ET) become next UTC day
-  // e.g. 10:30pm ET = 02:30 UTC next day — would be missed otherwise
-  const nextDay = new Date(new Date(`${date}T12:00:00`).getTime() + 86400000).toISOString().split("T")[0];
+  const { start: windowStart, end: windowEnd } = getLogicalDateWindow(date);
   const { data: marketOdds } = await supabase
     .from("market_odds")
     .select("*")
-    .gte("commence_time", `${date}T00:00:00Z`)
-    .lt("commence_time", `${nextDay}T12:00:00Z`);
+    .gte("commence_time", windowStart)
+    .lt("commence_time", windowEnd);
 
   let generated = 0;
 
