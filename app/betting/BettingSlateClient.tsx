@@ -80,6 +80,7 @@ export default function BettingSlateClient({
   const [expandedGame, setExpandedGame] = useState<string | null>(null);
   const [liveGames, setLiveGames] = useState(games);
   const [liveGolf, setLiveGolf] = useState(golfLeaderboard);
+  const [isMobile, setIsMobile] = useState(false);
 
   const [currentUser, setCurrentUser] = useState(user);
   const userRef = useRef(currentUser);
@@ -108,10 +109,11 @@ export default function BettingSlateClient({
   }, []);
 
   useEffect(() => {
-    if (currentUser?.id) {
-      // intentionally empty — kept for future use
-    }
-  }, [currentUser?.id]);
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   useEffect(() => {
     const orlDet = liveGames.find((g: any) =>
@@ -372,8 +374,8 @@ export default function BettingSlateClient({
             {SPORT_LABELS[sportKey] ?? sportKey}
           </div>
 
-          {/* Column headers */}
-          <div style={{ display: "grid", gridTemplateColumns: gridCols, padding: "5px 8px 4px", gap: "8px", borderBottom: "0.5px solid var(--color-border-tertiary)" }}>
+          {/* Column headers — desktop only */}
+          {!isMobile && <div style={{ display: "grid", gridTemplateColumns: gridCols, padding: "5px 8px 4px", gap: "8px", borderBottom: "0.5px solid var(--color-border-tertiary)" }}>
             {([
               { label: "Matchup" },
               { label: "Time" },
@@ -423,7 +425,7 @@ export default function BettingSlateClient({
                 )}
               </span>
             ))}
-          </div>
+          </div>}
 
           {/* Rows */}
           {bySport[sportKey].map(game => {
@@ -439,6 +441,121 @@ export default function BettingSlateClient({
               && Number(game.homeScore) > Number(game.awayScore);
             return (
               <div key={game.id}>
+                {isMobile ? (
+                  /* ── Mobile card ── */
+                  <div
+                    onClick={() => setExpandedGame(expanded ? null : game.id)}
+                    style={{
+                      background: "#161B22",
+                      borderRadius: "10px",
+                      padding: "12px 14px",
+                      marginBottom: "8px",
+                      border: "1px solid #21262D",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {/* Teams + scores */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        {getTeamLogo(game.awayTeam, game, "away") && (
+                          <img src={getTeamLogo(game.awayTeam, game, "away")!} alt={game.awayTeam} width={14} height={14} style={{ objectFit: "contain" }} />
+                        )}
+                        <span style={{ fontSize: "14px", fontWeight: 500, color: awayWon ? "#F1F3F5" : "#94A3B8" }}>
+                          {game.awayTeam}{awayWon && <span style={{ marginLeft: "4px", fontSize: "11px", color: "#16A34A" }}>✓</span>}
+                        </span>
+                        {game.awayRecord && <span style={{ fontSize: "10px", color: "#4B5563" }}>{game.awayRecord}</span>}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        {(game.isLive || game.isFinal) && game.awayScore !== null && (
+                          <span style={{ fontSize: "15px", fontWeight: 700, color: awayWon ? "#F1F3F5" : "#6B7280" }}>{game.awayScore}</span>
+                        )}
+                        {game.isFinal ? (
+                          <span style={{ fontSize: "10px", color: "#6B7280" }}>Final</span>
+                        ) : game.isLive ? (
+                          <span style={{ fontSize: "10px", color: "#EA6C0A", fontWeight: 500 }}>{game.statusDetail}</span>
+                        ) : (
+                          <span style={{ fontSize: "10px", color: "#6B7280" }}>{formatTime(game.commenceTime)}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        {getTeamLogo(game.homeTeam, game, "home") && (
+                          <img src={getTeamLogo(game.homeTeam, game, "home")!} alt={game.homeTeam} width={14} height={14} style={{ objectFit: "contain" }} />
+                        )}
+                        <span style={{ fontSize: "14px", fontWeight: 500, color: "#F1F3F5" }}>
+                          {game.homeTeam}{homeWon && <span style={{ marginLeft: "4px", fontSize: "11px", color: "#16A34A" }}>✓</span>}
+                        </span>
+                        {game.homeRecord && <span style={{ fontSize: "10px", color: "#4B5563" }}>{game.homeRecord}</span>}
+                      </div>
+                      {(game.isLive || game.isFinal) && game.homeScore !== null && (
+                        <span style={{ fontSize: "15px", fontWeight: 700, color: homeWon ? "#F1F3F5" : "#6B7280" }}>{game.homeScore}</span>
+                      )}
+                    </div>
+
+                    {/* MLB pitchers */}
+                    {game.sportKey === "mlb" && (() => {
+                      const home = mlbStartersByTeam[game.homeTeam];
+                      const away = mlbStartersByTeam[game.awayTeam];
+                      if (!home && !away) return null;
+                      return (
+                        <div style={{ fontSize: "11px", color: "#6B7280", marginBottom: "10px" }}>
+                          <span style={{ color: away?.confirmed ? "#9CA3AF" : "#D97706" }}>{away?.pitcher ?? "TBD"}</span>
+                          <span style={{ color: "#4B5563" }}> vs </span>
+                          <span style={{ color: home?.confirmed ? "#9CA3AF" : "#D97706" }}>{home?.pitcher ?? "TBD"}</span>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Divider */}
+                    <div style={{ height: "0.5px", background: "#21262D", marginBottom: "10px" }} />
+
+                    {/* Best line + edge */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                        <span style={{ fontSize: "10px", color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Best Line</span>
+                        {activeMarket === "totals" ? (() => {
+                          const totalsPool = preferClosing(game.odds, game).filter((o: any) => o.market_type === "totals");
+                          let bestOverRow: any = null;
+                          let bestUnderRow: any = null;
+                          for (const o of totalsPool) {
+                            if (o.over_price != null && (!bestOverRow || o.over_price > bestOverRow.over_price)) bestOverRow = o;
+                            if (o.under_price != null && (!bestUnderRow || o.under_price > bestUnderRow.under_price)) bestUnderRow = o;
+                          }
+                          const lineValue = bestOverRow?.line_value ?? bestUnderRow?.line_value ?? null;
+                          return <>
+                            {lineValue != null && <span style={{ fontSize: "12px", color: "#EA6C0A", fontWeight: 600 }}>O/U {lineValue}</span>}
+                            <span style={{ fontSize: "12px" }}><strong>O {fmtOdds(bestOverRow?.over_price ?? null)}</strong>{bestOverRow && <span style={{ color: "#6B7280", fontSize: "10px" }}> {BOOK_LABELS[bestOverRow.bookmaker] ?? bestOverRow.bookmaker}</span>}</span>
+                            <span style={{ fontSize: "12px" }}><strong>U {fmtOdds(bestUnderRow?.under_price ?? null)}</strong>{bestUnderRow && <span style={{ color: "#6B7280", fontSize: "10px" }}> {BOOK_LABELS[bestUnderRow.bookmaker] ?? bestUnderRow.bookmaker}</span>}</span>
+                          </>;
+                        })() : <>
+                          <span style={{ fontSize: "12px" }}><strong>{fmtOdds(bestAway?.price ?? null)}</strong>{bestAway && <span style={{ color: "#6B7280", fontSize: "10px" }}> {BOOK_LABELS[bestAway.bookmaker] ?? bestAway.bookmaker}</span>}</span>
+                          <span style={{ fontSize: "12px" }}><strong>{fmtOdds(bestHome?.price ?? null)}</strong>{bestHome && <span style={{ color: "#6B7280", fontSize: "10px" }}> {BOOK_LABELS[bestHome.bookmaker] ?? bestHome.bookmaker}</span>}</span>
+                        </>}
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "3px", alignItems: "flex-end" }}>
+                        {!game.isLive && !game.isFinal && (
+                          currentUser ? (
+                            topSignal ? (
+                              <>
+                                <span style={{ fontSize: "14px", fontWeight: 600, color: TIER_CONFIG[topSignal.tier]?.color }}>
+                                  {topSignal.edge_pct > 0 ? "+" : ""}{topSignal.edge_pct}%
+                                </span>
+                                <span style={{ fontSize: "10px", color: "var(--color-text-secondary)" }}>
+                                  {TIER_CONFIG[topSignal.tier]?.label} · {topSignal.side === "home" ? game.homeTeam.split(" ").pop() : game.awayTeam.split(" ").pop()}
+                                </span>
+                              </>
+                            ) : <span style={{ fontSize: "10px", color: "#4B5563" }}>No edge</span>
+                          ) : (
+                            <a href="/login" style={{ fontSize: "11px", color: "var(--color-text-secondary)", textDecoration: "none" }}>🔒 Sign in</a>
+                          )
+                        )}
+                        <span style={{ fontSize: "11px", color: "#EA6C0A", marginTop: "4px" }}>{expanded ? "Close ↑" : "Details →"}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                /* ── Desktop grid row ── */
                 <div
                   onClick={() => setExpandedGame(expanded ? null : game.id)}
                   style={{
@@ -697,6 +814,7 @@ export default function BettingSlateClient({
                     </span>
                   </div>
                 </div>
+                )}
 
                 {/* Expanded detail */}
                 {expanded && (
