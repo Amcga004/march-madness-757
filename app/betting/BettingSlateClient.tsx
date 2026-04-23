@@ -13,7 +13,7 @@ import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import AuthButton from "@/app/components/AuthButton";
 import GolfTournamentCard from "./GolfTournamentCard";
-import { savePick, fetchMyPicks } from "./actions";
+import { savePick, fetchMyPicks, deletePick, updateUnitSize } from "./actions";
 
 const SPORT_LABELS: Record<string, string> = {
   nba: "NBA",
@@ -87,7 +87,7 @@ export default function BettingSlateClient({
   const [slipModal, setSlipModal] = useState<{ game: any; selectedSide: "home" | "away" } | null>(null);
   const [myPicks, setMyPicks] = useState<any[] | null>(null);
   const [savingPick, setSavingPick] = useState(false);
-  const [picksDateFilter, setPicksDateFilter] = useState("all");
+  const [timeFilter, setTimeFilter] = useState("all");
   useEffect(() => { userRef.current = currentUser; }, [currentUser]);
 
   useEffect(() => {
@@ -1021,68 +1021,204 @@ export default function BettingSlateClient({
       )}
 
       {/* My Picks tab */}
-      {activeTab === "picks" && (
-        <div>
-          {myPicks === null ? (
+      {activeTab === "picks" && (() => {
+        if (myPicks === null) {
+          return (
             <div style={{ padding: "60px 0", textAlign: "center", color: "var(--color-text-secondary)", fontSize: "13px" }}>
               Loading picks...
             </div>
-          ) : myPicks.length === 0 ? (
-            <div style={{ padding: "60px 0", textAlign: "center", color: "var(--color-text-secondary)", fontSize: "13px" }}>
-              No picks yet. Click "+ Slip" on any pre-game matchup to add one.
+          );
+        }
+
+        const resultMeta: Record<string, { color: string; label: string }> = {
+          win:     { color: "#16A34A", label: "Win" },
+          loss:    { color: "#DC2626", label: "Loss" },
+          live:    { color: "#EA6C0A", label: "Live" },
+          pending: { color: "#6B7280", label: "Pending" },
+        };
+
+        const TIME_FILTERS = [
+          { key: "all", label: "All" },
+          { key: "7d",  label: "7D" },
+          { key: "15d", label: "15D" },
+          { key: "30d", label: "30D" },
+          { key: "90d", label: "90D" },
+        ];
+
+        function cutoffDate(key: string): string | null {
+          const days: Record<string, number> = { "7d": 7, "15d": 15, "30d": 30, "90d": 90 };
+          if (!days[key]) return null;
+          const d = new Date();
+          d.setDate(d.getDate() - days[key]);
+          return d.toISOString().split("T")[0];
+        }
+
+        const cutoff = cutoffDate(timeFilter);
+        const filteredPicks = cutoff
+          ? myPicks.filter((p: any) => p.game_date >= cutoff)
+          : myPicks;
+
+        function calcPnl(pick: any): number | null {
+          const unit = pick.unit_size ?? 1;
+          const odds = pick.pick_odds;
+          if (pick.result === "win") {
+            return odds > 0 ? unit * (odds / 100) : unit * (100 / Math.abs(odds));
+          }
+          if (pick.result === "loss") return -unit;
+          return null;
+        }
+
+        const settledPicks = filteredPicks.filter((p: any) => p.result === "win" || p.result === "loss");
+        const wins = settledPicks.filter((p: any) => p.result === "win").length;
+        const losses = settledPicks.filter((p: any) => p.result === "loss").length;
+        const winPct = settledPicks.length > 0 ? Math.round((wins / settledPicks.length) * 100) : null;
+        const totalPnl = settledPicks.reduce((sum: number, p: any) => sum + (calcPnl(p) ?? 0), 0);
+
+        return (
+          <div>
+            {/* Time filter pills */}
+            <div style={{ display: "flex", gap: "6px", marginBottom: "14px", flexWrap: "wrap" }}>
+              {TIME_FILTERS.map(f => (
+                <button key={f.key} onClick={() => setTimeFilter(f.key)} style={{
+                  padding: "4px 12px", borderRadius: "20px", fontSize: "12px", cursor: "pointer",
+                  border: `0.5px solid ${timeFilter === f.key ? "#EA6C0A80" : "var(--color-border-secondary)"}`,
+                  background: timeFilter === f.key ? "#EA6C0A15" : "transparent",
+                  color: timeFilter === f.key ? "#EA6C0A" : "var(--color-text-secondary)",
+                }}>
+                  {f.label}
+                </button>
+              ))}
             </div>
-          ) : (() => {
-            const pickDates = [...new Set(myPicks.map((p: any) => p.game_date as string))].sort((a, b) => b.localeCompare(a));
-            const filteredPicks = picksDateFilter === "all" ? myPicks : myPicks.filter((p: any) => p.game_date === picksDateFilter);
-            const resultMeta: Record<string, { color: string; label: string }> = {
-              win:     { color: "#16A34A", label: "Win" },
-              loss:    { color: "#DC2626", label: "Loss" },
-              live:    { color: "#EA6C0A", label: "Live" },
-              pending: { color: "#6B7280", label: "Pending" },
-            };
-            return (
-              <div>
-                {/* Date filter */}
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
-                  <span style={{ fontSize: "11px", color: "#6B7280" }}>Filter:</span>
-                  {["all", ...pickDates].map(d => (
-                    <button key={d} onClick={() => setPicksDateFilter(d)} style={{
-                      padding: "3px 10px", borderRadius: "5px", fontSize: "11px", cursor: "pointer",
-                      border: `0.5px solid ${picksDateFilter === d ? "#EA6C0A80" : "var(--color-border-secondary)"}`,
-                      background: picksDateFilter === d ? "#EA6C0A12" : "transparent",
-                      color: picksDateFilter === d ? "#EA6C0A" : "var(--color-text-secondary)",
-                    }}>
-                      {d === "all" ? "All" : new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </button>
-                  ))}
-                </div>
-                {/* Header */}
-                <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 70px 80px", gap: "8px", padding: "5px 8px 4px", borderBottom: "0.5px solid var(--color-border-tertiary)" }}>
-                  {["Date", "Matchup", "Pick", "Odds", "Status"].map((h, i) => (
-                    <span key={i} style={{ fontSize: "10px", color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
-                  ))}
-                </div>
+
+            {/* Summary bar */}
+            {settledPicks.length > 0 && (
+              <div style={{
+                display: "flex", gap: "0", marginBottom: "16px",
+                background: "#161B22", border: "1px solid #21262D", borderRadius: "10px",
+                overflow: "hidden",
+              }}>
+                {[
+                  { label: "Record", value: `${wins}-${losses}` },
+                  { label: "Win %", value: winPct !== null ? `${winPct}%` : "—" },
+                  {
+                    label: "P&L",
+                    value: totalPnl >= 0 ? `+${totalPnl.toFixed(1)}u` : `${totalPnl.toFixed(1)}u`,
+                    color: totalPnl > 0 ? "#16A34A" : totalPnl < 0 ? "#DC2626" : "#6B7280",
+                  },
+                ].map((stat, i) => (
+                  <div key={stat.label} style={{
+                    flex: 1, padding: "10px 8px", textAlign: "center",
+                    borderLeft: i > 0 ? "0.5px solid #21262D" : "none",
+                  }}>
+                    <div style={{ fontSize: "10px", color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "3px" }}>{stat.label}</div>
+                    <div style={{ fontSize: "15px", fontWeight: 600, color: stat.color ?? "#F1F3F5" }}>{stat.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Pick cards */}
+            {filteredPicks.length === 0 ? (
+              <div style={{ padding: "40px 0", textAlign: "center", color: "var(--color-text-secondary)", fontSize: "13px" }}>
+                No picks yet. Click "+ Slip" on any pre-game matchup to add one.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 {filteredPicks.map((pick: any) => {
                   const meta = resultMeta[pick.result] ?? resultMeta.pending;
+                  const unit = pick.unit_size ?? 1;
+                  const pnl = calcPnl(pick);
+                  const projWin = pick.pick_odds > 0
+                    ? unit * (pick.pick_odds / 100)
+                    : unit * (100 / Math.abs(pick.pick_odds));
+
                   return (
-                    <div key={pick.id} style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 70px 80px", gap: "8px", padding: "10px 8px", borderBottom: "0.5px solid var(--color-border-tertiary)", alignItems: "center" }}>
-                      <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                        {new Date(pick.game_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                      </span>
-                      <span style={{ fontSize: "12px" }}>{pick.away_team} @ {pick.home_team}</span>
-                      <span style={{ fontSize: "12px", fontWeight: 500 }}>{pick.picked_team}</span>
-                      <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                        {pick.pick_odds > 0 ? `+${pick.pick_odds}` : pick.pick_odds}
-                      </span>
-                      <span style={{ fontSize: "12px", fontWeight: 500, color: meta.color }}>{meta.label}</span>
+                    <div key={pick.id} style={{
+                      background: "#161B22",
+                      border: "1px solid #21262D",
+                      borderRadius: "10px",
+                      padding: "12px 14px",
+                    }}>
+                      {/* Row 1: matchup + date + delete */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                        <div>
+                          <span style={{ fontSize: "13px", fontWeight: 500, color: "#F1F3F5" }}>
+                            {pick.away_team} @ {pick.home_team}
+                          </span>
+                          <span style={{ fontSize: "11px", color: "#4B5563", marginLeft: "8px" }}>
+                            {new Date(pick.game_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!currentUser) return;
+                            setMyPicks(prev => prev ? prev.filter((p: any) => p.id !== pick.id) : prev);
+                            await deletePick(pick.id, currentUser.id);
+                          }}
+                          style={{
+                            background: "transparent", border: "none", cursor: "pointer",
+                            color: "#4B5563", fontSize: "16px", lineHeight: 1, padding: "0 2px",
+                          }}
+                          title="Delete pick"
+                        >×</button>
+                      </div>
+
+                      {/* Row 2: pick + odds + unit input */}
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "12px", color: "#6B7280" }}>Pick:</span>
+                        <span style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5" }}>{pick.picked_team}</span>
+                        <span style={{ fontSize: "13px", color: "#9CA3AF" }}>
+                          {pick.pick_odds > 0 ? `+${pick.pick_odds}` : pick.pick_odds}
+                        </span>
+                        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ fontSize: "11px", color: "#6B7280" }}>Units:</span>
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="0.5"
+                            defaultValue={unit}
+                            onBlur={async (e) => {
+                              if (!currentUser) return;
+                              const val = parseFloat(e.target.value);
+                              if (isNaN(val) || val <= 0) return;
+                              setMyPicks(prev => prev
+                                ? prev.map((p: any) => p.id === pick.id ? { ...p, unit_size: val } : p)
+                                : prev
+                              );
+                              await updateUnitSize(pick.id, currentUser.id, val);
+                            }}
+                            style={{
+                              width: "52px", padding: "3px 6px", borderRadius: "5px",
+                              background: "#0D1117", border: "0.5px solid #21262D",
+                              color: "#F1F3F5", fontSize: "12px", textAlign: "center",
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Row 3: status + P&L */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span style={{
+                          fontSize: "12px", fontWeight: 600, color: meta.color,
+                          background: `${meta.color}18`, padding: "2px 8px",
+                          borderRadius: "4px", border: `0.5px solid ${meta.color}40`,
+                        }}>
+                          {meta.label}
+                        </span>
+                        <span style={{ fontSize: "13px", fontWeight: 600, color: pnl !== null ? (pnl >= 0 ? "#16A34A" : "#DC2626") : "#6B7280" }}>
+                          {pnl !== null
+                            ? (pnl >= 0 ? `+${pnl.toFixed(2)}u` : `${pnl.toFixed(2)}u`)
+                            : `proj +${projWin.toFixed(2)}u`}
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
               </div>
-            );
-          })()}
-        </div>
-      )}
+            )}
+          </div>
+        );
+      })()}
 
       {/* Bet slip modal */}
       {slipModal && (

@@ -259,6 +259,7 @@ export async function savePick(pick: {
   sportKey: string;
   pickedTeam: string;
   pickOdds: number;
+  unitSize?: number;
 }) {
   const supabase = createServiceClient();
   const { error } = await supabase.from("bet_slip").insert({
@@ -270,9 +271,30 @@ export async function savePick(pick: {
     sport_key: pick.sportKey,
     picked_team: pick.pickedTeam,
     pick_odds: pick.pickOdds,
+    unit_size: pick.unitSize ?? null,
   });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+export async function deletePick(pickId: string, userId: string) {
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("bet_slip")
+    .delete()
+    .eq("id", pickId)
+    .eq("user_id", userId);
+  return { ok: !error, error: error?.message };
+}
+
+export async function updateUnitSize(pickId: string, userId: string, unitSize: number) {
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("bet_slip")
+    .update({ unit_size: unitSize })
+    .eq("id", pickId)
+    .eq("user_id", userId);
+  return { ok: !error };
 }
 
 export async function fetchMyPicks(userId: string) {
@@ -294,7 +316,7 @@ export async function fetchMyPicks(userId: string) {
 
   for (const d of uniqueDates) {
     const dateStr = d.replace(/-/g, "");
-    const sportPaths = ["basketball/nba", "baseball/mlb", "basketball/mens-college-basketball"];
+    const sportPaths = ["basketball/nba", "baseball/mlb", "basketball/mens-college-basketball", "hockey/nhl"];
     await Promise.all(sportPaths.map(async (path) => {
       try {
         const res = await fetch(
