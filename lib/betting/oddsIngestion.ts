@@ -212,12 +212,10 @@ export async function ingestOddsForSport(sport: keyof typeof SPORT_MAP) {
       }
     }
 
-    console.log(`[ingestOddsForSport] ${sport}: gamesFound=${games.length}, oddsUpserted=${upserted}, closingLineSnapshots=${vanishedGameIds.size}`);
     await recordSyncSuccess(sourceKey);
     return { ok: true, sport, gamesFound: games.length, oddsUpserted: upserted, closingLineSnapshots: vanishedGameIds.size };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[ingestOddsForSport] ${sport} FAILED:`, message);
     await recordSyncFailure(sourceKey, message);
     return { ok: false, sport, error: message };
   }
