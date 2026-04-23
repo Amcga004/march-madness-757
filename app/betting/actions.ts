@@ -174,7 +174,7 @@ export async function fetchGolfLeaderboard(tournamentId: string) {
       })
       .map((comp: any) => {
         const athlete = comp.athlete;
-        const athletes: any[] = comp.athletes ?? [];
+        const athletes = comp.athletes;
         const linescores = comp.linescores ?? [];
         const totalVsParStr = comp.score ?? "--";
         const totalVsPar = totalVsParStr === "E" ? 0
@@ -224,12 +224,16 @@ export async function fetchGolfLeaderboard(tournamentId: string) {
 
         return {
           position: comp.status?.position?.displayName ?? "—",
-          name: athlete?.displayName
-            ?? (athletes.length > 0
-              ? athletes.map((a: any) => a.athlete?.displayName ?? a.displayName).filter(Boolean).join(" / ")
-              : null)
-            ?? comp.team?.displayName
-            ?? "Unknown",
+          name: (() => {
+            if (athlete?.displayName) return athlete.displayName;
+            if (athletes && athletes.length >= 2) {
+              const p1 = athletes[0]?.athlete?.displayName;
+              const p2 = athletes[1]?.athlete?.displayName;
+              if (p1 && p2) return `${p1.split(" ").pop()} / ${p2.split(" ").pop()}`;
+              if (p1) return p1;
+            }
+            return comp.team?.displayName ?? "Unknown";
+          })(),
           totalVsPar,
           todayVsPar,
           thru,

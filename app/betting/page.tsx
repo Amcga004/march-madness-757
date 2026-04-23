@@ -206,6 +206,7 @@ export default async function BettingPage({
             })
             .map((comp: any) => {
               const athlete = comp.athlete;
+              const athletes = comp.athletes;
               const linescores = comp.linescores ?? [];
               const totalVsParStr = comp.score ?? "--";
               const totalVsPar = totalVsParStr === "E" ? 0
@@ -253,9 +254,24 @@ export default async function BettingPage({
                 } catch { return null; }
               })();
 
+              let playerName = "Unknown";
+              if (athlete?.displayName) {
+                playerName = athlete.displayName;
+              } else if (athletes && athletes.length >= 2) {
+                const p1 = athletes[0]?.athlete?.displayName;
+                const p2 = athletes[1]?.athlete?.displayName;
+                if (p1 && p2) {
+                  playerName = `${p1.split(" ").pop()} / ${p2.split(" ").pop()}`;
+                } else if (p1) {
+                  playerName = p1;
+                }
+              } else if (comp.team?.displayName) {
+                playerName = comp.team.displayName;
+              }
+
               return {
                 position: comp.status?.position?.displayName ?? "—",
-                name: athlete?.displayName ?? "Unknown",
+                name: playerName,
                 totalVsPar,
                 todayVsPar,
                 thru,
