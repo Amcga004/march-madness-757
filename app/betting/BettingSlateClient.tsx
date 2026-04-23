@@ -77,6 +77,7 @@ export default function BettingSlateClient({
   const [activeSport, setActiveSport] = useState(sport);
   const [activeMarket, setActiveMarket] = useState("h2h");
   const pathname = usePathname();
+  const router = useRouter();
   const [expandedGame, setExpandedGame] = useState<string | null>(null);
   const [liveGames, setLiveGames] = useState(games);
   const [liveGolf, setLiveGolf] = useState(golfLeaderboard);
@@ -134,6 +135,16 @@ export default function BettingSlateClient({
     const interval = setInterval(refresh, 60000);
     return () => clearInterval(interval);
   }, [refresh]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        router.refresh();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [router]);
 
   useEffect(() => {
     if (currentUser?.id) {
