@@ -135,6 +135,15 @@ export default function BettingSlateClient({
     return () => clearInterval(interval);
   }, [refresh]);
 
+  // Bfcache guard: if browser restores a stale snapshot showing a past date,
+  // redirect to today so the server re-renders with fresh data.
+  useEffect(() => {
+    if (date < todayET) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("date");
+      window.location.replace(url.toString());
+    }
+  }, [date, todayET]);
 
   useEffect(() => {
     if (currentUser?.id) {
