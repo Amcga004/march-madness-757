@@ -189,7 +189,8 @@ export async function ingestMlbMarketProxy(date: string) {
       .eq("closing_line", false)
       .in("bookmaker", ["draftkings", "fanduel"])
       .gte("commence_time", `${date}T00:00:00Z`)
-      .lt("commence_time", `${nextDay}T12:00:00Z`);
+      .lt("commence_time", `${nextDay}T12:00:00Z`)
+      .gte("updated_at", `${date}T00:00:00Z`);
 
     if (!allOdds || allOdds.length === 0) {
       return { ok: true, gamesUpserted: 0, note: "No MLB odds found for date" };
