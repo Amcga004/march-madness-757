@@ -81,8 +81,88 @@ export async function ingestOddsForSport(sport: keyof typeof SPORT_MAP) {
     await saveSnapshot(sourceKey, sport, "odds", { gameCount: games.length });
 
     const incomingGameIds = new Set(games.map((g: any) => g.id));
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    const cutoffIso = new Date(nowMs + 15 * 60 * 1000).toISOString(); // now + 15 min
 
-    // Detect games that have vanished from the feed (game started) and snapshot their closing lines
+    // Snapshot from FRESH API DATA for games starting within 15 minutes.
+    // Must run before the closing_line=false upsert loop so we capture pre-game odds.
+    const nearingStart = games.filter((g: any) => g.commence_time <= cutoffIso);
+    let apiSnapshots = 0;
+
+    if (nearingStart.length > 0) {
+      const nearingIds = nearingStart.map((g: any) => g.id);
+      const { data: alreadyClosing } = await supabase
+        .from("market_odds")
+        .select("external_game_id")
+        .eq("sport_key", sport)
+        .eq("closing_line", true)
+        .in("external_game_id", nearingIds);
+
+      const alreadySnapshotted = new Set((alreadyClosing ?? []).map((r: any) => r.external_game_id));
+
+      const apiClosingRows: any[] = [];
+      for (const game of nearingStart) {
+        if (alreadySnapshotted.has(game.id)) continue;
+        for (const bookmaker of game.bookmakers ?? []) {
+          for (const market of bookmaker.markets ?? []) {
+            const marketType = market.key as "h2h" | "spreads" | "totals";
+            const outcomes = market.outcomes ?? [];
+            let homePrice: number | null = null;
+            let awayPrice: number | null = null;
+            let overPrice: number | null = null;
+            let underPrice: number | null = null;
+            let spreadHome: number | null = null;
+            let spreadAway: number | null = null;
+            let lineValue: number | null = null;
+
+            for (const outcome of outcomes) {
+              if (marketType === "h2h") {
+                if (outcome.name === game.home_team) homePrice = outcome.price;
+                if (outcome.name === game.away_team) awayPrice = outcome.price;
+              } else if (marketType === "spreads") {
+                if (outcome.name === game.home_team) { homePrice = outcome.price; spreadHome = outcome.point ?? null; }
+                if (outcome.name === game.away_team) { awayPrice = outcome.price; spreadAway = outcome.point ?? null; }
+              } else if (marketType === "totals") {
+                if (outcome.name === "Over")  { overPrice = outcome.price; lineValue = outcome.point ?? null; }
+                if (outcome.name === "Under") { underPrice = outcome.price; }
+              }
+            }
+
+            apiClosingRows.push({
+              sport_key: sport,
+              event_id: null,
+              external_game_id: game.id,
+              external_source: "odds_api",
+              commence_time: game.commence_time,
+              home_team: game.home_team,
+              away_team: game.away_team,
+              bookmaker: bookmaker.key,
+              market_type: marketType,
+              home_price: homePrice,
+              away_price: awayPrice,
+              over_price: overPrice,
+              under_price: underPrice,
+              spread_home: spreadHome,
+              spread_away: spreadAway,
+              line_value: lineValue,
+              closing_line: true,
+              fetched_at: nowIso,
+              updated_at: nowIso,
+            });
+          }
+        }
+      }
+
+      if (apiClosingRows.length > 0) {
+        await supabase
+          .from("market_odds")
+          .upsert(apiClosingRows, { onConflict: "external_game_id,bookmaker,market_type,closing_line", ignoreDuplicates: true });
+        apiSnapshots = nearingStart.filter((g: any) => !alreadySnapshotted.has(g.id)).length;
+      }
+    }
+
+    // Fallback: also snapshot from DB rows for vanished/started games missed by the window above
     const today = getLogicalGameDate();
     const { start: windowStart, end: windowEnd } = getLogicalDateWindow(today);
     const { data: existingOdds } = await supabase
@@ -225,7 +305,7 @@ export async function ingestOddsForSport(sport: keyof typeof SPORT_MAP) {
     }
 
     await recordSyncSuccess(sourceKey);
-    return { ok: true, sport, gamesFound: games.length, oddsUpserted: upserted, closingLineSnapshots: vanishedGameIds.size };
+    return { ok: true, sport, gamesFound: games.length, oddsUpserted: upserted, closingLineSnapshots: apiSnapshots + vanishedGameIds.size };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     await recordSyncFailure(sourceKey, message);
