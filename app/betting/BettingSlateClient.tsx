@@ -87,6 +87,7 @@ export default function BettingSlateClient({
   const [slipModal, setSlipModal] = useState<{ game: any; selectedSide: "home" | "away" } | null>(null);
   const [myPicks, setMyPicks] = useState<any[] | null>(null);
   const [savingPick, setSavingPick] = useState(false);
+  const [modalUnit, setModalUnit] = useState(1);
   const [timeFilter, setTimeFilter] = useState("all");
   useEffect(() => { userRef.current = currentUser; }, [currentUser]);
 
@@ -567,6 +568,15 @@ export default function BettingSlateClient({
                           ) : (
                             <a href="/login" style={{ fontSize: "11px", color: "var(--color-text-secondary)", textDecoration: "none" }}>🔒 Sign in</a>
                           )
+                        )}
+                        {currentUser && !game.isLive && !game.isFinal && (
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSlipModal({ game, selectedSide: topSignal?.side ?? "away" });
+                            }}
+                            style={{ color: "#EA6C0A", fontSize: "13px", cursor: "pointer" }}
+                          >+ Slip</span>
                         )}
                         <a
                           href={`/betting/game/${game.id}?sport=${game.sportKey}`}
@@ -1082,7 +1092,7 @@ export default function BettingSlateClient({
         const totalPnl = settledPicks.reduce((sum: number, p: any) => sum + (calcPnl(p) ?? 0), 0);
 
         return (
-          <div>
+          <div style={{ maxWidth: "680px", margin: "0 auto" }}>
             {/* Time filter pills */}
             <div style={{ display: "flex", gap: "6px", marginBottom: "14px", flexWrap: "wrap" }}>
               {TIME_FILTERS.map(f => (
@@ -1231,7 +1241,7 @@ export default function BettingSlateClient({
       {slipModal && (
         <div
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
-          onClick={() => setSlipModal(null)}
+          onClick={() => { setSlipModal(null); setModalUnit(1); }}
         >
           <div
             style={{ background: "#1A2236", border: "0.5px solid var(--color-border-secondary)", borderRadius: "12px", padding: "24px", width: "360px", maxWidth: "90vw" }}
@@ -1263,6 +1273,23 @@ export default function BettingSlateClient({
               })}
             </div>
 
+            {/* Unit size input */}
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+              <span style={{ fontSize: "12px", color: "var(--color-text-secondary)", flex: 1 }}>Unit size</span>
+              <input
+                type="number"
+                min="0.1"
+                step="0.1"
+                value={modalUnit}
+                onChange={e => setModalUnit(Math.max(0.1, parseFloat(e.target.value) || 1))}
+                style={{
+                  width: "72px", padding: "6px 8px", borderRadius: "6px",
+                  background: "#0D1117", border: "0.5px solid var(--color-border-secondary)",
+                  color: "#F1F3F5", fontSize: "14px", textAlign: "center",
+                }}
+              />
+            </div>
+
             <button
               disabled={savingPick}
               onClick={async () => {
@@ -1280,10 +1307,12 @@ export default function BettingSlateClient({
                   sportKey: slipModal.game.sportKey,
                   pickedTeam,
                   pickOdds: best?.price ?? 0,
+                  unitSize: modalUnit,
                 });
                 setSavingPick(false);
                 if (result.ok) {
                   setSlipModal(null);
+                  setModalUnit(1);
                   setMyPicks(null);
                 }
               }}
@@ -1296,7 +1325,7 @@ export default function BettingSlateClient({
             >
               {savingPick ? "Saving..." : "Add to Slip"}
             </button>
-            <button onClick={() => setSlipModal(null)} style={{
+            <button onClick={() => { setSlipModal(null); setModalUnit(1); }} style={{
               width: "100%", padding: "8px", marginTop: "8px", borderRadius: "8px",
               cursor: "pointer", background: "transparent", border: "none",
               color: "var(--color-text-secondary)", fontSize: "13px",
