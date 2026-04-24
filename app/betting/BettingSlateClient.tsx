@@ -484,20 +484,11 @@ export default function BettingSlateClient({
                         </span>
                         {game.awayRecord && <span style={{ fontSize: "10px", color: "#4B5563" }}>{game.awayRecord}</span>}
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        {(game.isLive || game.isFinal) && game.awayScore !== null && (
-                          <span style={{ fontSize: "15px", fontWeight: 700, color: awayWon ? "#F1F3F5" : "#6B7280" }}>{game.awayScore}</span>
-                        )}
-                        {game.isFinal ? (
-                          <span style={{ fontSize: "10px", color: "#6B7280" }}>Final</span>
-                        ) : game.isLive ? (
-                          <span style={{ fontSize: "10px", color: "#EA6C0A", fontWeight: 500 }}>{game.statusDetail}</span>
-                        ) : (
-                          <span style={{ fontSize: "10px", color: "#6B7280" }}>{formatTime(game.commenceTime)}</span>
-                        )}
-                      </div>
+                      {(game.isLive || game.isFinal) && game.awayScore !== null && (
+                        <span style={{ fontSize: "15px", fontWeight: 700, color: awayWon ? "#F1F3F5" : "#6B7280" }}>{game.awayScore}</span>
+                      )}
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                         {getTeamLogo(game.homeTeam, game, "home") && (
                           <img src={getTeamLogo(game.homeTeam, game, "home")!} alt={game.homeTeam} width={14} height={14} style={{ objectFit: "contain" }} />
@@ -509,6 +500,16 @@ export default function BettingSlateClient({
                       </div>
                       {(game.isLive || game.isFinal) && game.homeScore !== null && (
                         <span style={{ fontSize: "15px", fontWeight: 700, color: homeWon ? "#F1F3F5" : "#6B7280" }}>{game.homeScore}</span>
+                      )}
+                    </div>
+                    {/* Status line below scores */}
+                    <div style={{ textAlign: "right", marginBottom: "10px" }}>
+                      {game.isFinal ? (
+                        <span style={{ fontSize: "10px", color: "#6B7280" }}>Final</span>
+                      ) : game.isLive ? (
+                        <span style={{ fontSize: "10px", color: "#EA6C0A", fontWeight: 500 }}>{game.statusDetail}</span>
+                      ) : (
+                        <span style={{ fontSize: "10px", color: "#6B7280" }}>{formatTime(game.commenceTime)}</span>
                       )}
                     </div>
 

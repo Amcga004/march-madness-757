@@ -47,15 +47,15 @@ export default function GolfTournamentCard({ tournamentName, roundStatus, player
   const hasR4 = players.some(p => hasData(p.r4));
 
   const gridCols = [
-    "40px",  // POS
-    "1fr",   // PLAYER
-    "60px",  // SCORE
-    "60px",  // TODAY
-    "50px",  // THRU
-    "50px",  // R1
-    hasR2 ? "50px" : null,
-    hasR3 ? "50px" : null,
-    hasR4 ? "55px" : null,
+    "35px",                   // POS
+    "minmax(80px, 1fr)",      // PLAYER
+    "52px",                   // SCORE
+    "52px",                   // TODAY
+    "45px",                   // THRU
+    "45px",                   // R1
+    hasR2 ? "45px" : null,
+    hasR3 ? "45px" : null,
+    hasR4 ? "45px" : null,
   ].filter(Boolean).join(" ");
 
   const roundCellStyle = {
@@ -130,7 +130,7 @@ export default function GolfTournamentCard({ tournamentName, roundStatus, player
             </span>
 
             {/* PLAYER */}
-            <span style={{ fontSize: "13px", fontWeight: 500, color: "#F1F3F5" }}>
+            <span style={{ fontSize: "13px", fontWeight: 500, color: "#F1F3F5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {player.name}
               {player.teeTime && player.thru === "--" && (
                 <span style={{ fontSize: "10px", color: "#4B5563", marginLeft: "8px", fontWeight: 400 }}>
