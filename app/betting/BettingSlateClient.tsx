@@ -716,7 +716,9 @@ export default function BettingSlateClient({
                           {bestUnderRow && <span style={{ color: "var(--color-text-secondary)", fontSize: "10px" }}> {BOOK_LABELS[bestUnderRow.bookmaker] ?? bestUnderRow.bookmaker}</span>}
                         </span>
                       </>;
-                    })() : <>
+                    })() : (!bestAway && !bestHome) ? (
+                      <span style={{ fontSize: "16px", color: "#4B5563" }}>🔒</span>
+                    ) : <>
                       <span style={{ fontSize: "12px" }}>
                         <strong>{fmtOdds(bestAway?.price ?? null)}</strong>
                         {bestAway && <span style={{ color: "var(--color-text-secondary)", fontSize: "10px" }}> {BOOK_LABELS[bestAway.bookmaker] ?? bestAway.bookmaker}</span>}

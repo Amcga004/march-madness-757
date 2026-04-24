@@ -40,7 +40,17 @@ function hasData(v: number | null): boolean {
 
 export default function GolfTournamentCard({ tournamentName, roundStatus, players }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const displayed = expanded ? players : players.slice(0, 10);
+  const [sortBy, setSortBy] = useState<"score" | "name">("score");
+
+  const sorted = [...players].sort((a, b) => {
+    if (sortBy === "name") return a.name.localeCompare(b.name);
+    if (a.totalVsPar === null && b.totalVsPar === null) return 0;
+    if (a.totalVsPar === null) return 1;
+    if (b.totalVsPar === null) return -1;
+    return a.totalVsPar - b.totalVsPar;
+  });
+
+  const displayed = expanded ? sorted : sorted.slice(0, 10);
 
   const hasR2 = players.some(p => hasData(p.r2));
   const hasR3 = players.some(p => hasData(p.r3));
@@ -85,9 +95,19 @@ export default function GolfTournamentCard({ tournamentName, roundStatus, player
         justifyContent: "space-between",
       }}>
         <span>⛳ PGA Tour — {tournamentName}</span>
-        <span style={{ fontSize: "10px", color: "#6B7280", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
-          {roundStatus}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "10px", color: "#6B7280", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>{roundStatus}</span>
+          {(["score", "name"] as const).map(s => (
+            <button key={s} onClick={() => setSortBy(s)} style={{
+              padding: "2px 8px", borderRadius: "10px", fontSize: "10px", cursor: "pointer",
+              border: `0.5px solid ${sortBy === s ? "#EA6C0A80" : "#21262D"}`,
+              background: sortBy === s ? "#EA6C0A15" : "transparent",
+              color: sortBy === s ? "#EA6C0A" : "#6B7280",
+              textTransform: "capitalize" as const,
+              fontWeight: sortBy === s ? 600 : 400,
+            }}>{s}</button>
+          ))}
+        </div>
       </div>
 
       <div className="golf-table-wrap">
@@ -198,7 +218,7 @@ export default function GolfTournamentCard({ tournamentName, roundStatus, player
       </div>
 
       {/* Expand button */}
-      {players.length > 10 && (
+      {sorted.length > 10 && (
         <div
           onClick={() => setExpanded(!expanded)}
           style={{
@@ -209,7 +229,7 @@ export default function GolfTournamentCard({ tournamentName, roundStatus, player
             borderBottom: "0.5px solid #1E2433",
           }}
         >
-          {expanded ? "Show less ↑" : `Show full field (${players.length} players) ↓`}
+          {expanded ? "Show less ↑" : `Show full field (${sorted.length} players) ↓`}
         </div>
       )}
     </div>
