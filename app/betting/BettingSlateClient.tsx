@@ -260,6 +260,7 @@ export default function BettingSlateClient({
       @media (max-width: 767px) {
         .golf-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .golf-col-r2, .golf-col-r3, .golf-col-r4 { display: none !important; }
+        .desktop-expand-panel { display: none !important; }
       }
     `}</style>
     <div className="betting-page-root" style={{
@@ -455,7 +456,13 @@ export default function BettingSlateClient({
                 {/* ── Mobile card (hidden on desktop via CSS) ── */}
                 <div
                   className="game-row-mobile"
-                  onClick={() => setExpandedGame(expanded ? null : game.id)}
+                  onClick={() => {
+                    if (window.innerWidth < 768) {
+                      window.location.href = `/betting/game/${game.id}?sport=${game.sportKey}`;
+                      return;
+                    }
+                    setExpandedGame(expanded ? null : game.id);
+                  }}
                   style={{
                     background: "#161B22",
                       borderRadius: "10px",
@@ -832,7 +839,7 @@ export default function BettingSlateClient({
 
                 {/* Expanded detail */}
                 {expanded && (
-                  <div style={{
+                  <div className="desktop-expand-panel" style={{
                     padding: "16px 0 20px",
                     borderBottom: "0.5px solid var(--color-border-tertiary)",
                     background: "#111827",
