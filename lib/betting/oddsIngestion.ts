@@ -93,25 +93,37 @@ export async function ingestOddsForSport(sport: keyof typeof SPORT_MAP) {
       .gte("commence_time", windowStart)
       .lt("commence_time", windowEnd);
 
+    // Method 1: games that vanished from the Odds API feed
     const vanishedGameIds = new Set(
       (existingOdds ?? [])
         .map((r: any) => r.external_game_id)
         .filter((id: string) => !incomingGameIds.has(id))
     );
 
-    if (vanishedGameIds.size > 0) {
-      // Check which vanished games already have closing_line rows
+    // Method 2: games still in feed but whose commence_time has passed — Odds API
+    // keeps serving live odds, so vanish detection alone misses these
+    const now = new Date().toISOString();
+    const startedGameIds = new Set(
+      (existingOdds ?? [])
+        .filter((r: any) => r.commence_time < now && !vanishedGameIds.has(r.external_game_id))
+        .map((r: any) => r.external_game_id)
+    );
+
+    const allToSnapshot = new Set([...vanishedGameIds, ...startedGameIds]);
+
+    if (allToSnapshot.size > 0) {
+      // Check which games already have a closing_line=true row
       const { data: existingClosing } = await supabase
         .from("market_odds")
         .select("external_game_id")
         .eq("sport_key", sport)
         .eq("closing_line", true)
-        .in("external_game_id", Array.from(vanishedGameIds));
+        .in("external_game_id", Array.from(allToSnapshot));
 
       const alreadySnapshotted = new Set((existingClosing ?? []).map((r: any) => r.external_game_id));
 
       const rowsToSnapshot = (existingOdds ?? []).filter(
-        (r: any) => vanishedGameIds.has(r.external_game_id) && !alreadySnapshotted.has(r.external_game_id)
+        (r: any) => allToSnapshot.has(r.external_game_id) && !alreadySnapshotted.has(r.external_game_id)
       );
 
       if (rowsToSnapshot.length > 0) {
