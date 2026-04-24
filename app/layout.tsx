@@ -1,8 +1,14 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "EdgePulse",
-  description: "Sports betting intelligence and fantasy. Find your edge.",
+  title: "EdgePulse — Sports Betting Intelligence & Fantasy",
+  description: "Real-time betting signals, edge analysis, and fantasy sports for NBA, MLB, NHL and PGA Tour. Built for serious bettors.",
+  openGraph: {
+    title: "EdgePulse — Sports Betting Intelligence & Fantasy",
+    description: "Find your edge. Real-time signals across NBA, MLB, NHL and PGA Tour.",
+    url: "https://www.edgepulse.ai",
+    siteName: "EdgePulse",
+  },
 };
 
 export default function RootLayout({

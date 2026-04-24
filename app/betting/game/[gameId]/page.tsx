@@ -166,29 +166,96 @@ export default async function GameDetailPage({
     return [...byBook.values()];
   })();
 
-  // MLB starters
-  let mlbStarters: Record<string, { pitcher: string; confirmed: boolean }> = {};
-  if (sportKey === "mlb") {
-    try {
-      const r = await fetch(
-        `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=probablePitcher`,
-        { cache: "no-store" }
-      ).then(x => x.json());
-      for (const de of r.dates ?? []) {
-        for (const g of de.games ?? []) {
-          const hn = g.teams?.home?.team?.name;
-          const an = g.teams?.away?.team?.name;
-          const hp = g.teams?.home?.probablePitcher?.fullName ?? null;
-          const ap = g.teams?.away?.probablePitcher?.fullName ?? null;
-          if (hn) mlbStarters[hn] = { pitcher: hp ?? "TBD", confirmed: !!hp };
-          if (an) mlbStarters[an] = { pitcher: ap ?? "TBD", confirmed: !!ap };
-        }
-      }
-    } catch {}
-  }
+  // Fetch ESPN summary + MLB starters in parallel
+  const [summaryRaw, startersRaw] = await Promise.all([
+    fetch(
+      `https://site.api.espn.com/apis/site/v2/sports/${espnPath}/summary?event=${gameId}`,
+      { cache: "no-store" }
+    ).then(r => r.ok ? r.json() : null).catch(() => null),
+    sportKey === "mlb"
+      ? fetch(
+          `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=probablePitcher`,
+          { cache: "no-store" }
+        ).then(x => x.json()).catch(() => ({ dates: [] }))
+      : Promise.resolve({ dates: [] }),
+  ]);
 
+  // MLB starters
+  const mlbStarters: Record<string, { pitcher: string; confirmed: boolean }> = {};
+  for (const de of startersRaw?.dates ?? []) {
+    for (const g of de.games ?? []) {
+      const hn = g.teams?.home?.team?.name;
+      const an = g.teams?.away?.team?.name;
+      const hp = g.teams?.home?.probablePitcher?.fullName ?? null;
+      const ap = g.teams?.away?.probablePitcher?.fullName ?? null;
+      if (hn) mlbStarters[hn] = { pitcher: hp ?? "TBD", confirmed: !!hp };
+      if (an) mlbStarters[an] = { pitcher: ap ?? "TBD", confirmed: !!ap };
+    }
+  }
   const homePitcher = mlbStarters[homeName];
   const awayPitcher = mlbStarters[awayName];
+
+  // ESPN Summary data
+  type InjuryEntry = { teamName: string; playerName: string; status: string; description: string };
+  const summaryInjuries: InjuryEntry[] = [];
+  let pickcenter: { spread: number | null; overUnder: number | null; awayMoneyLine: number | null; homeMoneyLine: number | null } | null = null;
+  let articleHeadline: string | null = null;
+  const newsItems: Array<{ headline: string }> = [];
+  let liveHomeWinPct: number | null = null;
+  type BoxTeam = { teamName: string; homeAway: string; stats: Array<{ name: string; value: string }> };
+  const boxscoreTeams: BoxTeam[] = [];
+
+  if (summaryRaw) {
+    // Injuries
+    for (const teamInj of summaryRaw.injuries ?? []) {
+      const teamName: string = teamInj.team?.displayName ?? "";
+      for (const inj of teamInj.injuries ?? []) {
+        const playerName: string = inj.athlete?.displayName ?? "";
+        const status: string = inj.status ?? "";
+        const description: string = inj.type?.description ?? status;
+        if (playerName) summaryInjuries.push({ teamName, playerName, status, description });
+      }
+    }
+
+    // Pickcenter (consensus line from ESPN)
+    const pc = summaryRaw.pickcenter?.[0];
+    if (pc) {
+      pickcenter = {
+        spread: pc.spread ?? null,
+        overUnder: pc.overUnder ?? null,
+        awayMoneyLine: pc.awayTeamOdds?.moneyLine ?? null,
+        homeMoneyLine: pc.homeTeamOdds?.moneyLine ?? null,
+      };
+    }
+
+    // Article headline for final games
+    if (summaryRaw.article?.headline) articleHeadline = summaryRaw.article.headline;
+
+    // News (up to 3)
+    for (const n of (summaryRaw.news ?? []).slice(0, 3)) {
+      if (n.headline) newsItems.push({ headline: n.headline });
+    }
+
+    // Live win probability
+    const wp: any[] = summaryRaw.winprobability ?? [];
+    if (wp.length > 0) liveHomeWinPct = wp[wp.length - 1]?.homeWinPercentage ?? null;
+
+    // Boxscore (final games)
+    if (isFinal) {
+      for (const team of summaryRaw.boxscore?.teams ?? []) {
+        const teamName: string = team.team?.displayName ?? "";
+        const homeAway: string = team.homeAway ?? "";
+        const stats: Array<{ name: string; value: string }> = [];
+        for (const stat of team.statistics ?? []) {
+          const val: string = stat.displayValue ?? "";
+          if (val && val !== "0" && val !== "-" && val !== "--") {
+            stats.push({ name: stat.label ?? stat.name ?? "", value: val });
+          }
+        }
+        if (stats.length > 0) boxscoreTeams.push({ teamName, homeAway, stats });
+      }
+    }
+  }
 
   const homeWon = isFinal && homeScore !== null && awayScore !== null && Number(homeScore) > Number(awayScore);
   const awayWon = isFinal && homeScore !== null && awayScore !== null && Number(awayScore) > Number(homeScore);
@@ -268,6 +335,38 @@ export default async function GameDetailPage({
             <span style={{ color: awayPitcher?.confirmed ? "#9CA3AF" : "#D97706" }}>{awayPitcher?.pitcher ?? "TBD"}</span>
             <span style={{ color: "#4B5563" }}> vs </span>
             <span style={{ color: homePitcher?.confirmed ? "#9CA3AF" : "#D97706" }}>{homePitcher?.pitcher ?? "TBD"}</span>
+          </div>
+        )}
+
+        {/* Pickcenter consensus line (pre-game) */}
+        {!isFinal && pickcenter && (pickcenter.spread !== null || pickcenter.overUnder !== null) && (
+          <div style={{ display: "flex", justifyContent: "center", gap: "16px", marginTop: "12px", paddingTop: "10px", borderTop: "0.5px solid #21262D" }}>
+            {pickcenter.spread !== null && (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "10px", color: "#4B5563", marginBottom: "2px" }}>Spread</div>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5" }}>
+                  {pickcenter.spread > 0 ? `+${pickcenter.spread}` : pickcenter.spread}
+                </div>
+              </div>
+            )}
+            {pickcenter.overUnder !== null && (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "10px", color: "#4B5563", marginBottom: "2px" }}>O/U</div>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5" }}>{pickcenter.overUnder}</div>
+              </div>
+            )}
+            {pickcenter.awayMoneyLine !== null && (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "10px", color: "#4B5563", marginBottom: "2px" }}>{awayName.split(" ").pop()} ML</div>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5" }}>{fmtOdds(pickcenter.awayMoneyLine)}</div>
+              </div>
+            )}
+            {pickcenter.homeMoneyLine !== null && (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "10px", color: "#4B5563", marginBottom: "2px" }}>{homeName.split(" ").pop()} ML</div>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5" }}>{fmtOdds(pickcenter.homeMoneyLine)}</div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -439,6 +538,131 @@ export default async function GameDetailPage({
               <span style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5", textAlign: "center" }}>{fmtOdds(row.under_price)}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Injury Report (pre-game only) */}
+      {!isFinal && summaryInjuries.length > 0 && (
+        <div style={{
+          background: "#161B22",
+          border: "1px solid #21262D",
+          borderRadius: "12px",
+          padding: "16px",
+          marginBottom: "16px",
+        }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
+            Injury Report
+          </div>
+          {summaryInjuries.map((inj, i) => {
+            const isOut = /out|il|injured list/i.test(inj.status);
+            const isDTD = /dtd|day-to-day/i.test(inj.status);
+            const badgeColor = isOut ? "#DC2626" : isDTD ? "#D97706" : "#6B7280";
+            return (
+              <div key={i} style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "5px 0",
+                borderTop: i > 0 ? "0.5px solid #1E2433" : "none",
+              }}>
+                <span style={{
+                  fontSize: "10px",
+                  fontWeight: 600,
+                  color: badgeColor,
+                  background: `${badgeColor}18`,
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                }}>{inj.status}</span>
+                <span style={{ fontSize: "12px", color: "#F1F3F5", fontWeight: 500 }}>{inj.playerName}</span>
+                <span style={{ fontSize: "11px", color: "#6B7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {inj.teamName.split(" ").pop()} · {inj.description}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Game Notes (pre-game) */}
+      {!isFinal && (newsItems.length > 0 || articleHeadline) && (
+        <div style={{
+          background: "#161B22",
+          border: "1px solid #21262D",
+          borderRadius: "12px",
+          padding: "16px",
+          marginBottom: "16px",
+        }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
+            Game Notes
+          </div>
+          {articleHeadline && (
+            <div style={{ fontSize: "13px", color: "#F1F3F5", marginBottom: newsItems.length > 0 ? "10px" : 0, fontWeight: 500 }}>
+              {articleHeadline}
+            </div>
+          )}
+          {newsItems.map((n, i) => (
+            <div key={i} style={{
+              display: "flex",
+              gap: "8px",
+              padding: "5px 0",
+              borderTop: i > 0 || articleHeadline ? "0.5px solid #1E2433" : "none",
+            }}>
+              <span style={{ fontSize: "11px", color: "#4B5563", flexShrink: 0, paddingTop: "1px" }}>•</span>
+              <span style={{ fontSize: "12px", color: "#94A3B8" }}>{n.headline}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Box Score (final games only) */}
+      {isFinal && boxscoreTeams.length > 0 && (
+        <div style={{
+          background: "#161B22",
+          border: "1px solid #21262D",
+          borderRadius: "12px",
+          padding: "16px",
+          marginBottom: "16px",
+        }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>
+            Final Stats
+          </div>
+          {boxscoreTeams.map((team, ti) => (
+            <div key={ti} style={{ marginBottom: ti < boxscoreTeams.length - 1 ? "12px" : 0 }}>
+              <div style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", marginBottom: "6px" }}>{team.teamName}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {team.stats.slice(0, 8).map((stat, si) => (
+                  <div key={si} style={{
+                    background: "#0D1117",
+                    borderRadius: "6px",
+                    padding: "4px 8px",
+                    minWidth: "52px",
+                    textAlign: "center",
+                  }}>
+                    <div style={{ fontSize: "10px", color: "#4B5563", marginBottom: "1px" }}>{stat.name}</div>
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5" }}>{stat.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Article headline for final games */}
+      {isFinal && articleHeadline && (
+        <div style={{
+          background: "#161B22",
+          border: "1px solid #21262D",
+          borderRadius: "12px",
+          padding: "16px",
+          marginBottom: "16px",
+        }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
+            Recap
+          </div>
+          <div style={{ fontSize: "13px", color: "#F1F3F5", fontWeight: 500 }}>{articleHeadline}</div>
         </div>
       )}
 

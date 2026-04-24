@@ -3,6 +3,7 @@ import { americanToImpliedProb } from "@/lib/betting/oddsIngestion";
 import { getLogicalDateWindow } from "@/lib/utils/dateUtils";
 
 type SignalTier = "strong_value" | "lean_value" | "fair" | "lean_avoid" | "avoid";
+type EdgeTier = "no_edge" | "lean" | "good_value" | "strong_value";
 
 function getSignalTier(edgePct: number): SignalTier {
   if (edgePct >= 8) return "strong_value";
@@ -10,6 +11,14 @@ function getSignalTier(edgePct: number): SignalTier {
   if (edgePct >= -4) return "fair";
   if (edgePct >= -8) return "lean_avoid";
   return "avoid";
+}
+
+function getEdgeTier(edgePct: number): EdgeTier {
+  const abs = Math.abs(edgePct);
+  if (abs >= 10) return "strong_value";
+  if (abs >= 5) return "good_value";
+  if (abs >= 2) return "lean";
+  return "no_edge";
 }
 
 function computeEV(
@@ -220,6 +229,7 @@ export async function generateSignalsForDate(date: string) {
       const homeEdgePct = Math.max(-25, Math.min(25, Math.round(rawHomeEdge * 10) / 10));
       const homeEvValue = computeEV(consensus.consensus_home_win_prob, bestHome.price);
       const homeTier = getSignalTier(homeEdgePct);
+      const homeEdgeTier = getEdgeTier(homeEdgePct);
 
       await supabase
         .from("signals")
@@ -239,6 +249,7 @@ export async function generateSignalsForDate(date: string) {
             best_price: bestHome.price,
             best_bookmaker: bestHome.bookmaker,
             tier: homeTier,
+            edge_tier: homeEdgeTier,
             is_visible: true,
             suppressed: consensus.confidence_tier === "insufficient",
             suppression_reason: consensus.confidence_tier === "insufficient"
@@ -258,6 +269,7 @@ export async function generateSignalsForDate(date: string) {
       const awayEdgePct = Math.max(-25, Math.min(25, Math.round(rawAwayEdge * 10) / 10));
       const awayEvValue = computeEV(consensus.consensus_away_win_prob, bestAway.price);
       const awayTier = getSignalTier(awayEdgePct);
+      const awayEdgeTier = getEdgeTier(awayEdgePct);
 
       await supabase
         .from("signals")
@@ -277,6 +289,7 @@ export async function generateSignalsForDate(date: string) {
             best_price: bestAway.price,
             best_bookmaker: bestAway.bookmaker,
             tier: awayTier,
+            edge_tier: awayEdgeTier,
             is_visible: true,
             suppressed: consensus.confidence_tier === "insufficient",
             suppression_reason: consensus.confidence_tier === "insufficient"
