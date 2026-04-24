@@ -262,6 +262,8 @@ export default function BettingSlateClient({
         .golf-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .golf-col-r2, .golf-col-r3, .golf-col-r4 { display: none !important; }
         .desktop-expand-panel { display: none !important; }
+        .nav-links { display: none !important; }
+        .nav-header { padding: 8px 12px !important; }
       }
     `}</style>
     <div className="betting-page-root" style={{
@@ -276,7 +278,7 @@ export default function BettingSlateClient({
     }}>
 
       {/* Nav */}
-      <div style={{
+      <div className="nav-header" style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         paddingBottom: "14px", borderBottom: "0.5px solid #1E2433", marginBottom: "16px",
         background: "#0D1117",
@@ -301,7 +303,7 @@ export default function BettingSlateClient({
             <span className="logo-pulse">Pulse</span>
           </span>
         </a>
-        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+        <div className="nav-links" style={{ display: "flex", alignItems: "center", gap: "20px" }}>
           {navLink("/betting", "Betting", pathname === "/betting")}
           {navLink("/fantasy", "Fantasy", pathname === "/fantasy")}
           {currentUser && (
