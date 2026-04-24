@@ -265,9 +265,9 @@ export default async function GameDetailPage({
 
   return (
     <div style={{
-      maxWidth: "480px",
+      maxWidth: "680px",
       margin: "0 auto",
-      padding: "16px",
+      padding: "clamp(12px, 4vw, 32px)",
       fontSize: "14px",
       color: "#F1F3F5",
       background: "#0D1117",

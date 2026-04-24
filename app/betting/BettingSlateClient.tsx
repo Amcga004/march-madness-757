@@ -51,6 +51,13 @@ const TIER_CONFIG: Record<string, { color: string; label: string }> = {
   avoid: { color: "#DC2626", label: "Avoid" },
 };
 
+const EDGE_TIER_CONFIG: Record<string, { color: string; label: string }> = {
+  no_edge:      { color: "#6B7280", label: "No edge" },
+  lean:         { color: "#6B7280", label: "Lean" },
+  good_value:   { color: "#D97706", label: "Good value" },
+  strong_value: { color: "#16A34A", label: "Strong value" },
+};
+
 const MODEL_LABELS: Record<string, string> = {
   dunks_and_threes: "Dunks & Threes",
   kenpom: "KenPom",
@@ -550,7 +557,9 @@ export default function BettingSlateClient({
                             <span style={{ fontSize: "12px" }}><strong>O {fmtOdds(bestOverRow?.over_price ?? null)}</strong>{bestOverRow && <span style={{ color: "#6B7280", fontSize: "10px" }}> {BOOK_LABELS[bestOverRow.bookmaker] ?? bestOverRow.bookmaker}</span>}</span>
                             <span style={{ fontSize: "12px" }}><strong>U {fmtOdds(bestUnderRow?.under_price ?? null)}</strong>{bestUnderRow && <span style={{ color: "#6B7280", fontSize: "10px" }}> {BOOK_LABELS[bestUnderRow.bookmaker] ?? bestUnderRow.bookmaker}</span>}</span>
                           </>;
-                        })() : <>
+                        })() : (!bestAway && !bestHome) ? (
+                          <span style={{ fontSize: "16px", color: "#4B5563" }}>🔒</span>
+                        ) : <>
                           <span style={{ fontSize: "12px" }}><strong>{fmtOdds(bestAway?.price ?? null)}</strong>{bestAway && <span style={{ color: "#6B7280", fontSize: "10px" }}> {BOOK_LABELS[bestAway.bookmaker] ?? bestAway.bookmaker}</span>}</span>
                           <span style={{ fontSize: "12px" }}><strong>{fmtOdds(bestHome?.price ?? null)}</strong>{bestHome && <span style={{ color: "#6B7280", fontSize: "10px" }}> {BOOK_LABELS[bestHome.bookmaker] ?? bestHome.bookmaker}</span>}</span>
                         </>}
@@ -560,11 +569,11 @@ export default function BettingSlateClient({
                           currentUser ? (
                             topSignal ? (
                               <>
-                                <span style={{ fontSize: "14px", fontWeight: 600, color: TIER_CONFIG[topSignal.tier]?.color }}>
+                                <span style={{ fontSize: "14px", fontWeight: 600, color: (EDGE_TIER_CONFIG[topSignal.edge_tier] ?? TIER_CONFIG[topSignal.tier])?.color }}>
                                   {topSignal.edge_pct > 0 ? "+" : ""}{topSignal.edge_pct}%
                                 </span>
                                 <span style={{ fontSize: "10px", color: "var(--color-text-secondary)" }}>
-                                  {TIER_CONFIG[topSignal.tier]?.label} · {topSignal.side === "home" ? game.homeTeam.split(" ").pop() : game.awayTeam.split(" ").pop()}
+                                  {(EDGE_TIER_CONFIG[topSignal.edge_tier] ?? TIER_CONFIG[topSignal.tier])?.label} · {topSignal.side === "home" ? game.homeTeam.split(" ").pop() : game.awayTeam.split(" ").pop()}
                                 </span>
                               </>
                             ) : <span style={{ fontSize: "10px", color: "#4B5563" }}>No edge</span>
@@ -814,11 +823,11 @@ export default function BettingSlateClient({
                       : currentUser ? (
                         topSignal ? (
                           <>
-                            <span style={{ fontSize: "13px", fontWeight: 500, color: TIER_CONFIG[topSignal.tier]?.color }}>
+                            <span style={{ fontSize: "13px", fontWeight: 500, color: (EDGE_TIER_CONFIG[topSignal.edge_tier] ?? TIER_CONFIG[topSignal.tier])?.color }}>
                               {topSignal.edge_pct > 0 ? "+" : ""}{topSignal.edge_pct}%
                             </span>
                             <span style={{ fontSize: "10px", color: "var(--color-text-secondary)" }}>
-                              {TIER_CONFIG[topSignal.tier]?.label} · {topSignal.side === "home" ? game.homeTeam.split(" ").pop() : game.awayTeam.split(" ").pop()}
+                              {(EDGE_TIER_CONFIG[topSignal.edge_tier] ?? TIER_CONFIG[topSignal.tier])?.label} · {topSignal.side === "home" ? game.homeTeam.split(" ").pop() : game.awayTeam.split(" ").pop()}
                             </span>
                           </>
                         ) : (
@@ -880,19 +889,21 @@ export default function BettingSlateClient({
                                   <span style={{ fontSize: "13px", fontWeight: 500 }}>
                                     {topSignal.side === "home" ? game.homeTeam : game.awayTeam} · Moneyline
                                   </span>
-                                  <span style={{ fontSize: "14px", fontWeight: 500, color: TIER_CONFIG[topSignal.tier]?.color }}>
+                                  <span style={{ fontSize: "14px", fontWeight: 500, color: (EDGE_TIER_CONFIG[topSignal.edge_tier] ?? TIER_CONFIG[topSignal.tier])?.color }}>
                                     {topSignal.edge_pct > 0 ? "+" : ""}{topSignal.edge_pct}% edge
                                   </span>
                                 </div>
                                 <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                                  {(() => { const cfg = EDGE_TIER_CONFIG[topSignal.edge_tier] ?? TIER_CONFIG[topSignal.tier]; return (
                                   <span style={{
                                     fontSize: "10px", fontWeight: 500,
                                     padding: "2px 8px", borderRadius: "4px",
-                                    background: `${TIER_CONFIG[topSignal.tier]?.color}18`,
-                                    color: TIER_CONFIG[topSignal.tier]?.color,
+                                    background: `${cfg?.color}18`,
+                                    color: cfg?.color,
                                   }}>
-                                    {TIER_CONFIG[topSignal.tier]?.label}
+                                    {cfg?.label}
                                   </span>
+                                  ); })()}
                                   <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
                                     Best: {fmtOdds(topSignal.best_price)} {BOOK_LABELS[topSignal.best_bookmaker] ?? topSignal.best_bookmaker}
                                   </span>
