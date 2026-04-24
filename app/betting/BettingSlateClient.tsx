@@ -74,7 +74,7 @@ interface Props {
 export default function BettingSlateClient({
   date, todayET, sport, games, mlbStartersByTeam, golfLeaderboard, golfTournamentName, golfTournamentId, golfRoundStatus, teamLogos, user,
 }: Props) {
-  const [activeSport, setActiveSport] = useState(sport);
+  const [activeSport] = useState(sport);
   const [activeMarket, setActiveMarket] = useState("h2h");
   const pathname = usePathname();
   const [expandedGame, setExpandedGame] = useState<string | null>(null);
@@ -320,11 +320,11 @@ export default function BettingSlateClient({
 
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "14px", flexWrap: "wrap", background: "#0D1117" }}>
-        {pill("All", activeSport === "all", () => setActiveSport("all"))}
-        {pill("NBA", activeSport === "nba", () => setActiveSport("nba"))}
-        {pill("NHL", activeSport === "nhl", () => setActiveSport("nhl"))}
-        {pill("MLB", activeSport === "mlb", () => setActiveSport("mlb"))}
-        {pill("CBB", activeSport === "ncaab", () => setActiveSport("ncaab"))}
+        {pill("All", activeSport === "all", () => { const u = new URL(window.location.href); u.searchParams.set("sport", "all"); window.location.href = u.toString(); })}
+        {pill("NBA", activeSport === "nba", () => { const u = new URL(window.location.href); u.searchParams.set("sport", "nba"); window.location.href = u.toString(); })}
+        {pill("NHL", activeSport === "nhl", () => { const u = new URL(window.location.href); u.searchParams.set("sport", "nhl"); window.location.href = u.toString(); })}
+        {pill("MLB", activeSport === "mlb", () => { const u = new URL(window.location.href); u.searchParams.set("sport", "mlb"); window.location.href = u.toString(); })}
+        {pill("CBB", activeSport === "ncaab", () => { const u = new URL(window.location.href); u.searchParams.set("sport", "ncaab"); window.location.href = u.toString(); })}
         <div style={{ width: "1px", height: "16px", background: "var(--color-border-tertiary)", margin: "0 2px" }} />
         {pill("Moneyline", activeMarket === "h2h", () => setActiveMarket("h2h"))}
         {pill("Spread", activeMarket === "spreads", () => setActiveMarket("spreads"))}
