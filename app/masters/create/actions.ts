@@ -55,9 +55,10 @@ export async function createLeague(formData: {
     }
 
     redirect(`/masters/${league.id}/hub`);
-  } catch (err) {
-    // redirect() throws internally — let it propagate
-    if (err instanceof Error && err.message === "NEXT_REDIRECT") throw err;
+  } catch (err: any) {
+    // In Next.js 14+, redirect() throws with err.digest starting with "NEXT_REDIRECT".
+    // Must rethrow so the framework can process the redirect response.
+    if (err?.digest?.startsWith?.("NEXT_REDIRECT")) throw err;
     console.error("[createLeague] unexpected error:", err);
     return { error: err instanceof Error ? err.message : "Unexpected error" };
   }

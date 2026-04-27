@@ -272,7 +272,32 @@ export default function BettingSlateClient({
         .desktop-expand-panel { display: none !important; }
         .nav-links { display: none !important; }
         .nav-header { padding: 8px 12px !important; }
+        .betting-page-root { padding-bottom: 80px !important; }
+        .mobile-bottom-nav { display: flex !important; }
       }
+      .mobile-bottom-nav {
+        display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #0D1117;
+        border-top: 1px solid #21262D;
+        padding: 8px 0 16px;
+        z-index: 100;
+      }
+      .mobile-tab {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        color: #6B7280;
+        text-decoration: none;
+        font-size: 10px;
+        flex: 1;
+        padding: 4px 0;
+      }
+      .mobile-tab.active { color: #EA6C0A; }
     `}</style>
     <div className="betting-page-root" style={{
       width: "100%",
@@ -590,13 +615,14 @@ export default function BettingSlateClient({
                               setSlipModal({ game, selectedSide: initSide });
                               setCustomOdds(getBest(game, initSide)?.price ?? null);
                             }}
-                            style={{ color: "#EA6C0A", fontSize: "13px", cursor: "pointer" }}
+                            style={{ color: "#EA6C0A", fontSize: "14px", cursor: "pointer", padding: "8px 12px", margin: "-8px -12px" }}
                           >+ Slip</span>
                         )}
                         <a
                           href={`/betting/game/${game.id}?sport=${game.sportKey}`}
                           className="mobile-details-link"
                           onClick={(e) => e.stopPropagation()}
+                          style={{ fontSize: "14px", padding: "8px 12px", margin: "-8px -12px" }}
                         >Details →</a>
                       </div>
                     </div>
@@ -1379,6 +1405,22 @@ export default function BettingSlateClient({
           </div>
         </div>
       )}
+
+      {/* Mobile bottom tab bar */}
+      <nav className="mobile-bottom-nav">
+        <a href="/betting" className="mobile-tab active">
+          <span>📊</span>
+          <span>Betting</span>
+        </a>
+        <a href="/fantasy/golf" className="mobile-tab">
+          <span>🏆</span>
+          <span>Fantasy</span>
+        </a>
+        <a href="/betting?tab=picks" className="mobile-tab">
+          <span>⭐</span>
+          <span>My Picks</span>
+        </a>
+      </nav>
     </div>
     </>
   );
