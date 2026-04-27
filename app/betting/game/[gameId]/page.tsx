@@ -119,11 +119,19 @@ export default async function GameDetailPage({
     .eq("sport_key", sportKey);
   if (isHistorical) oddsQuery = oddsQuery.eq("closing_line", true);
 
-  const [{ data: allOdds }, { data: consensusData }, { data: signalsData }] = await Promise.all([
-    oddsQuery,
-    supabase.from("consensus").select("*").eq("game_date", date).eq("sport_key", sportKey),
-    supabase.from("signals").select("*").eq("game_date", date).eq("sport_key", sportKey).eq("suppressed", false),
-  ]);
+  let allOdds: any[] | null = null;
+  let consensusData: any[] | null = null;
+  let signalsData: any[] | null = null;
+  try {
+    const [oddsRes, consensusRes, signalsRes] = await Promise.all([
+      oddsQuery,
+      supabase.from("consensus").select("*").eq("game_date", date).eq("sport_key", sportKey),
+      supabase.from("signals").select("*").eq("game_date", date).eq("sport_key", sportKey).eq("suppressed", false),
+    ]);
+    allOdds = oddsRes.data;
+    consensusData = consensusRes.data;
+    signalsData = signalsRes.data;
+  } catch { /* silently ignore — page will render with no odds/signals */ }
 
   // Match by team name
   const gameOdds = (allOdds ?? []).filter((o: any) => {
@@ -206,55 +214,63 @@ export default async function GameDetailPage({
   const boxscoreTeams: BoxTeam[] = [];
 
   if (summaryRaw) {
-    // Injuries
-    for (const teamInj of summaryRaw.injuries ?? []) {
-      const teamName: string = teamInj.team?.displayName ?? "";
-      for (const inj of teamInj.injuries ?? []) {
-        const playerName: string = inj.athlete?.displayName ?? "";
-        const status: string = inj.status ?? "";
-        const description: string = inj.type?.description ?? status;
-        if (playerName) summaryInjuries.push({ teamName, playerName, status, description });
-      }
-    }
-
-    // Pickcenter (consensus line from ESPN)
-    const pc = summaryRaw.pickcenter?.[0];
-    if (pc) {
-      pickcenter = {
-        spread: pc.spread ?? null,
-        overUnder: pc.overUnder ?? null,
-        awayMoneyLine: pc.awayTeamOdds?.moneyLine ?? null,
-        homeMoneyLine: pc.homeTeamOdds?.moneyLine ?? null,
-      };
-    }
-
-    // Article headline for final games
-    if (summaryRaw.article?.headline) articleHeadline = summaryRaw.article.headline;
-
-    // News (up to 3)
-    for (const n of (summaryRaw.news ?? []).slice(0, 3)) {
-      if (n.headline) newsItems.push({ headline: n.headline });
-    }
-
-    // Live win probability
-    const wp: any[] = summaryRaw.winprobability ?? [];
-    if (wp.length > 0) liveHomeWinPct = wp[wp.length - 1]?.homeWinPercentage ?? null;
-
-    // Boxscore (final games)
-    if (isFinal) {
-      for (const team of summaryRaw.boxscore?.teams ?? []) {
-        const teamName: string = team.team?.displayName ?? "";
-        const homeAway: string = team.homeAway ?? "";
-        const stats: Array<{ name: string; value: string }> = [];
-        for (const stat of team.statistics ?? []) {
-          const val: string = stat.displayValue ?? "";
-          if (val && val !== "0" && val !== "-" && val !== "--") {
-            stats.push({ name: stat.label ?? stat.name ?? "", value: val });
-          }
+    try {
+      // Injuries
+      const injuryList = Array.isArray(summaryRaw.injuries) ? summaryRaw.injuries : [];
+      for (const teamInj of injuryList) {
+        const teamName: string = teamInj?.team?.displayName ?? "";
+        const innerInjuries = Array.isArray(teamInj?.injuries) ? teamInj.injuries : [];
+        for (const inj of innerInjuries) {
+          const playerName: string = inj?.athlete?.displayName ?? "";
+          const status: string = inj?.status ?? "";
+          const description: string = inj?.type?.description ?? status;
+          if (playerName) summaryInjuries.push({ teamName, playerName, status, description });
         }
-        if (stats.length > 0) boxscoreTeams.push({ teamName, homeAway, stats });
       }
-    }
+
+      // Pickcenter (consensus line from ESPN)
+      const pcArr = Array.isArray(summaryRaw.pickcenter) ? summaryRaw.pickcenter : [];
+      const pc = pcArr[0] ?? null;
+      if (pc) {
+        pickcenter = {
+          spread: pc.spread ?? null,
+          overUnder: pc.overUnder ?? null,
+          awayMoneyLine: pc.awayTeamOdds?.moneyLine ?? null,
+          homeMoneyLine: pc.homeTeamOdds?.moneyLine ?? null,
+        };
+      }
+
+      // Article headline
+      if (summaryRaw.article?.headline) articleHeadline = String(summaryRaw.article.headline);
+
+      // News (up to 3)
+      const newsList = Array.isArray(summaryRaw.news) ? summaryRaw.news : [];
+      for (const n of newsList.slice(0, 3)) {
+        if (n?.headline) newsItems.push({ headline: String(n.headline) });
+      }
+
+      // Live win probability
+      const wp = Array.isArray(summaryRaw.winprobability) ? summaryRaw.winprobability : [];
+      if (wp.length > 0) liveHomeWinPct = wp[wp.length - 1]?.homeWinPercentage ?? null;
+
+      // Boxscore (final games)
+      if (isFinal) {
+        const bsTeams = Array.isArray(summaryRaw.boxscore?.teams) ? summaryRaw.boxscore.teams : [];
+        for (const team of bsTeams) {
+          const teamName: string = team?.team?.displayName ?? "";
+          const homeAway: string = team?.homeAway ?? "";
+          const stats: Array<{ name: string; value: string }> = [];
+          const statistics = Array.isArray(team?.statistics) ? team.statistics : [];
+          for (const stat of statistics) {
+            const val: string = stat?.displayValue ?? "";
+            if (val && val !== "0" && val !== "-" && val !== "--") {
+              stats.push({ name: stat?.label ?? stat?.name ?? "", value: val });
+            }
+          }
+          if (stats.length > 0) boxscoreTeams.push({ teamName, homeAway, stats });
+        }
+      }
+    } catch { /* silently ignore malformed ESPN summary data */ }
   }
 
   const homeWon = isFinal && homeScore !== null && awayScore !== null && Number(homeScore) > Number(awayScore);
