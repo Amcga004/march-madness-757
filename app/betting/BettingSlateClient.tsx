@@ -71,6 +71,7 @@ interface Props {
   games: any[];
   mlbStartersByTeam: Record<string, { pitcher: string; confirmed: boolean }>;
   golfLeaderboard: any[];
+  golfRawCompetitors: any[];
   golfTournamentName: string;
   golfTournamentId: string;
   golfRoundStatus: string;
@@ -79,7 +80,7 @@ interface Props {
 }
 
 export default function BettingSlateClient({
-  date, todayET, sport, games, mlbStartersByTeam, golfLeaderboard, golfTournamentName, golfTournamentId, golfRoundStatus, teamLogos, user,
+  date, todayET, sport, games, mlbStartersByTeam, golfLeaderboard, golfRawCompetitors, golfTournamentName, golfTournamentId, golfRoundStatus, teamLogos, user,
 }: Props) {
   const [activeSport] = useState(sport);
   const [activeMarket, setActiveMarket] = useState("h2h");
@@ -1041,6 +1042,7 @@ export default function BettingSlateClient({
           tournamentName={golfTournamentName}
           roundStatus={golfRoundStatus}
           players={liveGolf}
+          rawCompetitors={golfRawCompetitors}
         />
       )}
 

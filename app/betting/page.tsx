@@ -181,6 +181,7 @@ export default async function BettingPage({
     .maybeSingle();
 
   let golfLeaderboard: any[] = [];
+  let golfRawCompetitors: any[] = [];
   let golfRoundStatus = "";
 
   if (activeTournament) {
@@ -197,13 +198,13 @@ export default async function BettingPage({
         golfRoundStatus = event?.status?.type?.shortDetail ?? "";
 
         if (competition) {
-          golfLeaderboard = (competition.competitors ?? [])
-            .sort((a: any, b: any) => {
-              const posA = parseInt(a.status?.position?.id ?? "999");
-              const posB = parseInt(b.status?.position?.id ?? "999");
-              return posA - posB;
-            })
-            .map((comp: any) => {
+          const sortedComps = (competition.competitors ?? []).sort((a: any, b: any) => {
+            const posA = parseInt(a.status?.position?.id ?? "999");
+            const posB = parseInt(b.status?.position?.id ?? "999");
+            return posA - posB;
+          });
+          golfRawCompetitors = sortedComps;
+          golfLeaderboard = sortedComps.map((comp: any) => {
               const athlete = comp.athlete;
               const athletes = comp.athletes;
               const linescores = comp.linescores ?? [];
@@ -305,6 +306,7 @@ export default async function BettingPage({
       golfTournamentName={activeTournament?.name ?? ""}
       golfTournamentId={String((activeTournament?.metadata as any)?.tournamentId ?? "")}
       golfRoundStatus={golfRoundStatus}
+      golfRawCompetitors={golfRawCompetitors}
       user={user ? { id: user.id, email: user.email } : null}
     />
   );
