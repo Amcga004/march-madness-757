@@ -258,7 +258,7 @@ export default function BettingSlateClient({
       * { box-sizing: border-box; }
       body { overflow-x: hidden; }
       .betting-page-root { max-width: 100vw; overflow-x: hidden; }
-      .mobile-details-link { display: inline-block; font-size: 11px; color: #EA6C0A; margin-top: 4px; text-decoration: none; }
+      .mobile-details-link { display: inline-block; font-size: 14px; color: #EA6C0A; margin-top: 4px; text-decoration: none; }
       .col-headers { display: grid; }
       .game-row-desktop { display: grid; }
       .game-row-mobile { display: none; }
