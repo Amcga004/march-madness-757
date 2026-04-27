@@ -94,7 +94,7 @@ export default function BettingSlateClient({
   const [slipModal, setSlipModal] = useState<{ game: any; selectedSide: "home" | "away" } | null>(null);
   const [myPicks, setMyPicks] = useState<any[] | null>(null);
   const [savingPick, setSavingPick] = useState(false);
-  const [modalUnit, setModalUnit] = useState(1);
+  const [modalUnit, setModalUnit] = useState<number | string>('');
   const [customOdds, setCustomOdds] = useState<number | null>(null);
   const [timeFilter, setTimeFilter] = useState("all");
   useEffect(() => { userRef.current = currentUser; }, [currentUser]);
@@ -268,7 +268,6 @@ export default function BettingSlateClient({
       }
       @media (max-width: 767px) {
         .golf-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        .golf-col-r2, .golf-col-r3, .golf-col-r4 { display: none !important; }
         .desktop-expand-panel { display: none !important; }
         .nav-links { display: none !important; }
         .nav-header { padding: 8px 12px !important; }
@@ -1262,7 +1261,7 @@ export default function BettingSlateClient({
       {slipModal && (
         <div
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
-          onClick={() => { setSlipModal(null); setModalUnit(1); setCustomOdds(null); }}
+          onClick={() => { setSlipModal(null); setModalUnit(''); setCustomOdds(null); }}
         >
           <div
             style={{ background: "#1A2236", border: "0.5px solid var(--color-border-secondary)", borderRadius: "12px", padding: "24px", width: "360px", maxWidth: "90vw" }}
@@ -1321,7 +1320,8 @@ export default function BettingSlateClient({
                 min="0.1"
                 step="0.1"
                 value={modalUnit}
-                onChange={e => setModalUnit(Math.max(0.1, parseFloat(e.target.value) || 1))}
+                placeholder="e.g. 1.5"
+                onChange={e => setModalUnit(e.target.value === '' ? '' : parseFloat(e.target.value) || '')}
                 style={{
                   width: "72px", padding: "6px 8px", borderRadius: "6px",
                   background: "#0D1117", border: "0.5px solid var(--color-border-secondary)",
@@ -1348,12 +1348,12 @@ export default function BettingSlateClient({
                   sportKey: slipModal.game.sportKey,
                   pickedTeam,
                   pickOdds: finalOdds,
-                  unitSize: modalUnit,
+                  unitSize: modalUnit === '' ? undefined : Number(modalUnit),
                 });
                 setSavingPick(false);
                 if (result.ok) {
                   setSlipModal(null);
-                  setModalUnit(1);
+                  setModalUnit('');
                   setCustomOdds(null);
                   setMyPicks(null);
                 }
@@ -1367,7 +1367,7 @@ export default function BettingSlateClient({
             >
               {savingPick ? "Saving..." : "Add to Slip"}
             </button>
-            <button onClick={() => { setSlipModal(null); setModalUnit(1); setCustomOdds(null); }} style={{
+            <button onClick={() => { setSlipModal(null); setModalUnit(''); setCustomOdds(null); }} style={{
               width: "100%", padding: "8px", marginTop: "8px", borderRadius: "8px",
               cursor: "pointer", background: "transparent", border: "none",
               color: "var(--color-text-secondary)", fontSize: "13px",
