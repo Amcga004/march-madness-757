@@ -4,6 +4,8 @@ import { createServiceClient } from '@/lib/supabase/service'
 const ESPN_SCOREBOARD =
   'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard'
 
+const PGA_SPORT_ID = 'e9323465-f946-487f-b355-e63e596adfc2'
+
 function isTeamCompetitor(competitor: any): boolean {
   const name: string = competitor?.team?.displayName ?? ''
   return name.includes('/')
@@ -88,7 +90,7 @@ export async function POST(req: Request) {
     const { data: competitorRow, error: compError } = await supabase
       .from('competitors')
       .upsert(
-        { name, external_id: externalId, sport_key: 'pga' },
+        { name, external_id: externalId, sport_id: PGA_SPORT_ID },
         { onConflict: 'external_id', ignoreDuplicates: false }
       )
       .select('id')
