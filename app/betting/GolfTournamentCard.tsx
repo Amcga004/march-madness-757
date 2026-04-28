@@ -394,160 +394,201 @@ export default function GolfTournamentCard({ tournamentName, roundStatus, player
             {/* Scorecard table */}
             {activeRoundData && holes.length > 0 ? (
               <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" as any }}>
-                {/* Front 9 */}
-                <div style={{ marginBottom: "12px" }}>
-                  <div style={{ fontSize: "10px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>Front 9</div>
-                  <table style={{ borderCollapse: "collapse", fontSize: "12px", width: "100%" }}>
-                    <thead>
-                      <tr>
-                        <td style={{ fontSize: "10px", color: "#4B5563", paddingRight: "8px", width: "36px" }}>Hole</td>
-                        {front.map((h: any) => (
-                          <td key={h.period} style={{ textAlign: "center", width: cellW, color: "#6B7280", fontSize: "10px", paddingBottom: "4px" }}>{h.period}</td>
-                        ))}
-                        <td style={{ textAlign: "center", width: totW, color: "#6B7280", fontSize: "10px", paddingBottom: "4px", paddingLeft: "4px" }}>OUT</td>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* Par row */}
-                      <tr>
-                        <td style={{ fontSize: "10px", color: "#4B5563", paddingRight: "8px" }}>Par</td>
-                        {front.map((h: any) => {
-                          const par = derivePar(h);
-                          return (
-                            <td key={h.period} style={{ textAlign: "center", color: "#6B7280", fontSize: "11px", padding: "2px 0" }}>
-                              {par ?? "—"}
-                            </td>
-                          );
-                        })}
-                        <td style={{ textAlign: "center", color: "#6B7280", fontSize: "11px", paddingLeft: "4px" }}>
-                          {front.reduce((acc: number, h: any) => acc + (derivePar(h) ?? 0), 0) || "—"}
-                        </td>
-                      </tr>
-                      {/* Strokes row */}
-                      <tr>
-                        <td style={{ fontSize: "10px", color: "#4B5563", paddingRight: "8px" }}>Score</td>
-                        {front.map((h: any) => {
-                          const vp = parseVsPar(h.scoreType?.displayValue);
-                          return (
-                            <td key={h.period} style={{ textAlign: "center", padding: "2px 1px" }}>
-                              <span style={{
-                                display: "inline-block",
-                                width: "22px", height: "22px", lineHeight: "22px",
-                                borderRadius: vp !== null && vp <= -2 ? "50%" : vp === -1 ? "50%" : vp === 1 ? "2px" : vp !== null && vp >= 2 ? "2px" : "2px",
-                                background: holeBg(vp),
-                                color: holeColor(vp),
-                                fontSize: "12px", fontWeight: 600,
-                                border: vp !== null && vp <= -2 ? `1.5px solid ${holeColor(vp)}` : vp === -1 ? `1px solid ${holeColor(vp)}` : "none",
-                              }}>
-                                {h.displayValue}
-                              </span>
-                            </td>
-                          );
-                        })}
-                        <td style={{ textAlign: "center", paddingLeft: "4px", fontWeight: 600, color: "#F1F3F5", fontSize: "13px" }}>
-                          {sumStrokes(front) || "—"}
-                        </td>
-                      </tr>
-                      {/* vs Par row */}
-                      <tr>
-                        <td style={{ fontSize: "10px", color: "#4B5563", paddingRight: "8px" }}>+/-</td>
-                        {front.map((h: any) => {
-                          const vp = parseVsPar(h.scoreType?.displayValue);
-                          return (
-                            <td key={h.period} style={{ textAlign: "center", fontSize: "10px", color: holeColor(vp), padding: "2px 0" }}>
-                              {vp === null ? "—" : vp === 0 ? "E" : vp > 0 ? `+${vp}` : vp}
-                            </td>
-                          );
-                        })}
-                        <td style={{ textAlign: "center", paddingLeft: "4px", fontSize: "11px", color: holeColor(sumVsPar(front)) }}>
-                          {sumVsPar(front) === 0 ? "E" : sumVsPar(front) > 0 ? `+${sumVsPar(front)}` : sumVsPar(front)}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                {/* Shared cell styles */}
+                {(() => {
+                  const cell = (extra?: React.CSSProperties): React.CSSProperties => ({
+                    borderBottom: "0.5px solid #1E2433",
+                    borderRight: "0.5px solid #1E2433",
+                    padding: "4px 2px",
+                    textAlign: "center",
+                    ...extra,
+                  });
+                  const labelCell = (extra?: React.CSSProperties): React.CSSProperties => ({
+                    borderBottom: "0.5px solid #1E2433",
+                    borderRight: "0.5px solid #1E2433",
+                    padding: "4px 6px 4px 2px",
+                    ...extra,
+                  });
+                  const totCell = (extra?: React.CSSProperties): React.CSSProperties => ({
+                    borderBottom: "0.5px solid #1E2433",
+                    borderLeft: "1px solid #21262D",
+                    padding: "4px 6px",
+                    textAlign: "center",
+                    ...extra,
+                  });
+                  const hdrCell = (extra?: React.CSSProperties): React.CSSProperties => ({
+                    borderBottom: "0.5px solid #21262D",
+                    padding: "4px 2px",
+                    textAlign: "center",
+                    ...extra,
+                  });
+                  const hdrTotCell = (extra?: React.CSSProperties): React.CSSProperties => ({
+                    borderBottom: "0.5px solid #21262D",
+                    borderLeft: "1px solid #21262D",
+                    padding: "4px 6px",
+                    textAlign: "center",
+                    ...extra,
+                  });
 
-                {/* Back 9 */}
-                {back.length > 0 && (
-                  <div style={{ marginBottom: "12px" }}>
-                    <div style={{ fontSize: "10px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>Back 9</div>
-                    <table style={{ borderCollapse: "collapse", fontSize: "12px", width: "100%" }}>
-                      <thead>
-                        <tr>
-                          <td style={{ fontSize: "10px", color: "#4B5563", paddingRight: "8px", width: "36px" }}>Hole</td>
-                          {back.map((h: any) => (
-                            <td key={h.period} style={{ textAlign: "center", width: cellW, color: "#6B7280", fontSize: "10px", paddingBottom: "4px" }}>{h.period}</td>
-                          ))}
-                          <td style={{ textAlign: "center", width: totW, color: "#6B7280", fontSize: "10px", paddingBottom: "4px", paddingLeft: "4px" }}>IN</td>
-                          <td style={{ textAlign: "center", width: totW, color: "#6B7280", fontSize: "10px", paddingBottom: "4px", paddingLeft: "4px" }}>TOT</td>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td style={{ fontSize: "10px", color: "#4B5563", paddingRight: "8px" }}>Par</td>
-                          {back.map((h: any) => {
-                            const par = derivePar(h);
-                            return (
-                              <td key={h.period} style={{ textAlign: "center", color: "#6B7280", fontSize: "11px", padding: "2px 0" }}>
-                                {par ?? "—"}
+                  return (
+                    <>
+                      {/* Front 9 */}
+                      <div style={{ marginBottom: "12px" }}>
+                        <div style={{ fontSize: "10px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>Front 9</div>
+                        <table style={{ borderCollapse: "collapse", fontSize: "12px", width: "100%", border: "0.5px solid #1E2433" }}>
+                          <thead>
+                            <tr>
+                              <td style={hdrCell({ textAlign: "left", width: "36px", fontSize: "10px", color: "#4B5563", padding: "4px 6px" })}>Hole</td>
+                              {front.map((h: any) => (
+                                <td key={h.period} style={hdrCell({ width: cellW, color: "#6B7280", fontSize: "10px" })}>{h.period}</td>
+                              ))}
+                              <td style={hdrTotCell({ width: totW, color: "#6B7280", fontSize: "10px" })}>OUT</td>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {/* Par row */}
+                            <tr style={{ background: "transparent" }}>
+                              <td style={labelCell({ fontSize: "10px", color: "#4B5563" })}>Par</td>
+                              {front.map((h: any) => {
+                                const par = derivePar(h);
+                                return (
+                                  <td key={h.period} style={cell({ color: "#6B7280", fontSize: "11px" })}>
+                                    {par ?? "—"}
+                                  </td>
+                                );
+                              })}
+                              <td style={totCell({ color: "#6B7280", fontSize: "11px" })}>
+                                {front.reduce((acc: number, h: any) => acc + (derivePar(h) ?? 0), 0) || "—"}
                               </td>
-                            );
-                          })}
-                          <td style={{ textAlign: "center", color: "#6B7280", fontSize: "11px", paddingLeft: "4px" }}>
-                            {back.reduce((acc: number, h: any) => acc + (derivePar(h) ?? 0), 0) || "—"}
-                          </td>
-                          <td style={{ textAlign: "center", color: "#6B7280", fontSize: "11px", paddingLeft: "4px" }}>
-                            {holes.reduce((acc: number, h: any) => acc + (derivePar(h) ?? 0), 0) || "—"}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ fontSize: "10px", color: "#4B5563", paddingRight: "8px" }}>Score</td>
-                          {back.map((h: any) => {
-                            const vp = parseVsPar(h.scoreType?.displayValue);
-                            return (
-                              <td key={h.period} style={{ textAlign: "center", padding: "2px 1px" }}>
-                                <span style={{
-                                  display: "inline-block",
-                                  width: "22px", height: "22px", lineHeight: "22px",
-                                  borderRadius: "2px",
-                                  background: holeBg(vp),
-                                  color: holeColor(vp),
-                                  fontSize: "12px", fontWeight: 600,
-                                  border: vp !== null && vp <= -1 ? `1px solid ${holeColor(vp)}` : "none",
-                                }}>
-                                  {h.displayValue}
-                                </span>
+                            </tr>
+                            {/* Score row */}
+                            <tr style={{ background: "rgba(255,255,255,0.02)" }}>
+                              <td style={labelCell({ fontSize: "10px", color: "#4B5563" })}>Score</td>
+                              {front.map((h: any) => {
+                                const vp = parseVsPar(h.scoreType?.displayValue);
+                                return (
+                                  <td key={h.period} style={cell({ padding: "3px 2px" })}>
+                                    <span style={{
+                                      display: "inline-block",
+                                      width: "22px", height: "22px", lineHeight: "22px",
+                                      borderRadius: vp !== null && vp <= -2 ? "50%" : vp === -1 ? "50%" : "2px",
+                                      background: holeBg(vp),
+                                      color: holeColor(vp),
+                                      fontSize: "12px", fontWeight: 600,
+                                      border: vp !== null && vp <= -2 ? `1.5px solid ${holeColor(vp)}` : vp === -1 ? `1px solid ${holeColor(vp)}` : "none",
+                                    }}>
+                                      {h.displayValue}
+                                    </span>
+                                  </td>
+                                );
+                              })}
+                              <td style={totCell({ fontWeight: 600, color: "#F1F3F5", fontSize: "13px" })}>
+                                {sumStrokes(front) || "—"}
                               </td>
-                            );
-                          })}
-                          <td style={{ textAlign: "center", paddingLeft: "4px", fontWeight: 600, color: "#F1F3F5", fontSize: "13px" }}>
-                            {sumStrokes(back) || "—"}
-                          </td>
-                          <td style={{ textAlign: "center", paddingLeft: "4px", fontWeight: 700, color: "#EA6C0A", fontSize: "14px" }}>
-                            {sumStrokes(holes) || "—"}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ fontSize: "10px", color: "#4B5563", paddingRight: "8px" }}>+/-</td>
-                          {back.map((h: any) => {
-                            const vp = parseVsPar(h.scoreType?.displayValue);
-                            return (
-                              <td key={h.period} style={{ textAlign: "center", fontSize: "10px", color: holeColor(vp), padding: "2px 0" }}>
-                                {vp === null ? "—" : vp === 0 ? "E" : vp > 0 ? `+${vp}` : vp}
+                            </tr>
+                            {/* vs Par row */}
+                            <tr style={{ background: "transparent" }}>
+                              <td style={labelCell({ fontSize: "10px", color: "#4B5563" })}>+/-</td>
+                              {front.map((h: any) => {
+                                const vp = parseVsPar(h.scoreType?.displayValue);
+                                return (
+                                  <td key={h.period} style={cell({ fontSize: "10px", color: holeColor(vp) })}>
+                                    {vp === null ? "—" : vp === 0 ? "E" : vp > 0 ? `+${vp}` : vp}
+                                  </td>
+                                );
+                              })}
+                              <td style={totCell({ fontSize: "11px", color: holeColor(sumVsPar(front)) })}>
+                                {sumVsPar(front) === 0 ? "E" : sumVsPar(front) > 0 ? `+${sumVsPar(front)}` : sumVsPar(front)}
                               </td>
-                            );
-                          })}
-                          <td style={{ textAlign: "center", paddingLeft: "4px", fontSize: "11px", color: holeColor(sumVsPar(back)) }}>
-                            {sumVsPar(back) === 0 ? "E" : sumVsPar(back) > 0 ? `+${sumVsPar(back)}` : sumVsPar(back)}
-                          </td>
-                          <td style={{ textAlign: "center", paddingLeft: "4px", fontSize: "12px", fontWeight: 600, color: holeColor(sumVsPar(holes)) }}>
-                            {sumVsPar(holes) === 0 ? "E" : sumVsPar(holes) > 0 ? `+${sumVsPar(holes)}` : sumVsPar(holes)}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Back 9 */}
+                      {back.length > 0 && (
+                        <div style={{ marginBottom: "12px" }}>
+                          <div style={{ fontSize: "10px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>Back 9</div>
+                          <table style={{ borderCollapse: "collapse", fontSize: "12px", width: "100%", border: "0.5px solid #1E2433" }}>
+                            <thead>
+                              <tr>
+                                <td style={hdrCell({ textAlign: "left", width: "36px", fontSize: "10px", color: "#4B5563", padding: "4px 6px" })}>Hole</td>
+                                {back.map((h: any) => (
+                                  <td key={h.period} style={hdrCell({ width: cellW, color: "#6B7280", fontSize: "10px" })}>{h.period}</td>
+                                ))}
+                                <td style={hdrTotCell({ width: totW, color: "#6B7280", fontSize: "10px" })}>IN</td>
+                                <td style={hdrTotCell({ width: totW, color: "#6B7280", fontSize: "10px" })}>TOT</td>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr style={{ background: "transparent" }}>
+                                <td style={labelCell({ fontSize: "10px", color: "#4B5563" })}>Par</td>
+                                {back.map((h: any) => {
+                                  const par = derivePar(h);
+                                  return (
+                                    <td key={h.period} style={cell({ color: "#6B7280", fontSize: "11px" })}>
+                                      {par ?? "—"}
+                                    </td>
+                                  );
+                                })}
+                                <td style={totCell({ color: "#6B7280", fontSize: "11px" })}>
+                                  {back.reduce((acc: number, h: any) => acc + (derivePar(h) ?? 0), 0) || "—"}
+                                </td>
+                                <td style={totCell({ color: "#6B7280", fontSize: "11px" })}>
+                                  {holes.reduce((acc: number, h: any) => acc + (derivePar(h) ?? 0), 0) || "—"}
+                                </td>
+                              </tr>
+                              <tr style={{ background: "rgba(255,255,255,0.02)" }}>
+                                <td style={labelCell({ fontSize: "10px", color: "#4B5563" })}>Score</td>
+                                {back.map((h: any) => {
+                                  const vp = parseVsPar(h.scoreType?.displayValue);
+                                  return (
+                                    <td key={h.period} style={cell({ padding: "3px 2px" })}>
+                                      <span style={{
+                                        display: "inline-block",
+                                        width: "22px", height: "22px", lineHeight: "22px",
+                                        borderRadius: vp !== null && vp <= -2 ? "50%" : vp === -1 ? "50%" : "2px",
+                                        background: holeBg(vp),
+                                        color: holeColor(vp),
+                                        fontSize: "12px", fontWeight: 600,
+                                        border: vp !== null && vp <= -1 ? `1px solid ${holeColor(vp)}` : "none",
+                                      }}>
+                                        {h.displayValue}
+                                      </span>
+                                    </td>
+                                  );
+                                })}
+                                <td style={totCell({ fontWeight: 600, color: "#F1F3F5", fontSize: "13px" })}>
+                                  {sumStrokes(back) || "—"}
+                                </td>
+                                <td style={totCell({ fontWeight: 700, color: "#EA6C0A", fontSize: "14px" })}>
+                                  {sumStrokes(holes) || "—"}
+                                </td>
+                              </tr>
+                              <tr style={{ background: "transparent" }}>
+                                <td style={labelCell({ fontSize: "10px", color: "#4B5563" })}>+/-</td>
+                                {back.map((h: any) => {
+                                  const vp = parseVsPar(h.scoreType?.displayValue);
+                                  return (
+                                    <td key={h.period} style={cell({ fontSize: "10px", color: holeColor(vp) })}>
+                                      {vp === null ? "—" : vp === 0 ? "E" : vp > 0 ? `+${vp}` : vp}
+                                    </td>
+                                  );
+                                })}
+                                <td style={totCell({ fontSize: "11px", color: holeColor(sumVsPar(back)) })}>
+                                  {sumVsPar(back) === 0 ? "E" : sumVsPar(back) > 0 ? `+${sumVsPar(back)}` : sumVsPar(back)}
+                                </td>
+                                <td style={totCell({ fontSize: "12px", fontWeight: 600, color: holeColor(sumVsPar(holes)) })}>
+                                  {sumVsPar(holes) === 0 ? "E" : sumVsPar(holes) > 0 ? `+${sumVsPar(holes)}` : sumVsPar(holes)}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             ) : (
               <div style={{ textAlign: "center", color: "#4B5563", padding: "24px 0", fontSize: "13px" }}>
