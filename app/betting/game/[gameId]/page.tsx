@@ -346,63 +346,55 @@ export default async function GameDetailPage({
     ?? summaryRaw?.seasonseries?.[0]
     ?? null;
 
-  const homeTeamId: string | undefined = homeComp?.team?.id;
-  const awayTeamId: string | undefined = awayComp?.team?.id;
+  // ESPN Analytics pre-game win probability (predictor.homeTeam.gameProjection)
+  const espnHomeWinPct: number | null = isPreGame ? (summaryRaw?.predictor?.homeTeam?.gameProjection ?? null) : null;
+  const espnAwayWinPct: number | null = isPreGame ? (summaryRaw?.predictor?.awayTeam?.gameProjection ?? null) : null;
 
-  type TeamStatEntry = { name: string; displayValue: string; description?: string; abbreviation?: string };
-  let homeTeamStats: TeamStatEntry[] = [];
-  let awayTeamStats: TeamStatEntry[] = [];
-  type Last5Game = { date: string; opponent: string; homeAway: string; teamScore: number; oppScore: number; result: "W" | "L" };
-  let homeLast5: Last5Game[] = [];
-  let awayLast5: Last5Game[] = [];
-
-  if (isPreGame && (homeTeamId || awayTeamId)) {
-    const teamStatUrls: Record<string, (id: string) => string> = {
-      mlb: (id) => `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/${id}?stats=true`,
-      nba: (id) => `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${id}?stats=true`,
-      nhl: (id) => `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams/${id}?stats=true`,
-    };
-
-    function getLast5(schedData: any, teamId: string): Last5Game[] {
-      const events = Array.isArray(schedData?.events) ? schedData.events : [];
-      const completed = events.filter((e: any) =>
-        e.competitions?.[0]?.status?.type?.state === "post"
-      );
-      return completed.slice(-5).map((e: any) => {
-        const comp = e.competitions?.[0];
-        const teamComp = comp?.competitors?.find((c: any) => c.team?.id === teamId);
-        const oppComp = comp?.competitors?.find((c: any) => c.team?.id !== teamId);
-        const teamScore = Number(teamComp?.score?.displayValue ?? teamComp?.score ?? 0);
-        const oppScore = Number(oppComp?.score?.displayValue ?? oppComp?.score ?? 0);
-        return {
-          date: e.date ?? "",
-          opponent: oppComp?.team?.abbreviation ?? "?",
-          homeAway: teamComp?.homeAway ?? "away",
-          teamScore,
-          oppScore,
-          result: teamScore > oppScore ? "W" : "L",
-        } as Last5Game;
-      });
+  // Team season stats from boxscore (full stats available pre-game in summaryRaw.boxscore.teams)
+  function extractTeamStats(team: any): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const group of (team?.statistics ?? [])) {
+      for (const stat of (group?.stats ?? [])) {
+        if (stat?.name && stat?.displayValue) result[stat.name] = stat.displayValue;
+      }
     }
-
-    try {
-      const statUrlFn = teamStatUrls[sportKey];
-      const [homeStatsRaw, awayStatsRaw, homeSched, awaySched] = await Promise.all([
-        homeTeamId && statUrlFn ? fetch(statUrlFn(homeTeamId), { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
-        awayTeamId && statUrlFn ? fetch(statUrlFn(awayTeamId), { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
-        homeTeamId ? fetch(`https://site.api.espn.com/apis/site/v2/sports/${espnPath}/teams/${homeTeamId}/schedule?season=2026`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
-        awayTeamId ? fetch(`https://site.api.espn.com/apis/site/v2/sports/${espnPath}/teams/${awayTeamId}/schedule?season=2026`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
-      ]);
-
-      const rawHomeStats: any[] = homeStatsRaw?.team?.stats ?? [];
-      const rawAwayStats: any[] = awayStatsRaw?.team?.stats ?? [];
-      homeTeamStats = rawHomeStats.filter((s: any) => s.displayValue && s.displayValue !== "0" && s.displayValue !== "--").slice(0, 10);
-      awayTeamStats = rawAwayStats.filter((s: any) => s.displayValue && s.displayValue !== "0" && s.displayValue !== "--").slice(0, 10);
-
-      if (homeTeamId) homeLast5 = getLast5(homeSched, homeTeamId);
-      if (awayTeamId) awayLast5 = getLast5(awaySched, awayTeamId);
-    } catch { /* silently ignore */ }
+    return result;
   }
+  const _bsTeamsArr: any[] = Array.isArray(summaryRaw?.boxscore?.teams) ? summaryRaw.boxscore.teams : [];
+  const awaySeasonStats: Record<string, string> = extractTeamStats(_bsTeamsArr.find((t: any) => t.homeAway === "away"));
+  const homeSeasonStats: Record<string, string> = extractTeamStats(_bsTeamsArr.find((t: any) => t.homeAway === "home"));
+
+  // Team leaders from ESPN leaders array
+  type LeaderCategory = { name: string; displayName: string; leader: { name: string; value: string } | null };
+  type TeamLeaders = { teamName: string; teamId: string; categories: LeaderCategory[] };
+  const leadersByTeam: TeamLeaders[] = (Array.isArray(summaryRaw?.leaders) ? summaryRaw.leaders : []).map((grp: any) => ({
+    teamName: grp.team?.displayName ?? "",
+    teamId: grp.team?.id ?? "",
+    categories: ((grp.leaders ?? []) as any[]).map((cat: any) => ({
+      name: cat.name ?? "",
+      displayName: cat.displayName ?? "",
+      leader: cat.leaders?.[0] ? {
+        name: cat.leaders[0].athlete?.displayName ?? "",
+        value: cat.leaders[0].displayValue ?? "",
+      } : null,
+    })),
+  }));
+
+  // Last 5 games directly from ESPN summaryRaw.lastFiveGames (replaces schedule endpoint fetch)
+  type ESPN5Game = { result: "W" | "L"; score: string; opponent: string; atVs: string; date: string };
+  type ESPN5Team = { teamName: string; teamId: string; games: ESPN5Game[] };
+  const last5ByTeam: ESPN5Team[] = (Array.isArray(summaryRaw?.lastFiveGames) ? summaryRaw.lastFiveGames : []).map((grp: any) => ({
+    teamName: grp.team?.displayName ?? "",
+    teamId: grp.team?.id ?? "",
+    games: ((grp.events ?? []) as any[]).slice(0, 5).map((e: any) => ({
+      result: (e.gameResult ?? "L") as "W" | "L",
+      score: e.score ?? "",
+      opponent: e.opponent?.abbreviation ?? e.opponent?.displayName ?? "?",
+      atVs: e.atVs ?? "vs",
+      date: e.gameDate ?? "",
+    })),
+  }));
+
 
   return (
     <div style={{
@@ -659,6 +651,22 @@ export default async function GameDetailPage({
             ))}
           </div>
 
+          {/* ESPN Analytics + Consensus (pre-game) */}
+          {isPreGame && (espnAwayWinPct !== null || espnHomeWinPct !== null) && (
+            <div style={{ padding: "8px 0 4px", borderTop: "0.5px solid #21262D", marginTop: "4px" }}>
+              <div style={{ fontSize: "11px", color: "#6B7280", marginBottom: "3px" }}>
+                <span style={{ color: "#4B5563" }}>ESPN Analytics: </span>
+                {awayName.split(" ").pop()} {espnAwayWinPct?.toFixed(1)}% / {homeName.split(" ").pop()} {espnHomeWinPct?.toFixed(1)}%
+              </div>
+              {consensus && (
+                <div style={{ fontSize: "11px", color: "#6B7280" }}>
+                  <span style={{ color: "#4B5563" }}>Consensus: </span>
+                  {awayName.split(" ").pop()} {(((consensus.consensus_away_win_prob ?? 0) * 100 + (espnAwayWinPct ?? 0)) / 2).toFixed(1)}% / {homeName.split(" ").pop()} {(((consensus.consensus_home_win_prob ?? 0) * 100 + (espnHomeWinPct ?? 0)) / 2).toFixed(1)}%
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Market vs model comparison */}
           <div style={{ display: "flex", gap: "8px" }}>
             <div style={{ flex: 1 }}>
@@ -674,6 +682,34 @@ export default async function GameDetailPage({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Season Series (pre-game, above odds) */}
+      {isPreGame && seasonSeries?.summary && (
+        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px", textAlign: "center" }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>Season Series</div>
+          <div style={{ fontSize: "18px", fontWeight: 700, color: "#F1F3F5" }}>{seasonSeries.summary}</div>
+        </div>
+      )}
+
+      {/* Game Notes (pre-game — moved above odds) */}
+      {isPreGame && (newsItems.length > 0 || articleHeadline) && (
+        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
+            Game Notes
+          </div>
+          {articleHeadline && (
+            <div style={{ fontSize: "13px", color: "#F1F3F5", marginBottom: newsItems.length > 0 ? "10px" : 0, fontWeight: 500 }}>
+              {articleHeadline}
+            </div>
+          )}
+          {newsItems.map((n, i) => (
+            <div key={i} style={{ display: "flex", gap: "8px", padding: "5px 0", borderTop: i > 0 || articleHeadline ? "0.5px solid #1E2433" : "none" }}>
+              <span style={{ fontSize: "11px", color: "#4B5563", flexShrink: 0, paddingTop: "1px" }}>•</span>
+              <span style={{ fontSize: "12px", color: "#94A3B8" }}>{n.headline}</span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -819,84 +855,144 @@ export default async function GameDetailPage({
         </div>
       )}
 
-      {/* B) Season Series */}
-      {isPreGame && seasonSeries?.summary && (
-        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px", textAlign: "center" }}>
-          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>Season Series</div>
-          <div style={{ fontSize: "18px", fontWeight: 700, color: "#F1F3F5" }}>{seasonSeries.summary}</div>
-        </div>
-      )}
-
-      {/* C) Last 5 Results */}
-      {isPreGame && (homeLast5.length > 0 || awayLast5.length > 0) && (
+      {/* F) Team Stats Comparison */}
+      {isPreGame && (Object.keys(awaySeasonStats).length > 0 || Object.keys(homeSeasonStats).length > 0) && (
         <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px" }}>
-          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>Last 5 Games</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-            {[
-              { name: awayName, last5: awayLast5 },
-              { name: homeName, last5: homeLast5 },
-            ].map(({ name, last5 }) => (
-              <div key={name}>
-                <div style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", marginBottom: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {name.split(" ").pop()}
-                </div>
-                <div style={{ display: "flex", gap: "4px", marginBottom: "8px", flexWrap: "wrap" }}>
-                  {last5.map((g, i) => (
-                    <span key={i} style={{
-                      width: "22px", height: "22px", borderRadius: "50%",
-                      background: g.result === "W" ? "#16A34A" : "#DC2626",
-                      color: "white", fontSize: "10px", fontWeight: 700,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      flexShrink: 0,
-                    }}>{g.result}</span>
-                  ))}
-                  {last5.length === 0 && (
-                    <span style={{ fontSize: "11px", color: "#4B5563" }}>No data</span>
-                  )}
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                  {last5.map((g, i) => (
-                    <div key={i} style={{ fontSize: "10px", color: "#6B7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      <span style={{ color: g.result === "W" ? "#16A34A" : "#DC2626", fontWeight: 600 }}>{g.result}</span>
-                      {" "}{g.teamScore}–{g.oppScore} {g.homeAway === "home" ? "vs" : "@"} {g.opponent}
-                    </div>
-                  ))}
-                </div>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>Team Stats</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px", gap: "6px", marginBottom: "4px" }}>
+            <span style={{ fontSize: "10px", color: "#4B5563" }}>Stat</span>
+            <span style={{ fontSize: "10px", color: "#9CA3AF", textAlign: "center", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{awayName.split(" ").pop()}</span>
+            <span style={{ fontSize: "10px", color: "#9CA3AF", textAlign: "center", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{homeName.split(" ").pop()}</span>
+          </div>
+          <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.08em", padding: "6px 0 3px" }}>Batting</div>
+          {([
+            { key: "avg", label: "AVG", lowerIsBetter: false },
+            { key: "onBasePct", label: "OBP", lowerIsBetter: false },
+            { key: "slugAvg", label: "SLG", lowerIsBetter: false },
+            { key: "OPS", label: "OPS", lowerIsBetter: false },
+            { key: "homeRuns", label: "HR", lowerIsBetter: false },
+            { key: "runs", label: "R", lowerIsBetter: false },
+            { key: "strikeouts", label: "K", lowerIsBetter: true },
+          ] as { key: string; label: string; lowerIsBetter: boolean }[]).map(({ key, label, lowerIsBetter }, i) => {
+            const av = awaySeasonStats[key];
+            const hv = homeSeasonStats[key];
+            const aN = parseFloat(av); const hN = parseFloat(hv);
+            const awayBetter = !isNaN(aN) && !isNaN(hN) && (lowerIsBetter ? aN < hN : aN > hN);
+            const homeBetter = !isNaN(aN) && !isNaN(hN) && (lowerIsBetter ? hN < aN : hN > aN);
+            return (
+              <div key={key} style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px", gap: "6px", padding: "4px 0", borderTop: "0.5px solid #1E2433" }}>
+                <span style={{ fontSize: "11px", color: "#6B7280" }}>{label}</span>
+                <span style={{ fontSize: "12px", fontWeight: awayBetter ? 700 : 400, color: awayBetter ? "#EA6C0A" : "#F1F3F5", textAlign: "center" }}>{av ?? "—"}</span>
+                <span style={{ fontSize: "12px", fontWeight: homeBetter ? 700 : 400, color: homeBetter ? "#EA6C0A" : "#F1F3F5", textAlign: "center" }}>{hv ?? "—"}</span>
               </div>
-            ))}
-          </div>
+            );
+          })}
+          <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.08em", padding: "8px 0 3px", marginTop: "4px" }}>Pitching</div>
+          {([
+            { key: "ERA", label: "ERA", lowerIsBetter: true },
+            { key: "WHIP", label: "WHIP", lowerIsBetter: true },
+            { key: "strikeoutsPerNineInnings", label: "K/9", lowerIsBetter: false },
+            { key: "opponentAvg", label: "OBA", lowerIsBetter: true },
+          ] as { key: string; label: string; lowerIsBetter: boolean }[]).map(({ key, label, lowerIsBetter }) => {
+            const av = awaySeasonStats[key];
+            const hv = homeSeasonStats[key];
+            const aN = parseFloat(av); const hN = parseFloat(hv);
+            const awayBetter = !isNaN(aN) && !isNaN(hN) && (lowerIsBetter ? aN < hN : aN > hN);
+            const homeBetter = !isNaN(aN) && !isNaN(hN) && (lowerIsBetter ? hN < aN : hN > aN);
+            return (
+              <div key={key} style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px", gap: "6px", padding: "4px 0", borderTop: "0.5px solid #1E2433" }}>
+                <span style={{ fontSize: "11px", color: "#6B7280" }}>{label}</span>
+                <span style={{ fontSize: "12px", fontWeight: awayBetter ? 700 : 400, color: awayBetter ? "#EA6C0A" : "#F1F3F5", textAlign: "center" }}>{av ?? "—"}</span>
+                <span style={{ fontSize: "12px", fontWeight: homeBetter ? 700 : 400, color: homeBetter ? "#EA6C0A" : "#F1F3F5", textAlign: "center" }}>{hv ?? "—"}</span>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* D) Away Team Season Stats */}
-      {isPreGame && awayTeamStats.length > 0 && (
-        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px" }}>
-          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
-            {awayName} Season Stats
-          </div>
-          {awayTeamStats.map((stat, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderTop: i > 0 ? "0.5px solid #1E2433" : "none" }}>
-              <span style={{ fontSize: "12px", color: "#6B7280" }}>{stat.description ?? stat.name}</span>
-              <span style={{ fontSize: "12px", fontWeight: 600, color: "#F1F3F5" }}>{stat.displayValue}</span>
+      {/* G) Team Leaders */}
+      {isPreGame && leadersByTeam.length >= 2 && (() => {
+        const awayLeaders = leadersByTeam.find(t => normalizeTeam(t.teamName) === normalizeTeam(awayName)) ?? leadersByTeam[0];
+        const homeLeaders = leadersByTeam.find(t => normalizeTeam(t.teamName) === normalizeTeam(homeName)) ?? leadersByTeam[1];
+        const categories = awayLeaders?.categories ?? [];
+        if (categories.length === 0) return null;
+        return (
+          <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px" }}>
+            <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>Team Leaders</div>
+            <div style={{ display: "grid", gridTemplateColumns: "52px 1fr 1fr", gap: "6px", marginBottom: "4px" }}>
+              <span />
+              <span style={{ fontSize: "10px", color: "#9CA3AF", fontWeight: 600 }}>{awayName.split(" ").pop()}</span>
+              <span style={{ fontSize: "10px", color: "#9CA3AF", fontWeight: 600 }}>{homeName.split(" ").pop()}</span>
             </div>
-          ))}
-        </div>
-      )}
+            {categories.map((cat) => {
+              const homeCat = homeLeaders?.categories?.find(c => c.name === cat.name);
+              return (
+                <div key={cat.name} style={{ display: "grid", gridTemplateColumns: "52px 1fr 1fr", gap: "6px", padding: "5px 0", borderTop: "0.5px solid #1E2433" }}>
+                  <span style={{ fontSize: "10px", color: "#4B5563", fontWeight: 600, textTransform: "uppercase", alignSelf: "center" }}>{cat.displayName?.split(" ").pop() ?? cat.name}</span>
+                  <div>
+                    {cat.leader ? (
+                      <>
+                        <div style={{ fontSize: "11px", color: "#F1F3F5", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.leader.name?.split(" ").pop()}</div>
+                        <div style={{ fontSize: "10px", color: "#EA6C0A", fontWeight: 600 }}>{cat.leader.value}</div>
+                      </>
+                    ) : <span style={{ fontSize: "11px", color: "#4B5563" }}>—</span>}
+                  </div>
+                  <div>
+                    {homeCat?.leader ? (
+                      <>
+                        <div style={{ fontSize: "11px", color: "#F1F3F5", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{homeCat.leader.name?.split(" ").pop()}</div>
+                        <div style={{ fontSize: "10px", color: "#EA6C0A", fontWeight: 600 }}>{homeCat.leader.value}</div>
+                      </>
+                    ) : <span style={{ fontSize: "11px", color: "#4B5563" }}>—</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
-      {/* E) Home Team Season Stats */}
-      {isPreGame && homeTeamStats.length > 0 && (
-        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px" }}>
-          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
-            {homeName} Season Stats
-          </div>
-          {homeTeamStats.map((stat, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderTop: i > 0 ? "0.5px solid #1E2433" : "none" }}>
-              <span style={{ fontSize: "12px", color: "#6B7280" }}>{stat.description ?? stat.name}</span>
-              <span style={{ fontSize: "12px", fontWeight: 600, color: "#F1F3F5" }}>{stat.displayValue}</span>
+      {/* H) Last 5 Games (ESPN lastFiveGames) */}
+      {isPreGame && last5ByTeam.length > 0 && (() => {
+        const awayL5 = last5ByTeam.find(t => normalizeTeam(t.teamName) === normalizeTeam(awayName)) ?? last5ByTeam[0];
+        const homeL5 = last5ByTeam.find(t => normalizeTeam(t.teamName) === normalizeTeam(homeName)) ?? last5ByTeam[1];
+        return (
+          <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px" }}>
+            <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>Last 5 Games</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+              {[awayL5, homeL5].map((data, side) => {
+                const label = side === 0 ? awayName : homeName;
+                return (
+                  <div key={label}>
+                    <div style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", marginBottom: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {label.split(" ").pop()}
+                    </div>
+                    <div style={{ display: "flex", gap: "4px", marginBottom: "8px", flexWrap: "wrap" }}>
+                      {data?.games.map((g, i) => (
+                        <span key={i} style={{
+                          width: "22px", height: "22px", borderRadius: "50%",
+                          background: g.result === "W" ? "#16A34A" : "#DC2626",
+                          color: "white", fontSize: "10px", fontWeight: 700,
+                          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                        }}>{g.result}</span>
+                      ))}
+                      {(!data || data.games.length === 0) && <span style={{ fontSize: "11px", color: "#4B5563" }}>No data</span>}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                      {data?.games.map((g, i) => (
+                        <div key={i} style={{ fontSize: "10px", color: "#6B7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <span style={{ color: g.result === "W" ? "#16A34A" : "#DC2626", fontWeight: 600 }}>{g.result}</span>
+                          {" "}{g.score} {g.atVs} {g.opponent}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        );
+      })()}
 
       {/* ── Team Stats (live/final, after model edge) ── */}
       {(isLive || isFinal) && sportKey === "nba" && boxscoreTeams.length >= 2 && (() => {
@@ -980,8 +1076,8 @@ export default async function GameDetailPage({
         </div>
       )}
 
-      {/* Game Notes (pre-game) */}
-      {!isFinal && (newsItems.length > 0 || articleHeadline) && (
+      {/* Game Notes (live only — pre-game version is above odds) */}
+      {isLive && (newsItems.length > 0 || articleHeadline) && (
         <div style={{
           background: "#161B22",
           border: "1px solid #21262D",
