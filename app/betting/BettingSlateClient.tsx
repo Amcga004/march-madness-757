@@ -85,7 +85,6 @@ export default function BettingSlateClient({
   const [activeSport] = useState(sport);
   const [activeMarket, setActiveMarket] = useState("h2h");
   const pathname = usePathname();
-  const [expandedGame, setExpandedGame] = useState<string | null>(null);
   const [liveGames, setLiveGames] = useState(games);
   const [liveGolf, setLiveGolf] = useState(golfLeaderboard);
 
@@ -501,7 +500,6 @@ export default function BettingSlateClient({
 
           {/* Rows */}
           {bySport[sportKey].map(game => {
-            const expanded = expandedGame === game.id;
             const bestAway = getBest(game, "away");
             const bestHome = getBest(game, "home");
             const dk = getBookOdds(game, "draftkings");
@@ -517,11 +515,7 @@ export default function BettingSlateClient({
                 <div
                   className="game-row-mobile"
                   onClick={() => {
-                    if (window.innerWidth < 768) {
-                      window.location.href = `/betting/game/${game.id}?sport=${game.sportKey}`;
-                      return;
-                    }
-                    setExpandedGame(expanded ? null : game.id);
+                    window.location.href = `/betting/game/${game.id}?sport=${game.sportKey}`;
                   }}
                   style={{
                     background: "#161B22",
@@ -654,7 +648,7 @@ export default function BettingSlateClient({
                 {/* ── Desktop grid row (hidden on mobile via CSS) ── */}
                 <div
                   className="game-row-desktop"
-                  onClick={() => setExpandedGame(expanded ? null : game.id)}
+                  onClick={() => { window.location.href = `/betting/game/${game.id}?sport=${game.sportKey}` }}
                   style={{
                     display: "grid",
                     gridTemplateColumns: gridCols,
@@ -910,177 +904,14 @@ export default function BettingSlateClient({
                         + Slip
                       </span>
                     )}
-                    <span style={{ fontSize: "11px", color: "#EA6C0A", cursor: "pointer" }}>
-                      {expanded ? "Close ↑" : "View →"}
-                    </span>
+                    <a href={`/betting/game/${game.id}?sport=${game.sportKey}`}
+                      onClick={e => e.stopPropagation()}
+                      style={{ color: '#EA6C0A', fontSize: '13px', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                      View →
+                    </a>
                   </div>
                 </div>
 
-                {/* Expanded detail */}
-                {expanded && (
-                  <div className="desktop-expand-panel" style={{
-                    padding: "16px 0 20px",
-                    borderBottom: "0.5px solid var(--color-border-tertiary)",
-                    background: "#111827",
-                  }}>
-                    <div style={{ padding: "0 8px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-
-                      {/* Left: signal + probability */}
-                      <div>
-                        {/* Signal card */}
-                        {currentUser ? (
-                          topSignal ? (
-                            <div style={{ marginBottom: "16px" }}>
-                              <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-secondary)", marginBottom: "8px", fontWeight: 500 }}>
-                                Signal
-                              </div>
-                              <div style={{
-                                padding: "10px 12px",
-                                background: "#1A2236",
-                                borderRadius: "8px",
-                                border: "0.5px solid var(--color-border-tertiary)",
-                              }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                                  <span style={{ fontSize: "13px", fontWeight: 500 }}>
-                                    {topSignal.side === "home" ? game.homeTeam : game.awayTeam} · Moneyline
-                                  </span>
-                                  <span style={{ fontSize: "14px", fontWeight: 500, color: (EDGE_TIER_CONFIG[topSignal.edge_tier] ?? TIER_CONFIG[topSignal.tier])?.color }}>
-                                    {topSignal.edge_pct > 0 ? "+" : ""}{topSignal.edge_pct}% edge
-                                  </span>
-                                </div>
-                                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-                                  {(() => { const cfg = EDGE_TIER_CONFIG[topSignal.edge_tier] ?? TIER_CONFIG[topSignal.tier]; return (
-                                  <span style={{
-                                    fontSize: "10px", fontWeight: 500,
-                                    padding: "2px 8px", borderRadius: "4px",
-                                    background: `${cfg?.color}18`,
-                                    color: cfg?.color,
-                                  }}>
-                                    {cfg?.label}
-                                  </span>
-                                  ); })()}
-                                  <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                                    Best: {fmtOdds(topSignal.best_price)} {BOOK_LABELS[topSignal.best_bookmaker] ?? topSignal.best_bookmaker}
-                                  </span>
-                                  <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                                    EV: {topSignal.ev_value > 0 ? "+" : ""}${topSignal.ev_value?.toFixed(2)} / $100
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={{ marginBottom: "16px", padding: "10px 12px", background: "#1A2236", borderRadius: "8px", border: "0.5px solid var(--color-border-tertiary)" }}>
-                              <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>No signal available for this game.</span>
-                            </div>
-                          )
-                        ) : (
-                          <div style={{
-                            padding: "14px", background: "#1A2236",
-                            borderRadius: "8px", border: "0.5px solid var(--color-border-tertiary)",
-                            textAlign: "center", marginBottom: "16px",
-                          }}>
-                            <p style={{ fontSize: "12px", color: "var(--color-text-secondary)", margin: "0 0 8px" }}>
-                              Sign in to see edge, probability, and signals
-                            </p>
-                            <a href="/login" style={{ fontSize: "12px", color: "#EA6C0A", fontWeight: 500, textDecoration: "none" }}>
-                              Sign in free →
-                            </a>
-                          </div>
-                        )}
-
-                        {/* Win probability */}
-                        {currentUser && game.consensus && (
-                          <div>
-                            <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-secondary)", marginBottom: "8px", fontWeight: 500 }}>
-                              Win probability
-                            </div>
-                            {[
-                              {
-                                label: `Model (${MODEL_LABELS[game.consensus.model_source] ?? game.consensus.model_source})`,
-                                value: game.consensus.consensus_home_win_prob,
-                                color: "#EA6C0A",
-                              },
-                              {
-                                label: "Market implied",
-                                value: game.consensus.market_implied_home_prob,
-                                color: "var(--color-border-secondary)",
-                              },
-                            ].map((row, i) => (
-                              <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                                <span style={{ fontSize: "11px", color: "var(--color-text-secondary)", width: "168px", flexShrink: 0 }}>
-                                  {row.label}
-                                </span>
-                                <div style={{ flex: 1, height: "5px", background: "var(--color-border-tertiary)", borderRadius: "3px", overflow: "hidden" }}>
-                                  <div style={{
-                                    width: `${Math.round((row.value ?? 0) * 100)}%`,
-                                    height: "100%",
-                                    background: row.color,
-                                    borderRadius: "3px",
-                                  }} />
-                                </div>
-                                <span style={{ fontSize: "11px", fontWeight: 500, width: "34px", textAlign: "right" }}>
-                                  {Math.round((row.value ?? 0) * 100)}%
-                                </span>
-                              </div>
-                            ))}
-                            <div style={{ fontSize: "10px", color: "var(--color-text-secondary)", marginTop: "6px" }}>
-                              Confidence: {game.consensus.confidence_tier}
-                              {game.consensus.model_available ? " · Independent model" : " · Market proxy"}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Right: book comparison */}
-                      <div>
-                        <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-secondary)", marginBottom: "8px", fontWeight: 500 }}>
-                          Lines across books
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
-                          {BOOKS_PRIORITY.map(bookmaker => {
-                            const o = getBookOdds(game, bookmaker);
-                            if (!o) return null;
-                            const isBestAway = bestAway?.bookmaker === bookmaker;
-                            const isBestHome = bestHome?.bookmaker === bookmaker;
-
-                            let awayVal: number | null = null;
-                            let homeVal: number | null = null;
-
-                            if (activeMarket === "h2h") {
-                              awayVal = o.away_price;
-                              homeVal = o.home_price;
-                            } else if (activeMarket === "spreads") {
-                              awayVal = o.spread_away;
-                              homeVal = o.spread_home;
-                            } else if (activeMarket === "totals") {
-                              awayVal = o.over_price;
-                              homeVal = o.under_price;
-                            }
-
-                            return (
-                              <div key={bookmaker} style={{
-                                padding: "8px 10px",
-                                background: "#1A2236",
-                                borderRadius: "6px",
-                                border: "0.5px solid var(--color-border-tertiary)",
-                              }}>
-                                <div style={{ fontSize: "10px", color: "var(--color-text-secondary)", marginBottom: "4px" }}>
-                                  {BOOK_LABELS[bookmaker]}
-                                </div>
-                                <div style={{ fontSize: "13px", fontWeight: 500, color: isBestAway ? "#16A34A" : "#F1F3F5" }}>
-                                  {activeMarket === "spreads" ? awayVal ?? "—" : fmtOdds(awayVal)}
-                                </div>
-                                <div style={{ fontSize: "13px", fontWeight: 500, color: isBestHome ? "#16A34A" : "#F1F3F5" }}>
-                                  {activeMarket === "spreads" ? homeVal ?? "—" : fmtOdds(homeVal)}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })}
