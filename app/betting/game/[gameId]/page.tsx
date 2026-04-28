@@ -346,54 +346,72 @@ export default async function GameDetailPage({
     ?? summaryRaw?.seasonseries?.[0]
     ?? null;
 
-  // ESPN Analytics pre-game win probability (predictor.homeTeam.gameProjection)
-  const espnHomeWinPct: number | null = isPreGame ? (summaryRaw?.predictor?.homeTeam?.gameProjection ?? null) : null;
-  const espnAwayWinPct: number | null = isPreGame ? (summaryRaw?.predictor?.awayTeam?.gameProjection ?? null) : null;
+  // Pre-game enrichment — all wrapped in try/catch so any ESPN shape change is silent
+  let espnHomeWinPct: number | null = null;
+  let espnAwayWinPct: number | null = null;
+  let consensusHomeWinPct: number | null = null;
+  let consensusAwayWinPct: number | null = null;
+  let awaySeasonStats: Record<string, string> = {};
+  let homeSeasonStats: Record<string, string> = {};
+  let leadersByTeam: any[] = [];
+  let last5ByTeam: any[] = [];
 
-  // Team season stats from boxscore (full stats available pre-game in summaryRaw.boxscore.teams)
-  function extractTeamStats(team: any): Record<string, string> {
-    const result: Record<string, string> = {};
-    for (const group of (team?.statistics ?? [])) {
-      for (const stat of (group?.stats ?? [])) {
-        if (stat?.name && stat?.displayValue) result[stat.name] = stat.displayValue;
-      }
+  try {
+    // ESPN Analytics win probability (predictor.homeTeam.gameProjection is already a %)
+    espnHomeWinPct = summaryRaw?.predictor?.homeTeam?.gameProjection ?? null;
+    espnAwayWinPct = summaryRaw?.predictor?.awayTeam?.gameProjection ?? null;
+
+    // Consensus: average of our model + ESPN
+    if (consensus?.consensus_home_win_prob != null && espnHomeWinPct != null) {
+      consensusHomeWinPct = Math.round(((consensus.consensus_home_win_prob * 100) + espnHomeWinPct) / 2 * 10) / 10;
+      consensusAwayWinPct = Math.round((100 - consensusHomeWinPct) * 10) / 10;
     }
-    return result;
-  }
-  const _bsTeamsArr: any[] = Array.isArray(summaryRaw?.boxscore?.teams) ? summaryRaw.boxscore.teams : [];
-  const awaySeasonStats: Record<string, string> = extractTeamStats(_bsTeamsArr.find((t: any) => t.homeAway === "away"));
-  const homeSeasonStats: Record<string, string> = extractTeamStats(_bsTeamsArr.find((t: any) => t.homeAway === "home"));
 
-  // Team leaders from ESPN leaders array
-  type LeaderCategory = { name: string; displayName: string; leader: { name: string; value: string } | null };
-  type TeamLeaders = { teamName: string; teamId: string; categories: LeaderCategory[] };
-  const leadersByTeam: TeamLeaders[] = (Array.isArray(summaryRaw?.leaders) ? summaryRaw.leaders : []).map((grp: any) => ({
-    teamName: grp.team?.displayName ?? "",
-    teamId: grp.team?.id ?? "",
-    categories: ((grp.leaders ?? []) as any[]).map((cat: any) => ({
-      name: cat.name ?? "",
-      displayName: cat.displayName ?? "",
-      leader: cat.leaders?.[0] ? {
-        name: cat.leaders[0].athlete?.displayName ?? "",
-        value: cat.leaders[0].displayValue ?? "",
-      } : null,
-    })),
-  }));
+    // Team season stats from boxscore.teams[].statistics[].stats[]
+    const bsTeams: any[] = Array.isArray(summaryRaw?.boxscore?.teams) ? summaryRaw.boxscore.teams : [];
+    const buildStatMap = (homeAway: string): Record<string, string> => {
+      const team = bsTeams.find((t: any) => t?.homeAway === homeAway);
+      const result: Record<string, string> = {};
+      for (const group of (team?.statistics ?? [])) {
+        for (const stat of (group?.stats ?? [])) {
+          if (stat?.name && stat?.displayValue &&
+              stat.displayValue !== "0" && stat.displayValue !== "0.0") {
+            result[stat.name] = stat.displayValue;
+          }
+        }
+      }
+      return result;
+    };
+    awaySeasonStats = buildStatMap("away");
+    homeSeasonStats = buildStatMap("home");
 
-  // Last 5 games directly from ESPN summaryRaw.lastFiveGames (replaces schedule endpoint fetch)
-  type ESPN5Game = { result: "W" | "L"; score: string; opponent: string; atVs: string; date: string };
-  type ESPN5Team = { teamName: string; teamId: string; games: ESPN5Game[] };
-  const last5ByTeam: ESPN5Team[] = (Array.isArray(summaryRaw?.lastFiveGames) ? summaryRaw.lastFiveGames : []).map((grp: any) => ({
-    teamName: grp.team?.displayName ?? "",
-    teamId: grp.team?.id ?? "",
-    games: ((grp.events ?? []) as any[]).slice(0, 5).map((e: any) => ({
-      result: (e.gameResult ?? "L") as "W" | "L",
-      score: e.score ?? "",
-      opponent: e.opponent?.abbreviation ?? e.opponent?.displayName ?? "?",
-      atVs: e.atVs ?? "vs",
-      date: e.gameDate ?? "",
-    })),
-  }));
+    // Team leaders (up to 6 categories per team, filtered to those with a leader)
+    leadersByTeam = (Array.isArray(summaryRaw?.leaders) ? summaryRaw.leaders : []).map((grp: any) => ({
+      teamName: grp.team?.displayName ?? "",
+      teamId: grp.team?.id ?? "",
+      categories: ((grp.leaders ?? []) as any[]).slice(0, 6).map((cat: any) => ({
+        name: cat.name ?? "",
+        displayName: cat.displayName ?? "",
+        leader: cat.leaders?.[0] ? {
+          name: cat.leaders[0].athlete?.displayName ?? "",
+          shortName: cat.leaders[0].athlete?.shortName ?? cat.leaders[0].athlete?.displayName ?? "",
+          value: cat.leaders[0].displayValue ?? "",
+        } : null,
+      })).filter((c: any) => c.leader !== null),
+    }));
+
+    // Last 5 games from summaryRaw.lastFiveGames
+    last5ByTeam = (Array.isArray(summaryRaw?.lastFiveGames) ? summaryRaw.lastFiveGames : []).map((grp: any) => ({
+      teamName: grp.team?.displayName ?? "",
+      teamId: grp.team?.id ?? "",
+      games: ((grp.events ?? []) as any[]).slice(0, 5).map((e: any) => ({
+        result: (e.gameResult ?? "L") as "W" | "L",
+        score: e.score ?? "",
+        opponent: e.opponent?.abbreviation ?? e.opponent?.displayName ?? "?",
+        atVs: e.atVs ?? "vs",
+      })),
+    }));
+  } catch { /* silently ignore — pre-game enrichment is best-effort */ }
 
 
   return (
@@ -652,16 +670,18 @@ export default async function GameDetailPage({
           </div>
 
           {/* ESPN Analytics + Consensus (pre-game) */}
-          {isPreGame && (espnAwayWinPct !== null || espnHomeWinPct !== null) && (
+          {isPreGame && (espnAwayWinPct !== null || consensusAwayWinPct !== null) && (
             <div style={{ padding: "8px 0 4px", borderTop: "0.5px solid #21262D", marginTop: "4px" }}>
-              <div style={{ fontSize: "11px", color: "#6B7280", marginBottom: "3px" }}>
-                <span style={{ color: "#4B5563" }}>ESPN Analytics: </span>
-                {awayName.split(" ").pop()} {espnAwayWinPct?.toFixed(1)}% / {homeName.split(" ").pop()} {espnHomeWinPct?.toFixed(1)}%
-              </div>
-              {consensus && (
-                <div style={{ fontSize: "11px", color: "#6B7280" }}>
-                  <span style={{ color: "#4B5563" }}>Consensus: </span>
-                  {awayName.split(" ").pop()} {(((consensus.consensus_away_win_prob ?? 0) * 100 + (espnAwayWinPct ?? 0)) / 2).toFixed(1)}% / {homeName.split(" ").pop()} {(((consensus.consensus_home_win_prob ?? 0) * 100 + (espnHomeWinPct ?? 0)) / 2).toFixed(1)}%
+              {espnAwayWinPct !== null && (
+                <div style={{ fontSize: "11px", color: "#6B7280", marginBottom: "3px" }}>
+                  <span style={{ color: "#4B5563" }}>ESPN Analytics: </span>
+                  {awayName.split(" ").pop()} {espnAwayWinPct.toFixed(1)}% / {homeName.split(" ").pop()} {espnHomeWinPct?.toFixed(1)}%
+                </div>
+              )}
+              {consensusAwayWinPct !== null && (
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#EA6C0A" }}>
+                  <span style={{ color: "#4B5563", fontWeight: 400 }}>Consensus: </span>
+                  {awayName.split(" ").pop()} {consensusAwayWinPct.toFixed(1)}% / {homeName.split(" ").pop()} {consensusHomeWinPct?.toFixed(1)}%
                 </div>
               )}
             </div>
@@ -831,41 +851,12 @@ export default async function GameDetailPage({
 
       {/* ── PRE-GAME PREVIEW CARDS ── */}
 
-      {/* A) Venue + Weather */}
-      {isPreGame && venue && (
-        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px" }}>
-          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>Venue</div>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#F1F3F5", marginBottom: weather ? "6px" : 0 }}>
-            <span>📍</span>
-            <span>{venue}</span>
-          </div>
-          {weather && (
-            <div style={{ fontSize: "12px", color: "#6B7280", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-              {weather.temperature !== undefined && (
-                <span>🌡 {weather.temperature}°F</span>
-              )}
-              {weather.conditionId && (
-                <span>· {weather.conditionId}</span>
-              )}
-              {weather.gust !== undefined && (
-                <span>· 💨 {weather.gust} mph</span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* F) Team Stats Comparison */}
-      {isPreGame && (Object.keys(awaySeasonStats).length > 0 || Object.keys(homeSeasonStats).length > 0) && (
-        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px" }}>
-          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>Team Stats</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px", gap: "6px", marginBottom: "4px" }}>
-            <span style={{ fontSize: "10px", color: "#4B5563" }}>Stat</span>
-            <span style={{ fontSize: "10px", color: "#9CA3AF", textAlign: "center", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{awayName.split(" ").pop()}</span>
-            <span style={{ fontSize: "10px", color: "#9CA3AF", textAlign: "center", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{homeName.split(" ").pop()}</span>
-          </div>
-          <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.08em", padding: "6px 0 3px" }}>Batting</div>
-          {([
+      {/* Team Stats (pre-game, sport-adaptive) */}
+      {isPreGame && (Object.keys(awaySeasonStats).length > 0 || Object.keys(homeSeasonStats).length > 0) && (() => {
+        type StatDef = { key: string; label: string; lowerIsBetter: boolean };
+        type StatGroup = { label: string; stats: StatDef[] };
+        const statGroups: StatGroup[] = sportKey === "mlb" ? [
+          { label: "Batting", stats: [
             { key: "avg", label: "AVG", lowerIsBetter: false },
             { key: "onBasePct", label: "OBP", lowerIsBetter: false },
             { key: "slugAvg", label: "SLG", lowerIsBetter: false },
@@ -873,42 +864,70 @@ export default async function GameDetailPage({
             { key: "homeRuns", label: "HR", lowerIsBetter: false },
             { key: "runs", label: "R", lowerIsBetter: false },
             { key: "strikeouts", label: "K", lowerIsBetter: true },
-          ] as { key: string; label: string; lowerIsBetter: boolean }[]).map(({ key, label, lowerIsBetter }, i) => {
-            const av = awaySeasonStats[key];
-            const hv = homeSeasonStats[key];
-            const aN = parseFloat(av); const hN = parseFloat(hv);
-            const awayBetter = !isNaN(aN) && !isNaN(hN) && (lowerIsBetter ? aN < hN : aN > hN);
-            const homeBetter = !isNaN(aN) && !isNaN(hN) && (lowerIsBetter ? hN < aN : hN > aN);
-            return (
-              <div key={key} style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px", gap: "6px", padding: "4px 0", borderTop: "0.5px solid #1E2433" }}>
-                <span style={{ fontSize: "11px", color: "#6B7280" }}>{label}</span>
-                <span style={{ fontSize: "12px", fontWeight: awayBetter ? 700 : 400, color: awayBetter ? "#EA6C0A" : "#F1F3F5", textAlign: "center" }}>{av ?? "—"}</span>
-                <span style={{ fontSize: "12px", fontWeight: homeBetter ? 700 : 400, color: homeBetter ? "#EA6C0A" : "#F1F3F5", textAlign: "center" }}>{hv ?? "—"}</span>
-              </div>
-            );
-          })}
-          <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.08em", padding: "8px 0 3px", marginTop: "4px" }}>Pitching</div>
-          {([
+          ]},
+          { label: "Pitching", stats: [
             { key: "ERA", label: "ERA", lowerIsBetter: true },
             { key: "WHIP", label: "WHIP", lowerIsBetter: true },
             { key: "strikeoutsPerNineInnings", label: "K/9", lowerIsBetter: false },
             { key: "opponentAvg", label: "OBA", lowerIsBetter: true },
-          ] as { key: string; label: string; lowerIsBetter: boolean }[]).map(({ key, label, lowerIsBetter }) => {
-            const av = awaySeasonStats[key];
-            const hv = homeSeasonStats[key];
-            const aN = parseFloat(av); const hN = parseFloat(hv);
-            const awayBetter = !isNaN(aN) && !isNaN(hN) && (lowerIsBetter ? aN < hN : aN > hN);
-            const homeBetter = !isNaN(aN) && !isNaN(hN) && (lowerIsBetter ? hN < aN : hN > aN);
-            return (
-              <div key={key} style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px", gap: "6px", padding: "4px 0", borderTop: "0.5px solid #1E2433" }}>
-                <span style={{ fontSize: "11px", color: "#6B7280" }}>{label}</span>
-                <span style={{ fontSize: "12px", fontWeight: awayBetter ? 700 : 400, color: awayBetter ? "#EA6C0A" : "#F1F3F5", textAlign: "center" }}>{av ?? "—"}</span>
-                <span style={{ fontSize: "12px", fontWeight: homeBetter ? 700 : 400, color: homeBetter ? "#EA6C0A" : "#F1F3F5", textAlign: "center" }}>{hv ?? "—"}</span>
+          ]},
+        ] : sportKey === "nba" ? [
+          { label: "", stats: [
+            { key: "avgPoints", label: "PTS", lowerIsBetter: false },
+            { key: "avgRebounds", label: "REB", lowerIsBetter: false },
+            { key: "avgAssists", label: "AST", lowerIsBetter: false },
+            { key: "fieldGoalPct", label: "FG%", lowerIsBetter: false },
+            { key: "threePtPct", label: "3P%", lowerIsBetter: false },
+            { key: "avgPointsAgainst", label: "OPP PTS", lowerIsBetter: true },
+          ]},
+        ] : sportKey === "nhl" ? [
+          { label: "", stats: [
+            { key: "avgGoals", label: "GF", lowerIsBetter: false },
+            { key: "avgGoalsAgainst", label: "GA", lowerIsBetter: true },
+            { key: "avgShots", label: "SF", lowerIsBetter: false },
+            { key: "avgShotsAgainst", label: "SA", lowerIsBetter: true },
+            { key: "powerPlayPct", label: "PP%", lowerIsBetter: false },
+            { key: "penaltyKillPct", label: "PK%", lowerIsBetter: false },
+          ]},
+        ] : [];
+        const filteredGroups = statGroups.map(g => ({
+          ...g,
+          stats: g.stats.filter(s => awaySeasonStats[s.key] || homeSeasonStats[s.key]),
+        })).filter(g => g.stats.length > 0);
+        if (filteredGroups.length === 0) return null;
+        return (
+          <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px" }}>
+            <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>Team Stats</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px", gap: "6px", marginBottom: "4px" }}>
+              <span />
+              <span style={{ fontSize: "10px", color: "#9CA3AF", textAlign: "center", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{awayName.split(" ").pop()}</span>
+              <span style={{ fontSize: "10px", color: "#9CA3AF", textAlign: "center", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{homeName.split(" ").pop()}</span>
+            </div>
+            {filteredGroups.map((group, gi) => (
+              <div key={gi}>
+                {group.label && (
+                  <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.08em", padding: gi === 0 ? "6px 0 3px" : "8px 0 3px", marginTop: gi > 0 ? "4px" : 0 }}>{group.label}</div>
+                )}
+                {group.stats.map(({ key, label, lowerIsBetter }) => {
+                  const av = awaySeasonStats[key];
+                  const hv = homeSeasonStats[key];
+                  const aN = parseFloat(av);
+                  const hN = parseFloat(hv);
+                  const awayBetter = !isNaN(aN) && !isNaN(hN) && (lowerIsBetter ? aN < hN : aN > hN);
+                  const homeBetter = !isNaN(aN) && !isNaN(hN) && (lowerIsBetter ? hN < aN : hN > aN);
+                  return (
+                    <div key={key} style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px", gap: "6px", padding: "4px 0", borderTop: "0.5px solid #1E2433" }}>
+                      <span style={{ fontSize: "11px", color: "#6B7280" }}>{label}</span>
+                      <span style={{ fontSize: "12px", fontWeight: awayBetter ? 700 : 400, color: awayBetter ? "#EA6C0A" : (av ? "#F1F3F5" : "#4B5563"), textAlign: "center" }}>{av ?? "—"}</span>
+                      <span style={{ fontSize: "12px", fontWeight: homeBetter ? 700 : 400, color: homeBetter ? "#EA6C0A" : (hv ? "#F1F3F5" : "#4B5563"), textAlign: "center" }}>{hv ?? "—"}</span>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        );
+      })()}
 
       {/* G) Team Leaders */}
       {isPreGame && leadersByTeam.length >= 2 && (() => {
@@ -924,15 +943,15 @@ export default async function GameDetailPage({
               <span style={{ fontSize: "10px", color: "#9CA3AF", fontWeight: 600 }}>{awayName.split(" ").pop()}</span>
               <span style={{ fontSize: "10px", color: "#9CA3AF", fontWeight: 600 }}>{homeName.split(" ").pop()}</span>
             </div>
-            {categories.map((cat) => {
-              const homeCat = homeLeaders?.categories?.find(c => c.name === cat.name);
+            {categories.slice(0, 4).map((cat: any) => {
+              const homeCat = homeLeaders?.categories?.find((c: any) => c.name === cat.name);
               return (
                 <div key={cat.name} style={{ display: "grid", gridTemplateColumns: "52px 1fr 1fr", gap: "6px", padding: "5px 0", borderTop: "0.5px solid #1E2433" }}>
                   <span style={{ fontSize: "10px", color: "#4B5563", fontWeight: 600, textTransform: "uppercase", alignSelf: "center" }}>{cat.displayName?.split(" ").pop() ?? cat.name}</span>
                   <div>
                     {cat.leader ? (
                       <>
-                        <div style={{ fontSize: "11px", color: "#F1F3F5", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.leader.name?.split(" ").pop()}</div>
+                        <div style={{ fontSize: "11px", color: "#F1F3F5", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.leader.shortName?.split(" ").pop() ?? cat.leader.name?.split(" ").pop()}</div>
                         <div style={{ fontSize: "10px", color: "#EA6C0A", fontWeight: 600 }}>{cat.leader.value}</div>
                       </>
                     ) : <span style={{ fontSize: "11px", color: "#4B5563" }}>—</span>}
@@ -940,7 +959,7 @@ export default async function GameDetailPage({
                   <div>
                     {homeCat?.leader ? (
                       <>
-                        <div style={{ fontSize: "11px", color: "#F1F3F5", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{homeCat.leader.name?.split(" ").pop()}</div>
+                        <div style={{ fontSize: "11px", color: "#F1F3F5", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{homeCat.leader.shortName?.split(" ").pop() ?? homeCat.leader.name?.split(" ").pop()}</div>
                         <div style={{ fontSize: "10px", color: "#EA6C0A", fontWeight: 600 }}>{homeCat.leader.value}</div>
                       </>
                     ) : <span style={{ fontSize: "11px", color: "#4B5563" }}>—</span>}
@@ -968,7 +987,7 @@ export default async function GameDetailPage({
                       {label.split(" ").pop()}
                     </div>
                     <div style={{ display: "flex", gap: "4px", marginBottom: "8px", flexWrap: "wrap" }}>
-                      {data?.games.map((g, i) => (
+                      {data?.games.map((g: any, i: number) => (
                         <span key={i} style={{
                           width: "22px", height: "22px", borderRadius: "50%",
                           background: g.result === "W" ? "#16A34A" : "#DC2626",
@@ -979,7 +998,7 @@ export default async function GameDetailPage({
                       {(!data || data.games.length === 0) && <span style={{ fontSize: "11px", color: "#4B5563" }}>No data</span>}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                      {data?.games.map((g, i) => (
+                      {data?.games.map((g: any, i: number) => (
                         <div key={i} style={{ fontSize: "10px", color: "#6B7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                           <span style={{ color: g.result === "W" ? "#16A34A" : "#DC2626", fontWeight: 600 }}>{g.result}</span>
                           {" "}{g.score} {g.atVs} {g.opponent}
