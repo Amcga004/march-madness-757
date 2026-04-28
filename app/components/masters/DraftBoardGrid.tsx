@@ -53,7 +53,8 @@ export default function DraftBoardGrid({ picks, rosterSize, managers }: Props) {
                 </div>
 
                 {order.map((manager, i) => {
-                  const roundPick = i + 1
+                  const isEven = round % 2 === 0
+                  const roundPick = isEven ? managers.length - i : i + 1
                   const pick = pickMap.get(`${round}-${roundPick}`)
                   const theme = getManagerTheme(manager)
                   const pickNum = overallPickNum(round, i + 1)

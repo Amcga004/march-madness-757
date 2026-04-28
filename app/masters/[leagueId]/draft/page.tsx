@@ -96,7 +96,7 @@ export default async function MastersDraftPage({ params }: PageProps) {
     currentUserId === currentTurn.current_drafter_user_id
 
   const managerNames = draftOrder.map((m) => m.display_name)
-  const totalRounds = league.roster_size + 1
+  const totalRounds = league.roster_size
   const upcomingPicks = buildUpcomingPicks(
     managerNames,
     totalRounds,
