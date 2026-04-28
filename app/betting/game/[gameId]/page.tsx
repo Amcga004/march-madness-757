@@ -675,13 +675,13 @@ export default async function GameDetailPage({
               {espnAwayWinPct !== null && (
                 <div style={{ fontSize: "11px", color: "#6B7280", marginBottom: "3px" }}>
                   <span style={{ color: "#4B5563" }}>ESPN Analytics: </span>
-                  {awayName.split(" ").pop()} {espnAwayWinPct.toFixed(1)}% / {homeName.split(" ").pop()} {espnHomeWinPct?.toFixed(1)}%
+                  {awayName.split(" ").pop()} {espnAwayWinPct?.toFixed(1) ?? "—"}% / {homeName.split(" ").pop()} {espnHomeWinPct?.toFixed(1) ?? "—"}%
                 </div>
               )}
               {consensusAwayWinPct !== null && (
                 <div style={{ fontSize: "11px", fontWeight: 600, color: "#EA6C0A" }}>
                   <span style={{ color: "#4B5563", fontWeight: 400 }}>Consensus: </span>
-                  {awayName.split(" ").pop()} {consensusAwayWinPct.toFixed(1)}% / {homeName.split(" ").pop()} {consensusHomeWinPct?.toFixed(1)}%
+                  {awayName.split(" ").pop()} {consensusAwayWinPct?.toFixed(1) ?? "—"}% / {homeName.split(" ").pop()} {consensusHomeWinPct?.toFixed(1) ?? "—"}%
                 </div>
               )}
             </div>
