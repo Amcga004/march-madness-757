@@ -37,6 +37,7 @@ export default function CreateLeagueWizard({ tournaments }: Props) {
   const [rosterSize, setRosterSize] = useState<4 | 6 | 8>(6);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [showAllTournaments, setShowAllTournaments] = useState(false);
 
   const rounds = rosterSize + 1; // +1 bench round
   const totalPicks = maxManagers * rounds;
@@ -96,32 +97,44 @@ export default function CreateLeagueWizard({ tournaments }: Props) {
               <p className="text-sm text-[#6f7a67]">No upcoming tournaments available.</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              {tournaments.map((t) => (
+            <>
+              <div className="flex flex-col gap-2">
+                {(showAllTournaments ? tournaments : tournaments.slice(0, 6)).map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => { setSelectedEvent(t); setStep(2); }}
+                    className={`flex items-center gap-4 rounded-xl border px-5 py-4 text-left transition-colors ${
+                      selectedEvent?.id === t.id
+                        ? "border-[#0B5D3B] bg-[#0B5D3B]/5"
+                        : "border-[#d9ddcf] bg-white hover:border-[#0B5D3B]/30 hover:bg-[#f6f4ed]"
+                    }`}
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#C9A84C]/10 text-lg">
+                      🏆
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-[#162317]">{t.name}</p>
+                      <p className="text-xs text-[#6f7a67]">
+                        {t.starts_at ? formatDate(t.starts_at) : "Date TBD"}
+                      </p>
+                    </div>
+                    <svg className="h-4 w-4 text-[#6f7a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+              {tournaments.length > 6 && (
                 <button
-                  key={t.id}
-                  onClick={() => { setSelectedEvent(t); setStep(2); }}
-                  className={`flex items-center gap-4 rounded-xl border px-5 py-4 text-left transition-colors ${
-                    selectedEvent?.id === t.id
-                      ? "border-[#0B5D3B] bg-[#0B5D3B]/5"
-                      : "border-[#d9ddcf] bg-white hover:border-[#0B5D3B]/30 hover:bg-[#f6f4ed]"
-                  }`}
+                  onClick={() => setShowAllTournaments(x => !x)}
+                  className="mt-2 w-full rounded-xl border border-[#d9ddcf] bg-white px-4 py-2.5 text-sm text-[#6f7a67] transition-colors hover:border-[#0B5D3B]/30 hover:text-[#162317]"
                 >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#C9A84C]/10 text-lg">
-                    🏆
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-[#162317]">{t.name}</p>
-                    <p className="text-xs text-[#6f7a67]">
-                      {t.starts_at ? formatDate(t.starts_at) : "Date TBD"}
-                    </p>
-                  </div>
-                  <svg className="h-4 w-4 text-[#6f7a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
+                  {showAllTournaments
+                    ? "Show fewer tournaments ↑"
+                    : `Show more tournaments ↓ (${tournaments.length - 6} more)`}
                 </button>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       )}

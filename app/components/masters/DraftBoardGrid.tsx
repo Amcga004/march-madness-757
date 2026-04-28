@@ -18,6 +18,10 @@ export default function DraftBoardGrid({ picks, rosterSize, managers }: Props) {
     return round % 2 === 1 ? managers : [...managers].reverse()
   })
 
+  function overallPickNum(round: number, posInRound: number): number {
+    return (round - 1) * managers.length + posInRound
+  }
+
   return (
     <div className="rounded-[20px] border border-[#0b5d3b] bg-[#0b5d3b] p-3 shadow-[0_8px_20px_rgba(16,24,40,0.08)] md:rounded-[24px] md:p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -52,17 +56,21 @@ export default function DraftBoardGrid({ picks, rosterSize, managers }: Props) {
                   const roundPick = i + 1
                   const pick = pickMap.get(`${round}-${roundPick}`)
                   const theme = getManagerTheme(manager)
+                  const pickNum = overallPickNum(round, i + 1)
 
                   return (
                     <div
                       key={`${round}-${roundPick}-${manager}`}
                       className="min-h-[60px] rounded-lg border border-[#cfd9c8] bg-white px-2.5 py-2"
                     >
-                      <p
-                        className={`mb-1 truncate text-[10px] uppercase tracking-[0.12em] ${theme.textClass}`}
-                      >
-                        {manager}
-                      </p>
+                      <div className="mb-1 flex items-center justify-between gap-1">
+                        <p className={`truncate text-[10px] uppercase tracking-[0.12em] ${theme.textClass}`}>
+                          {manager}
+                        </p>
+                        <span className="shrink-0 text-[10px] font-semibold text-[#b0b8a7]">
+                          #{pickNum}
+                        </span>
+                      </div>
 
                       {pick ? (
                         <p className="line-clamp-2 text-xs font-semibold leading-4 text-[#162317]">

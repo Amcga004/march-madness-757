@@ -91,6 +91,7 @@ export type LeaderboardPageData = {
     draft_status: string | null
   } | null
   rows: LeaderboardRow[]
+  eventStartsAt: string | null
 }
 
 function isFinished(status: string | null | undefined, thru: string | null | undefined) {
@@ -309,17 +310,21 @@ export async function getLeaderboardPageData(leagueId: string): Promise<Leaderbo
     return {
       league: league ?? null,
       rows: [],
+      eventStartsAt: null,
     }
   }
 
-  const [{ data: competitors }, { data: liveRows }, { data: fantasyRows }] = await Promise.all([
+  const [{ data: competitors }, { data: liveRows }, { data: fantasyRows }, { data: platformEvent }] = await Promise.all([
     supabase.from('competitors').select('id, name').order('name', { ascending: true }),
     supabase
       .from('golf_live_player_state')
       .select('competitor_id, player_name, position_text, today_to_par, total_to_par, thru, status')
       .eq('event_id', league.event_id),
     supabase.from('golf_live_player_fantasy_scores').select('*').eq('league_id', leagueId),
+    supabase.from('platform_events').select('starts_at').eq('id', league.event_id).maybeSingle(),
   ])
+
+  const eventStartsAt: string | null = platformEvent?.starts_at ?? null
 
   const rows = sortLeaderboardRows(
     buildFullFieldRows(
@@ -332,6 +337,7 @@ export async function getLeaderboardPageData(leagueId: string): Promise<Leaderbo
   return {
     league,
     rows,
+    eventStartsAt,
   }
 }
 

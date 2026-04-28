@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/auth/authHelpers";
 import { createServiceClient } from "@/lib/supabase/service";
+import DeleteLeagueMini from "@/app/components/masters/DeleteLeagueMini";
 
 export const dynamic = "force-dynamic";
 
@@ -154,25 +155,27 @@ export default async function FantasyGolfPage() {
             </summary>
             <div className="flex flex-col gap-2">
               {leagues.map((league) => (
-                <Link
-                  key={league.id}
-                  href={`/masters/${league.id}/hub`}
-                  className="flex items-center gap-4 rounded-xl border border-[#d9ddcf] bg-white px-5 py-4 opacity-70 transition-colors hover:opacity-100"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#d9ddcf]/40 text-lg">
-                    ⛳
+                <div key={league.id} className="group flex items-center rounded-xl border border-[#d9ddcf] bg-white opacity-70 transition-colors hover:opacity-100">
+                  <Link
+                    href={`/masters/${league.id}/hub`}
+                    className="flex flex-1 min-w-0 items-center gap-4 px-5 py-4"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#d9ddcf]/40 text-lg">⛳</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-[#162317] truncate">{league.name}</p>
+                      <p className="text-xs text-[#6f7a67]">Created {formatDate(league.created_at)}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <LeagueBadge status={league.draft_status} />
+                      <svg className="h-4 w-4 text-[#6f7a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </Link>
+                  <div className="pr-3 opacity-0 transition-opacity group-hover:opacity-100 md:opacity-0 max-md:opacity-100">
+                    <DeleteLeagueMini leagueId={league.id} />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-[#162317] truncate">{league.name}</p>
-                    <p className="text-xs text-[#6f7a67]">Created {formatDate(league.created_at)}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <LeagueBadge status={league.draft_status} />
-                    <svg className="h-4 w-4 text-[#6f7a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </Link>
+                </div>
               ))}
             </div>
           </details>
@@ -183,25 +186,27 @@ export default async function FantasyGolfPage() {
             </h2>
             <div className="flex flex-col gap-2">
               {leagues.map((league) => (
-                <Link
-                  key={league.id}
-                  href={`/masters/${league.id}/hub`}
-                  className="flex items-center gap-4 rounded-xl border border-[#d9ddcf] bg-white px-5 py-4 transition-colors hover:border-[#0B5D3B]/30 hover:bg-[#f6f4ed]"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0B5D3B]/10 text-lg">
-                    ⛳
+                <div key={league.id} className="group flex items-center rounded-xl border border-[#d9ddcf] bg-white transition-colors hover:border-[#0B5D3B]/30 hover:bg-[#f6f4ed]">
+                  <Link
+                    href={`/masters/${league.id}/hub`}
+                    className="flex flex-1 min-w-0 items-center gap-4 px-5 py-4"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0B5D3B]/10 text-lg">⛳</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-[#162317] truncate">{league.name}</p>
+                      <p className="text-xs text-[#6f7a67]">Created {formatDate(league.created_at)}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <LeagueBadge status={league.draft_status} />
+                      <svg className="h-4 w-4 text-[#6f7a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </Link>
+                  <div className="pr-3 opacity-0 transition-opacity group-hover:opacity-100 md:opacity-0 max-md:opacity-100">
+                    <DeleteLeagueMini leagueId={league.id} />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-[#162317] truncate">{league.name}</p>
-                    <p className="text-xs text-[#6f7a67]">Created {formatDate(league.created_at)}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <LeagueBadge status={league.draft_status} />
-                    <svg className="h-4 w-4 text-[#6f7a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </Link>
+                </div>
               ))}
             </div>
           </>
