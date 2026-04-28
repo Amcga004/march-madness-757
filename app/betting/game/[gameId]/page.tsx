@@ -212,6 +212,12 @@ export default async function GameDetailPage({
   let liveHomeWinPct: number | null = null;
   type BoxTeam = { teamName: string; homeAway: string; stats: Array<{ name: string; value: string }> };
   const boxscoreTeams: BoxTeam[] = [];
+  type PlayerBoxTeam = { teamName: string; labels: string[]; athletes: Array<{ displayName: string; starter: boolean; didNotPlay: boolean; stats: string[] }>; totals: string[] };
+  const playerBoxTeams: PlayerBoxTeam[] = [];
+  type ScoringPlay = { period: string; text: string; awayScore: number | null; homeScore: number | null };
+  const scoringPlays: ScoringPlay[] = [];
+  type LineScoreRow = { teamName: string; linescores: string[]; runs: string; hits: string; errors: string };
+  const mlbLineScores: LineScoreRow[] = [];
 
   if (summaryRaw) {
     try {
@@ -253,21 +259,68 @@ export default async function GameDetailPage({
       const wp = Array.isArray(summaryRaw.winprobability) ? summaryRaw.winprobability : [];
       if (wp.length > 0) liveHomeWinPct = wp[wp.length - 1]?.homeWinPercentage ?? null;
 
-      // Boxscore (final games)
-      if (isFinal) {
-        const bsTeams = Array.isArray(summaryRaw.boxscore?.teams) ? summaryRaw.boxscore.teams : [];
-        for (const team of bsTeams) {
-          const teamName: string = team?.team?.displayName ?? "";
-          const homeAway: string = team?.homeAway ?? "";
-          const stats: Array<{ name: string; value: string }> = [];
-          const statistics = Array.isArray(team?.statistics) ? team.statistics : [];
-          for (const stat of statistics) {
-            const val: string = stat?.displayValue ?? "";
-            if (val && val !== "0" && val !== "-" && val !== "--") {
-              stats.push({ name: stat?.label ?? stat?.name ?? "", value: val });
-            }
+      // Team-level boxscore (available live and final)
+      const bsTeams = Array.isArray(summaryRaw.boxscore?.teams) ? summaryRaw.boxscore.teams : [];
+      for (const team of bsTeams) {
+        const teamName: string = team?.team?.displayName ?? "";
+        const homeAway: string = team?.homeAway ?? "";
+        const stats: Array<{ name: string; value: string }> = [];
+        const statistics = Array.isArray(team?.statistics) ? team.statistics : [];
+        for (const stat of statistics) {
+          const val: string = stat?.displayValue ?? "";
+          if (val && val !== "0" && val !== "-" && val !== "--") {
+            stats.push({ name: stat?.label ?? stat?.name ?? "", value: val });
           }
-          if (stats.length > 0) boxscoreTeams.push({ teamName, homeAway, stats });
+        }
+        if (stats.length > 0) boxscoreTeams.push({ teamName, homeAway, stats });
+      }
+
+      // Player box score (NBA / MLB — from boxscore.players)
+      const rawPlayers = Array.isArray(summaryRaw.boxscore?.players) ? summaryRaw.boxscore.players : [];
+      for (const team of rawPlayers) {
+        const statGroup = Array.isArray(team?.statistics) && team.statistics.length > 0 ? team.statistics[0] : null;
+        if (!statGroup) continue;
+        playerBoxTeams.push({
+          teamName: team?.team?.displayName ?? "",
+          labels: Array.isArray(statGroup.labels) ? statGroup.labels : [],
+          athletes: (Array.isArray(statGroup.athletes) ? statGroup.athletes : []).map((a: any) => ({
+            displayName: a?.athlete?.displayName ?? "",
+            starter: !!a?.starter,
+            didNotPlay: !!a?.didNotPlay,
+            stats: Array.isArray(a?.stats) ? a.stats : [],
+          })),
+          totals: Array.isArray(statGroup.totals) ? statGroup.totals : [],
+        });
+      }
+
+      // MLB scoring plays
+      for (const p of (Array.isArray(summaryRaw.scoringPlays) ? summaryRaw.scoringPlays : [])) {
+        scoringPlays.push({
+          period: p?.period?.displayValue ?? "",
+          text: p?.text ?? "",
+          awayScore: p?.awayScore ?? null,
+          homeScore: p?.homeScore ?? null,
+        });
+      }
+
+      // MLB line scores (inning-by-inning from header competitors)
+      if (sportKey === "mlb") {
+        const compComps: any[] = Array.isArray(summaryRaw?.header?.competitions?.[0]?.competitors)
+          ? summaryRaw.header.competitions[0].competitors : [];
+        for (const comp of compComps) {
+          const ls: any[] = Array.isArray(comp?.linescores) ? comp.linescores : [];
+          const bsTeam = bsTeams.find((t: any) => t?.team?.displayName === comp?.team?.displayName);
+          const bsStats: any[] = Array.isArray(bsTeam?.statistics) ? bsTeam.statistics : [];
+          const rStat = bsStats.find((s: any) => /runs|^r$/i.test(s?.name ?? s?.label ?? ""));
+          const hStat = bsStats.find((s: any) => /hits|^h$/i.test(s?.name ?? s?.label ?? ""));
+          const eStat = bsStats.find((s: any) => /errors|^e$/i.test(s?.name ?? s?.label ?? ""));
+          mlbLineScores.push({
+            teamName: comp?.team?.displayName ?? comp?.team?.abbreviation ?? "",
+            linescores: ls.map((l: any) => l?.value !== undefined ? String(l.value) : l?.displayValue ?? "—"),
+            runs: rStat?.displayValue ?? String(comp?.score ?? "—"),
+            hits: hStat?.displayValue ?? "—",
+            errors: eStat?.displayValue ?? "—",
+          });
         }
       }
     } catch { /* silently ignore malformed ESPN summary data */ }
@@ -679,6 +732,150 @@ export default async function GameDetailPage({
             Recap
           </div>
           <div style={{ fontSize: "13px", color: "#F1F3F5", fontWeight: 500 }}>{articleHeadline}</div>
+        </div>
+      )}
+
+      {/* Player Box Score (live + final) */}
+      {(isLive || isFinal) && playerBoxTeams.length > 0 && (
+        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>
+            Box Score
+          </div>
+          {playerBoxTeams.map((team, ti) => (
+            <div key={ti} style={{ marginBottom: ti < playerBoxTeams.length - 1 ? "20px" : 0 }}>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: "#9CA3AF", marginBottom: "6px" }}>{team.teamName}</div>
+              <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" as any }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", minWidth: "480px" }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: "left", padding: "4px 6px", color: "#4B5563", fontWeight: 600, borderBottom: "0.5px solid #21262D", minWidth: "130px", whiteSpace: "nowrap" }}>PLAYER</th>
+                      {team.labels.map((lbl, li) => (
+                        <th key={li} style={{ textAlign: "center", padding: "4px 6px", color: "#4B5563", fontWeight: 600, borderBottom: "0.5px solid #21262D", whiteSpace: "nowrap" }}>{lbl}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {team.athletes.map((a, ai) => (
+                      <tr key={ai}>
+                        <td style={{ padding: "5px 6px", color: a.starter ? "#F1F3F5" : "#9CA3AF", fontWeight: a.starter ? 600 : 400, whiteSpace: "nowrap", borderBottom: "0.5px solid #1E2433" }}>
+                          {a.displayName}
+                        </td>
+                        {a.didNotPlay ? (
+                          <td colSpan={team.labels.length} style={{ padding: "5px 6px", color: "#4B5563", borderBottom: "0.5px solid #1E2433", textAlign: "center", fontSize: "11px" }}>DNP</td>
+                        ) : (
+                          a.stats.map((s, si) => (
+                            <td key={si} style={{ textAlign: "center", padding: "5px 6px", color: "#F1F3F5", borderBottom: "0.5px solid #1E2433" }}>{s || "—"}</td>
+                          ))
+                        )}
+                      </tr>
+                    ))}
+                    {team.totals.length > 0 && (
+                      <tr>
+                        <td style={{ padding: "5px 6px", color: "#EA6C0A", fontWeight: 700, borderTop: "0.5px solid #EA6C0A30", fontSize: "11px" }}>Totals</td>
+                        {team.totals.map((t, ti2) => (
+                          <td key={ti2} style={{ textAlign: "center", padding: "5px 6px", color: "#EA6C0A", fontWeight: 600, borderTop: "0.5px solid #EA6C0A30" }}>{t}</td>
+                        ))}
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* NBA Team Stats comparison (live + final) */}
+      {(isLive || isFinal) && sportKey === "nba" && boxscoreTeams.length >= 2 && (() => {
+        const away = boxscoreTeams.find(t => t.homeAway === "away") ?? boxscoreTeams[0];
+        const home = boxscoreTeams.find(t => t.homeAway === "home") ?? boxscoreTeams[1];
+        const sharedStats = away.stats.filter(s => home.stats.some(hs => hs.name === s.name));
+        if (sharedStats.length === 0) return null;
+        return (
+          <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+            <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>
+              Team Stats
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", columnGap: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: "#9CA3AF", textAlign: "right", paddingBottom: "8px" }}>{away.teamName.split(" ").pop()}</div>
+              <div></div>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: "#9CA3AF", paddingBottom: "8px" }}>{home.teamName.split(" ").pop()}</div>
+              {sharedStats.flatMap((stat, si) => {
+                const homeStat = home.stats.find(s => s.name === stat.name);
+                const awayVal = stat.value;
+                const homeVal = homeStat?.value ?? "—";
+                const aN = parseFloat(awayVal);
+                const hN = parseFloat(homeVal);
+                const awayBetter = !isNaN(aN) && !isNaN(hN) && aN > hN;
+                const homeBetter = !isNaN(aN) && !isNaN(hN) && hN > aN;
+                const border = si > 0 ? "0.5px solid #1E2433" : "none";
+                return [
+                  <div key={`a${si}`} style={{ fontSize: "13px", fontWeight: awayBetter ? 700 : 400, color: awayBetter ? "#EA6C0A" : "#F1F3F5", textAlign: "right", padding: "4px 0", borderTop: border }}>{awayVal}</div>,
+                  <div key={`n${si}`} style={{ fontSize: "10px", color: "#4B5563", textAlign: "center", whiteSpace: "nowrap", padding: "4px 4px", borderTop: border }}>{stat.name}</div>,
+                  <div key={`h${si}`} style={{ fontSize: "13px", fontWeight: homeBetter ? 700 : 400, color: homeBetter ? "#EA6C0A" : "#F1F3F5", padding: "4px 0", borderTop: border }}>{homeVal}</div>,
+                ];
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MLB Line Score */}
+      {sportKey === "mlb" && mlbLineScores.length >= 2 && mlbLineScores[0].linescores.length > 0 && (
+        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>
+            Line Score
+          </div>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" as any }}>
+            <table style={{ borderCollapse: "collapse", fontSize: "12px", minWidth: "340px" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", padding: "4px 8px 4px 0", color: "#4B5563", fontWeight: 600, borderBottom: "0.5px solid #21262D", minWidth: "80px" }}></th>
+                  {mlbLineScores[0].linescores.map((_, i) => (
+                    <th key={i} style={{ textAlign: "center", padding: "4px 8px", color: "#4B5563", fontWeight: 600, borderBottom: "0.5px solid #21262D", minWidth: "28px" }}>{i + 1}</th>
+                  ))}
+                  <th style={{ textAlign: "center", padding: "4px 10px", color: "#EA6C0A", fontWeight: 700, borderBottom: "0.5px solid #21262D", borderLeft: "0.5px solid #21262D" }}>R</th>
+                  <th style={{ textAlign: "center", padding: "4px 10px", color: "#4B5563", fontWeight: 600, borderBottom: "0.5px solid #21262D" }}>H</th>
+                  <th style={{ textAlign: "center", padding: "4px 10px", color: "#4B5563", fontWeight: 600, borderBottom: "0.5px solid #21262D" }}>E</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mlbLineScores.map((row, ri) => (
+                  <tr key={ri}>
+                    <td style={{ padding: "5px 8px 5px 0", fontWeight: 600, color: "#F1F3F5", borderBottom: "0.5px solid #1E2433", whiteSpace: "nowrap" }}>
+                      {row.teamName.split(" ").slice(-2).join(" ")}
+                    </td>
+                    {row.linescores.map((ls, li) => (
+                      <td key={li} style={{ textAlign: "center", padding: "5px 8px", color: ls !== "0" && ls !== "—" ? "#F1F3F5" : "#4B5563", borderBottom: "0.5px solid #1E2433" }}>{ls}</td>
+                    ))}
+                    <td style={{ textAlign: "center", padding: "5px 10px", color: "#EA6C0A", fontWeight: 700, borderBottom: "0.5px solid #1E2433", borderLeft: "0.5px solid #21262D" }}>{row.runs}</td>
+                    <td style={{ textAlign: "center", padding: "5px 10px", color: "#F1F3F5", borderBottom: "0.5px solid #1E2433" }}>{row.hits}</td>
+                    <td style={{ textAlign: "center", padding: "5px 10px", color: "#F1F3F5", borderBottom: "0.5px solid #1E2433" }}>{row.errors}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* MLB Scoring Summary */}
+      {sportKey === "mlb" && scoringPlays.length > 0 && (
+        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
+            Scoring Summary
+          </div>
+          {scoringPlays.map((play, pi) => (
+            <div key={pi} style={{ display: "flex", gap: "10px", padding: "6px 0", borderTop: pi > 0 ? "0.5px solid #1E2433" : "none", alignItems: "flex-start" }}>
+              <span style={{ fontSize: "11px", color: "#4B5563", whiteSpace: "nowrap", flexShrink: 0, paddingTop: "1px", minWidth: "44px" }}>{play.period}</span>
+              <span style={{ fontSize: "12px", color: "#94A3B8", flex: 1 }}>{play.text}</span>
+              {(play.awayScore !== null || play.homeScore !== null) && (
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "#F1F3F5", whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {play.awayScore ?? "—"}–{play.homeScore ?? "—"}
+                </span>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
