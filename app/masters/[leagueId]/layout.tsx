@@ -32,6 +32,17 @@ export default async function MastersLeagueLayout({
 
         <header className="sticky top-0 z-50 border-b border-[#d9ddcf] bg-[rgba(243,241,234,0.96)] text-[#162317] shadow-[0_8px_20px_rgba(16,24,40,0.06)] backdrop-blur-xl">
           <div className="mx-auto max-w-7xl px-3 py-2.5 sm:px-4 md:px-6">
+            {/* Breadcrumb */}
+            <nav className="mb-1.5 flex items-center gap-1 text-[10px] text-[#9aa89a]">
+              <Link href="/betting" className="hover:text-[#162317] transition-colors">EdgePulse</Link>
+              <span>›</span>
+              <Link href="/fantasy" className="hover:text-[#162317] transition-colors">Fantasy</Link>
+              <span>›</span>
+              <Link href="/fantasy/golf" className="hover:text-[#162317] transition-colors">Golf</Link>
+              <span>›</span>
+              <span className="truncate font-medium text-[#162317]">{leagueName}</span>
+            </nav>
+
             <div className="flex items-center justify-between gap-3">
               <Link href={`/masters/${leagueId}/hub`} className="min-w-0">
                 <div className="flex items-center gap-2.5">
