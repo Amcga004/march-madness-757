@@ -100,6 +100,12 @@ export default async function MastersLeagueLayout({
               >
                 Draft
               </Link>
+              <Link
+                href={`/masters/${leagueId}/settings`}
+                className="whitespace-nowrap rounded-full border border-[#d9ddcf] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#243126]"
+              >
+                Settings
+              </Link>
             </div>
           </div>
         </header>

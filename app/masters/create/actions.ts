@@ -98,3 +98,24 @@ export async function createLeague(formData: {
     return { error: err instanceof Error ? err.message : "Unexpected error" };
   }
 }
+
+export async function updateScoringConfig(
+  leagueId: string,
+  userId: string,
+  config: Record<string, unknown>
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = createServiceClient();
+  const { data: league } = await supabase
+    .from("leagues_v2")
+    .select("created_by")
+    .eq("id", leagueId)
+    .maybeSingle();
+  if (!league || league.created_by !== userId) {
+    return { ok: false, error: "Not authorized" };
+  }
+  const { error } = await supabase
+    .from("leagues_v2")
+    .update({ scoring_config: config })
+    .eq("id", leagueId);
+  return { ok: !error, error: error?.message };
+}

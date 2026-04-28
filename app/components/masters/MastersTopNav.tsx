@@ -13,6 +13,7 @@ const items = [
   { label: 'Leaderboard', getHref: (leagueId: string) => `/masters/${leagueId}/leaderboard` },
   { label: 'Rosters', getHref: (leagueId: string) => `/masters/${leagueId}/rosters` },
   { label: 'Draft', getHref: (leagueId: string) => `/masters/${leagueId}/draft` },
+  { label: 'Settings', getHref: (leagueId: string) => `/masters/${leagueId}/settings` },
 ]
 
 export default function MastersTopNav() {
