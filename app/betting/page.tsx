@@ -171,14 +171,33 @@ export default async function BettingPage({
 
   // Fetch active golf tournament and leaderboard
   const todayStr = new Date().toISOString();
-  const { data: activeTournament } = await supabase
+  const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Step 1: find in-progress tournament
+  let { data: activeTournament } = await supabase
     .from("platform_events")
     .select("id, name, metadata, status, starts_at")
     .eq("sport_key", "pga")
-    .lte("starts_at", todayStr)
+    .eq("status", "in")
     .order("starts_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // Step 2: if none active, find next upcoming within 7 days
+  if (!activeTournament) {
+    const { data: upcomingTournament } = await supabase
+      .from("platform_events")
+      .select("id, name, metadata, status, starts_at")
+      .eq("sport_key", "pga")
+      .eq("status", "pre")
+      .gte("starts_at", todayStr)
+      .lte("starts_at", sevenDaysFromNow)
+      .order("starts_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    activeTournament = upcomingTournament;
+  }
+  // Step 3: if still none, activeTournament stays null → golf section hidden
 
   let golfLeaderboard: any[] = [];
   let golfRawCompetitors: any[] = [];
