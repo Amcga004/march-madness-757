@@ -207,6 +207,10 @@ export default function GolfTournamentCard({ tournamentName, roundStatus, player
               textTransform: "uppercase",
               letterSpacing: "0.05em",
               textAlign: i >= 2 ? "center" : "left",
+              position: i === 0 ? "sticky" : i === 1 ? "sticky" : undefined,
+              left: i === 0 ? 0 : i === 1 ? "35px" : undefined,
+              background: i <= 1 ? "#0D1117" : undefined,
+              zIndex: i <= 1 ? 1 : undefined,
             }}>{col}</span>
           ))}
           {hasR2 && <span style={{ fontSize: "10px", color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "center" }}>R2</span>}
@@ -226,14 +230,16 @@ export default function GolfTournamentCard({ tournamentName, roundStatus, player
             background: idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)",
           }}>
             {/* POS */}
-            <span style={{ fontSize: "12px", color: "#6B7280" }}>
+            <span style={{ fontSize: "12px", color: "#6B7280", position: "sticky", left: 0, background: idx % 2 === 0 ? "#0D1117" : "#0e131a", zIndex: 1 }}>
               {player.position === "—" || player.position === "--" ? "—" : player.position}
             </span>
 
             {/* PLAYER */}
-            <span style={{ fontSize: "13px", fontWeight: 500, color: "#F1F3F5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: "13px", fontWeight: 500, color: "#F1F3F5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", position: "sticky", left: "35px", background: idx % 2 === 0 ? "#0D1117" : "#0e131a", zIndex: 1 }}>
               <span
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
                   if (!rawCompetitors) return;
                   const raw = findRawCompetitor(player, rawCompetitors);
                   if (raw) {

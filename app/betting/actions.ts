@@ -297,6 +297,63 @@ export async function updateUnitSize(pickId: string, userId: string, unitSize: n
   return { ok: !error };
 }
 
+export async function saveParlay(parlay: {
+  userId: string
+  legs: Array<{
+    gameId: string
+    awayTeam: string
+    homeTeam: string
+    sportKey: string
+    gameDate: string
+    pickedTeam: string
+    odds: number
+    bookmaker?: string
+  }>
+  calculatedOdds: number
+  unitSize?: number
+}) {
+  const supabase = createServiceClient();
+  const { error } = await supabase.from("parlays").insert({
+    user_id: parlay.userId,
+    legs: parlay.legs,
+    calculated_odds: parlay.calculatedOdds,
+    unit_size: parlay.unitSize ?? null,
+    result: "pending",
+  });
+  return { ok: !error, error: error?.message };
+}
+
+export async function fetchMyParlays(userId: string) {
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("parlays")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  return data ?? [];
+}
+
+export async function deleteParlay(parlayId: string, userId: string) {
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("parlays")
+    .delete()
+    .eq("id", parlayId)
+    .eq("user_id", userId);
+  return { ok: !error };
+}
+
+export async function updateParlayUnit(parlayId: string, userId: string, unitSize: number) {
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("parlays")
+    .update({ unit_size: unitSize })
+    .eq("id", parlayId)
+    .eq("user_id", userId);
+  return { ok: !error };
+}
+
 export async function fetchMyPicks(userId: string) {
   const supabase = createServiceClient();
   const { data: picks } = await supabase

@@ -8,6 +8,7 @@ import LeaguePulseCard from '@/app/components/masters/LeaguePulseCard'
 import TopContributorsCard from '@/app/components/masters/TopContributorsCard'
 import InviteCopyButton from '@/app/components/masters/InviteCopyButton'
 import StartDraftButton from '@/app/components/masters/StartDraftButton'
+import DeleteLeagueButton from '@/app/components/masters/DeleteLeagueButton'
 import { getEventHubData } from '@/lib/golf/queries'
 import { getUser } from '@/lib/auth/authHelpers'
 
@@ -136,6 +137,7 @@ export default async function MastersHubPage({ params }: PageProps) {
                   : 'You can start the draft at any time, even before all managers join.'}
               </p>
               <StartDraftButton leagueId={leagueId} />
+              <DeleteLeagueButton leagueId={leagueId} />
             </div>
           )}
         </div>

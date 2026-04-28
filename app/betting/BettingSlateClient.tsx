@@ -13,7 +13,7 @@ import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import AuthButton from "@/app/components/AuthButton";
 import GolfTournamentCard from "./GolfTournamentCard";
-import { savePick, fetchMyPicks, deletePick, updateUnitSize } from "./actions";
+import { savePick, fetchMyPicks, deletePick, updateUnitSize, saveParlay, fetchMyParlays, deleteParlay, updateParlayUnit } from "./actions";
 
 const SPORT_LABELS: Record<string, string> = {
   nba: "NBA",
@@ -98,6 +98,20 @@ export default function BettingSlateClient({
   const [modalUnit, setModalUnit] = useState<number | string>('');
   const [customOdds, setCustomOdds] = useState<number | null>(null);
   const [timeFilter, setTimeFilter] = useState("all");
+  const [parlayLegs, setParlayLegs] = useState<Array<{
+    gameId: string
+    awayTeam: string
+    homeTeam: string
+    sportKey: string
+    gameDate: string
+    pickedTeam: string
+    odds: number
+  }>>([]);
+  const [showParlayTray, setShowParlayTray] = useState(false);
+  const [parlayTrayExpanded, setParlayTrayExpanded] = useState(true);
+  const [parlayUnit, setParlayUnit] = useState<number | string>('');
+  const [savingParlay, setSavingParlay] = useState(false);
+  const [myParlays, setMyParlays] = useState<any[] | null>(null);
   useEffect(() => { userRef.current = currentUser; }, [currentUser]);
 
   useEffect(() => {
@@ -133,8 +147,9 @@ export default function BettingSlateClient({
   }, [liveGames]);
 
   useEffect(() => {
-    if (activeTab === "picks" && currentUser && myPicks === null) {
-      fetchMyPicks(currentUser.id).then(setMyPicks);
+    if (activeTab === "picks" && currentUser) {
+      if (myPicks === null) fetchMyPicks(currentUser.id).then(setMyPicks);
+      if (myParlays === null) fetchMyParlays(currentUser.id).then(setMyParlays);
     }
   }, [activeTab, currentUser]);
 
@@ -206,6 +221,15 @@ export default function BettingSlateClient({
       if (!best || price > best.price) best = { price, bookmaker: o.bookmaker };
     }
     return best;
+  }
+
+  function calcParlayOdds(legs: Array<{ odds: number }>): number {
+    const decimal = legs.reduce((acc, leg) => {
+      const d = leg.odds > 0 ? (leg.odds / 100) + 1 : (100 / Math.abs(leg.odds)) + 1;
+      return acc * d;
+    }, 1);
+    if (decimal >= 2) return Math.round((decimal - 1) * 100);
+    return Math.round(-100 / (decimal - 1));
   }
 
   function getTopSignal(game: any) {
@@ -1281,6 +1305,97 @@ export default function BettingSlateClient({
                 })}
               </div>
             )}
+
+            {/* ── Parlays ── */}
+            {(() => {
+              if (myParlays === null) return (
+                <div style={{ marginTop: "24px", textAlign: "center", color: "#6B7280", fontSize: "13px" }}>Loading parlays…</div>
+              );
+              const cutoff2 = cutoffDate(timeFilter);
+              const filteredParlays = cutoff2
+                ? myParlays.filter((p: any) => {
+                    const earliest = (p.legs as any[]).reduce((min: string, l: any) => l.gameDate < min ? l.gameDate : min, p.legs[0]?.gameDate ?? "");
+                    return earliest >= cutoff2;
+                  })
+                : myParlays;
+              if (filteredParlays.length === 0) return null;
+              return (
+                <div style={{ marginTop: "24px" }}>
+                  <div style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.08em", color: "#6B7280", textTransform: "uppercase", marginBottom: "8px" }}>
+                    Parlays
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {filteredParlays.map((parlay: any) => {
+                      const meta = resultMeta[parlay.result] ?? resultMeta.pending;
+                      const unit = parlay.unit_size ?? 1;
+                      const odds = parlay.calculated_odds;
+                      const pnl = parlay.result === "win"
+                        ? (odds > 0 ? unit * (odds / 100) : unit * (100 / Math.abs(odds)))
+                        : parlay.result === "loss" ? -unit : null;
+                      const projWin = odds > 0 ? unit * (odds / 100) : unit * (100 / Math.abs(odds));
+                      const oddsStr = odds > 0 ? `+${odds}` : `${odds}`;
+                      const legs: any[] = parlay.legs ?? [];
+                      return (
+                        <div key={parlay.id} style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "10px", padding: "12px 14px" }}>
+                          {/* Header */}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                            <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.06em", color: "#EA6C0A", textTransform: "uppercase" }}>
+                              Parlay · {legs.length} legs · {oddsStr}
+                            </span>
+                            <button
+                              onClick={async () => {
+                                if (!currentUser) return;
+                                setMyParlays(prev => prev ? prev.filter((p: any) => p.id !== parlay.id) : prev);
+                                await deleteParlay(parlay.id, currentUser.id);
+                              }}
+                              style={{ background: "transparent", border: "none", cursor: "pointer", color: "#4B5563", fontSize: "16px", lineHeight: 1, padding: "0 2px" }}
+                              title="Delete parlay"
+                            >×</button>
+                          </div>
+                          {/* Legs list */}
+                          <div style={{ display: "flex", flexDirection: "column", gap: "3px", marginBottom: "10px" }}>
+                            {legs.map((leg: any, i: number) => (
+                              <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#9CA3AF" }}>
+                                <span style={{ fontWeight: 500, color: "#F1F3F5" }}>{leg.pickedTeam}</span>
+                                <span>{leg.odds > 0 ? `+${leg.odds}` : leg.odds}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {/* Unit + P&L */}
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                            <span style={{ fontSize: "11px", color: "#6B7280" }}>Units:</span>
+                            <input
+                              type="number"
+                              min="0.1"
+                              step="0.5"
+                              defaultValue={unit}
+                              onBlur={async (e) => {
+                                if (!currentUser) return;
+                                const val = parseFloat(e.target.value);
+                                if (isNaN(val) || val <= 0) return;
+                                setMyParlays(prev => prev ? prev.map((p: any) => p.id === parlay.id ? { ...p, unit_size: val } : p) : prev);
+                                await updateParlayUnit(parlay.id, currentUser.id, val);
+                              }}
+                              style={{ width: "52px", padding: "3px 6px", borderRadius: "5px", background: "#0D1117", border: "0.5px solid #21262D", color: "#F1F3F5", fontSize: "12px", textAlign: "center" }}
+                            />
+                            <span style={{
+                              fontSize: "12px", fontWeight: 600, color: meta.color,
+                              background: `${meta.color}18`, padding: "2px 8px",
+                              borderRadius: "4px", border: `0.5px solid ${meta.color}40`,
+                            }}>{meta.label}</span>
+                            <span style={{ marginLeft: "auto", fontSize: "13px", fontWeight: 600, color: pnl !== null ? (pnl >= 0 ? "#16A34A" : "#DC2626") : "#6B7280" }}>
+                              {pnl !== null
+                                ? (pnl >= 0 ? `+${pnl.toFixed(2)}u` : `${pnl.toFixed(2)}u`)
+                                : `proj +${projWin.toFixed(2)}u`}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
@@ -1395,6 +1510,37 @@ export default function BettingSlateClient({
             >
               {savingPick ? "Saving..." : "Add to Slip"}
             </button>
+            <button
+              onClick={() => {
+                const side = slipModal.selectedSide;
+                const pickedTeam = side === "home" ? slipModal.game.homeTeam : slipModal.game.awayTeam;
+                const odds = customOdds ?? getBest(slipModal.game, side)?.price ?? 0;
+                const alreadyAdded = parlayLegs.some(l => l.gameId === slipModal.game.id);
+                if (alreadyAdded) { alert("This game is already in your parlay"); return; }
+                if (parlayLegs.length >= 15) { alert("Maximum 15 legs allowed"); return; }
+                setParlayLegs(prev => [...prev, {
+                  gameId: slipModal.game.id,
+                  awayTeam: slipModal.game.awayTeam,
+                  homeTeam: slipModal.game.homeTeam,
+                  sportKey: slipModal.game.sportKey,
+                  gameDate: slipModal.game.gameDate ?? date,
+                  pickedTeam,
+                  odds,
+                }]);
+                setShowParlayTray(true);
+                setParlayTrayExpanded(true);
+                setSlipModal(null);
+                setCustomOdds(null);
+                setModalUnit('');
+              }}
+              style={{
+                width: "100%", padding: "10px", marginTop: "8px", borderRadius: "8px",
+                border: "1px solid #EA6C0A80", background: "transparent",
+                color: "#EA6C0A", fontSize: "14px", cursor: "pointer",
+              }}
+            >
+              + Add to Parlay ({parlayLegs.length} leg{parlayLegs.length !== 1 ? "s" : ""})
+            </button>
             <button onClick={() => { setSlipModal(null); setModalUnit(''); setCustomOdds(null); }} style={{
               width: "100%", padding: "8px", marginTop: "8px", borderRadius: "8px",
               cursor: "pointer", background: "transparent", border: "none",
@@ -1405,6 +1551,156 @@ export default function BettingSlateClient({
           </div>
         </div>
       )}
+
+      {/* Parlay tray */}
+      {showParlayTray && parlayLegs.length > 0 && (() => {
+        const parlayOdds = calcParlayOdds(parlayLegs);
+        const parlayOddsStr = parlayOdds > 0 ? `+${parlayOdds}` : `${parlayOdds}`;
+        const unit = parlayUnit === '' ? 1 : Number(parlayUnit);
+        const toWin = parlayOdds > 0
+          ? unit * (parlayOdds / 100)
+          : unit * (100 / Math.abs(parlayOdds));
+        return (
+          <div style={{
+            position: "fixed",
+            bottom: 60,
+            left: 0,
+            right: 0,
+            zIndex: 900,
+            background: "#161B22",
+            borderTop: "1px solid #EA6C0A40",
+            boxShadow: "0 -4px 20px rgba(0,0,0,0.4)",
+          }}>
+            <style>{`
+              @media (min-width: 768px) {
+                .parlay-tray-inner {
+                  max-width: 480px !important;
+                  margin-left: auto !important;
+                  margin-right: 0 !important;
+                  border-left: 1px solid #EA6C0A40 !important;
+                  bottom: 0 !important;
+                }
+              }
+            `}</style>
+            <div className="parlay-tray-inner" style={{ padding: "12px 16px" }}>
+              {/* Header */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: parlayTrayExpanded ? "12px" : 0 }}>
+                <button
+                  onClick={() => setParlayTrayExpanded(x => !x)}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#EA6C0A", fontSize: "13px", fontWeight: 700, letterSpacing: "0.05em", padding: 0 }}
+                >
+                  {parlayTrayExpanded ? "▼" : "▲"} PARLAY ({parlayLegs.length} leg{parlayLegs.length !== 1 ? "s" : ""}) · {parlayOddsStr}
+                </button>
+                <button
+                  onClick={() => { setParlayLegs([]); setShowParlayTray(false); setParlayUnit(''); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", fontSize: "18px", lineHeight: 1 }}
+                  title="Clear parlay"
+                >×</button>
+              </div>
+
+              {parlayTrayExpanded && (
+                <>
+                  {/* Legs */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }}>
+                    {parlayLegs.map((leg, i) => (
+                      <div key={leg.gameId} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px" }}>
+                        <span style={{ flex: 1, color: "#F1F3F5", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {leg.pickedTeam}
+                        </span>
+                        <input
+                          type="number"
+                          defaultValue={leg.odds}
+                          onBlur={e => {
+                            const v = parseInt(e.target.value, 10);
+                            if (isNaN(v)) return;
+                            setParlayLegs(prev => prev.map((l, j) => j === i ? { ...l, odds: v } : l));
+                          }}
+                          style={{
+                            width: "68px", padding: "3px 6px", borderRadius: "5px",
+                            background: "#0D1117", border: "0.5px solid #21262D",
+                            color: "#F1F3F5", fontSize: "12px", textAlign: "center",
+                          }}
+                        />
+                        <button
+                          onClick={() => {
+                            const next = parlayLegs.filter((_, j) => j !== i);
+                            setParlayLegs(next);
+                            if (next.length === 0) { setShowParlayTray(false); setParlayUnit(''); }
+                          }}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", fontSize: "16px", lineHeight: 1 }}
+                        >×</button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Unit + to-win */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ fontSize: "12px", color: "#6B7280" }}>Units</span>
+                      <input
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={parlayUnit}
+                        placeholder="1"
+                        onChange={e => setParlayUnit(e.target.value === '' ? '' : parseFloat(e.target.value) || '')}
+                        style={{
+                          width: "60px", padding: "4px 6px", borderRadius: "5px",
+                          background: "#0D1117", border: "0.5px solid #21262D",
+                          color: "#F1F3F5", fontSize: "13px", textAlign: "center",
+                        }}
+                      />
+                    </div>
+                    <span style={{ fontSize: "12px", color: "#6B7280" }}>
+                      To win: <span style={{ color: "#16A34A", fontWeight: 600 }}>{toWin.toFixed(2)}u</span>
+                    </span>
+                    <button
+                      onClick={() => setParlayTrayExpanded(false)}
+                      style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#6B7280", fontSize: "12px" }}
+                    >
+                      Add More
+                    </button>
+                  </div>
+
+                  {/* Lock in */}
+                  <button
+                    disabled={savingParlay || parlayLegs.length < 2}
+                    onClick={async () => {
+                      if (!currentUser || savingParlay || parlayLegs.length < 2) return;
+                      setSavingParlay(true);
+                      const result = await saveParlay({
+                        userId: currentUser.id,
+                        legs: parlayLegs,
+                        calculatedOdds: parlayOdds,
+                        unitSize: parlayUnit === '' ? undefined : Number(parlayUnit),
+                      });
+                      setSavingParlay(false);
+                      if (result.ok) {
+                        setParlayLegs([]);
+                        setShowParlayTray(false);
+                        setParlayUnit('');
+                        setMyParlays(null);
+                      } else {
+                        alert(result.error ?? "Failed to save parlay");
+                      }
+                    }}
+                    style={{
+                      width: "100%", padding: "10px", borderRadius: "8px",
+                      background: parlayLegs.length < 2 ? "#21262D" : "#EA6C0A",
+                      border: "none", color: parlayLegs.length < 2 ? "#6B7280" : "#fff",
+                      fontSize: "14px", fontWeight: 600,
+                      cursor: parlayLegs.length < 2 || savingParlay ? "not-allowed" : "pointer",
+                      opacity: savingParlay ? 0.6 : 1,
+                    }}
+                  >
+                    {savingParlay ? "Saving…" : parlayLegs.length < 2 ? "Add 2+ legs to lock in" : "Lock in Parlay"}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Mobile bottom tab bar */}
       <nav className="mobile-bottom-nav">

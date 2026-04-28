@@ -4,6 +4,41 @@ import { redirect } from "next/navigation";
 import { getUser } from "@/lib/auth/authHelpers";
 import { createServiceClient } from "@/lib/supabase/service";
 
+export async function deleteLeague(leagueId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const user = await getUser();
+    if (!user) return { ok: false, error: "Not authenticated" };
+
+    const supabase = createServiceClient();
+
+    // Verify commissioner
+    const { data: league } = await supabase
+      .from("leagues_v2")
+      .select("id, created_by")
+      .eq("id", leagueId)
+      .maybeSingle();
+
+    if (!league) return { ok: false, error: "League not found" };
+    if (league.created_by !== user.id) return { ok: false, error: "Only the commissioner can delete this league" };
+
+    // Delete child rows first
+    await supabase.from("league_draft_order_v2").delete().eq("league_id", leagueId);
+
+    // Delete the league (commissioner guard at DB level too)
+    const { error: deleteError } = await supabase
+      .from("leagues_v2")
+      .delete()
+      .eq("id", leagueId)
+      .eq("created_by", user.id);
+
+    if (deleteError) return { ok: false, error: deleteError.message };
+
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err instanceof Error ? err.message : "Unexpected error" };
+  }
+}
+
 export async function createLeague(formData: {
   platformEventId: string;
   name: string;
