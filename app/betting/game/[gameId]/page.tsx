@@ -335,6 +335,75 @@ export default async function GameDetailPage({
   const awayInjuries = summaryInjuries.filter(i => normalizeTeam(i.teamName) === normalizeTeam(awayName));
   const homeInjuries = summaryInjuries.filter(i => normalizeTeam(i.teamName) === normalizeTeam(homeName));
 
+  // ── Pre-game preview data ──
+  const isPreGame = !isLive && !isFinal;
+  const venue: string | null = summaryRaw?.gameInfo?.venue?.fullName ?? null;
+  const weather: { temperature?: number; conditionId?: string; gust?: number } | null =
+    summaryRaw?.gameInfo?.weather ?? null;
+  const seasonSeries: { summary?: string; title?: string } | null =
+    (Array.isArray(summaryRaw?.seasonseries) ? summaryRaw.seasonseries : [])
+      .find((s: any) => s.title?.toLowerCase().includes("regular"))
+    ?? summaryRaw?.seasonseries?.[0]
+    ?? null;
+
+  const homeTeamId: string | undefined = homeComp?.team?.id;
+  const awayTeamId: string | undefined = awayComp?.team?.id;
+
+  type TeamStatEntry = { name: string; displayValue: string; description?: string; abbreviation?: string };
+  let homeTeamStats: TeamStatEntry[] = [];
+  let awayTeamStats: TeamStatEntry[] = [];
+  type Last5Game = { date: string; opponent: string; homeAway: string; teamScore: number; oppScore: number; result: "W" | "L" };
+  let homeLast5: Last5Game[] = [];
+  let awayLast5: Last5Game[] = [];
+
+  if (isPreGame && (homeTeamId || awayTeamId)) {
+    const teamStatUrls: Record<string, (id: string) => string> = {
+      mlb: (id) => `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/${id}?stats=true`,
+      nba: (id) => `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${id}?stats=true`,
+      nhl: (id) => `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams/${id}?stats=true`,
+    };
+
+    function getLast5(schedData: any, teamId: string): Last5Game[] {
+      const events = Array.isArray(schedData?.events) ? schedData.events : [];
+      const completed = events.filter((e: any) =>
+        e.competitions?.[0]?.status?.type?.state === "post"
+      );
+      return completed.slice(-5).map((e: any) => {
+        const comp = e.competitions?.[0];
+        const teamComp = comp?.competitors?.find((c: any) => c.team?.id === teamId);
+        const oppComp = comp?.competitors?.find((c: any) => c.team?.id !== teamId);
+        const teamScore = Number(teamComp?.score?.displayValue ?? teamComp?.score ?? 0);
+        const oppScore = Number(oppComp?.score?.displayValue ?? oppComp?.score ?? 0);
+        return {
+          date: e.date ?? "",
+          opponent: oppComp?.team?.abbreviation ?? "?",
+          homeAway: teamComp?.homeAway ?? "away",
+          teamScore,
+          oppScore,
+          result: teamScore > oppScore ? "W" : "L",
+        } as Last5Game;
+      });
+    }
+
+    try {
+      const statUrlFn = teamStatUrls[sportKey];
+      const [homeStatsRaw, awayStatsRaw, homeSched, awaySched] = await Promise.all([
+        homeTeamId && statUrlFn ? fetch(statUrlFn(homeTeamId), { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+        awayTeamId && statUrlFn ? fetch(statUrlFn(awayTeamId), { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+        homeTeamId ? fetch(`https://site.api.espn.com/apis/site/v2/sports/${espnPath}/teams/${homeTeamId}/schedule?season=2026`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+        awayTeamId ? fetch(`https://site.api.espn.com/apis/site/v2/sports/${espnPath}/teams/${awayTeamId}/schedule?season=2026`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+      ]);
+
+      const rawHomeStats: any[] = homeStatsRaw?.team?.stats ?? [];
+      const rawAwayStats: any[] = awayStatsRaw?.team?.stats ?? [];
+      homeTeamStats = rawHomeStats.filter((s: any) => s.displayValue && s.displayValue !== "0" && s.displayValue !== "--").slice(0, 10);
+      awayTeamStats = rawAwayStats.filter((s: any) => s.displayValue && s.displayValue !== "0" && s.displayValue !== "--").slice(0, 10);
+
+      if (homeTeamId) homeLast5 = getLast5(homeSched, homeTeamId);
+      if (awayTeamId) awayLast5 = getLast5(awaySched, awayTeamId);
+    } catch { /* silently ignore */ }
+  }
+
   return (
     <div style={{
       maxWidth: "680px",
@@ -719,6 +788,111 @@ export default async function GameDetailPage({
               <span style={{ fontSize: "12px", color: "#EA6C0A", fontWeight: 600, textAlign: "center" }}>{row.line_value ?? "—"}</span>
               <span style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5", textAlign: "center" }}>{fmtOdds(row.over_price)}</span>
               <span style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5", textAlign: "center" }}>{fmtOdds(row.under_price)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── PRE-GAME PREVIEW CARDS ── */}
+
+      {/* A) Venue + Weather */}
+      {isPreGame && venue && (
+        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>Venue</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#F1F3F5", marginBottom: weather ? "6px" : 0 }}>
+            <span>📍</span>
+            <span>{venue}</span>
+          </div>
+          {weather && (
+            <div style={{ fontSize: "12px", color: "#6B7280", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              {weather.temperature !== undefined && (
+                <span>🌡 {weather.temperature}°F</span>
+              )}
+              {weather.conditionId && (
+                <span>· {weather.conditionId}</span>
+              )}
+              {weather.gust !== undefined && (
+                <span>· 💨 {weather.gust} mph</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* B) Season Series */}
+      {isPreGame && seasonSeries?.summary && (
+        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px", textAlign: "center" }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>Season Series</div>
+          <div style={{ fontSize: "18px", fontWeight: 700, color: "#F1F3F5" }}>{seasonSeries.summary}</div>
+        </div>
+      )}
+
+      {/* C) Last 5 Results */}
+      {isPreGame && (homeLast5.length > 0 || awayLast5.length > 0) && (
+        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>Last 5 Games</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+            {[
+              { name: awayName, last5: awayLast5 },
+              { name: homeName, last5: homeLast5 },
+            ].map(({ name, last5 }) => (
+              <div key={name}>
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", marginBottom: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {name.split(" ").pop()}
+                </div>
+                <div style={{ display: "flex", gap: "4px", marginBottom: "8px", flexWrap: "wrap" }}>
+                  {last5.map((g, i) => (
+                    <span key={i} style={{
+                      width: "22px", height: "22px", borderRadius: "50%",
+                      background: g.result === "W" ? "#16A34A" : "#DC2626",
+                      color: "white", fontSize: "10px", fontWeight: 700,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      flexShrink: 0,
+                    }}>{g.result}</span>
+                  ))}
+                  {last5.length === 0 && (
+                    <span style={{ fontSize: "11px", color: "#4B5563" }}>No data</span>
+                  )}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                  {last5.map((g, i) => (
+                    <div key={i} style={{ fontSize: "10px", color: "#6B7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <span style={{ color: g.result === "W" ? "#16A34A" : "#DC2626", fontWeight: 600 }}>{g.result}</span>
+                      {" "}{g.teamScore}–{g.oppScore} {g.homeAway === "home" ? "vs" : "@"} {g.opponent}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* D) Away Team Season Stats */}
+      {isPreGame && awayTeamStats.length > 0 && (
+        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
+            {awayName} Season Stats
+          </div>
+          {awayTeamStats.map((stat, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderTop: i > 0 ? "0.5px solid #1E2433" : "none" }}>
+              <span style={{ fontSize: "12px", color: "#6B7280" }}>{stat.description ?? stat.name}</span>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "#F1F3F5" }}>{stat.displayValue}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* E) Home Team Season Stats */}
+      {isPreGame && homeTeamStats.length > 0 && (
+        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
+            {homeName} Season Stats
+          </div>
+          {homeTeamStats.map((stat, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderTop: i > 0 ? "0.5px solid #1E2433" : "none" }}>
+              <span style={{ fontSize: "12px", color: "#6B7280" }}>{stat.description ?? stat.name}</span>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "#F1F3F5" }}>{stat.displayValue}</span>
             </div>
           ))}
         </div>
