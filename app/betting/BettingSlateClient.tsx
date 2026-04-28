@@ -1220,6 +1220,7 @@ export default function BettingSlateClient({
                   const projWin = pick.pick_odds > 0
                     ? unit * (pick.pick_odds / 100)
                     : unit * (100 / Math.abs(pick.pick_odds));
+                  const isLocked = pick.result !== "pending";
 
                   return (
                     <div key={pick.id} style={{
@@ -1238,18 +1239,20 @@ export default function BettingSlateClient({
                             {new Date(pick.game_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                           </span>
                         </div>
-                        <button
-                          onClick={async () => {
-                            if (!currentUser) return;
-                            setMyPicks(prev => prev ? prev.filter((p: any) => p.id !== pick.id) : prev);
-                            await deletePick(pick.id, currentUser.id);
-                          }}
-                          style={{
-                            background: "transparent", border: "none", cursor: "pointer",
-                            color: "#4B5563", fontSize: "16px", lineHeight: 1, padding: "0 2px",
-                          }}
-                          title="Delete pick"
-                        >×</button>
+                        {!isLocked && (
+                          <button
+                            onClick={async () => {
+                              if (!currentUser) return;
+                              setMyPicks(prev => prev ? prev.filter((p: any) => p.id !== pick.id) : prev);
+                              await deletePick(pick.id, currentUser.id);
+                            }}
+                            style={{
+                              background: "transparent", border: "none", cursor: "pointer",
+                              color: "#4B5563", fontSize: "16px", lineHeight: 1, padding: "0 2px",
+                            }}
+                            title="Delete pick"
+                          >×</button>
+                        )}
                       </div>
 
                       {/* Row 2: pick + odds + unit input */}
@@ -1261,39 +1264,50 @@ export default function BettingSlateClient({
                         </span>
                         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "6px" }}>
                           <span style={{ fontSize: "11px", color: "#6B7280" }}>Units:</span>
-                          <input
-                            type="number"
-                            min="0.1"
-                            step="0.5"
-                            defaultValue={unit}
-                            onBlur={async (e) => {
-                              if (!currentUser) return;
-                              const val = parseFloat(e.target.value);
-                              if (isNaN(val) || val <= 0) return;
-                              setMyPicks(prev => prev
-                                ? prev.map((p: any) => p.id === pick.id ? { ...p, unit_size: val } : p)
-                                : prev
-                              );
-                              await updateUnitSize(pick.id, currentUser.id, val);
-                            }}
-                            style={{
-                              width: "52px", padding: "3px 6px", borderRadius: "5px",
-                              background: "#0D1117", border: "0.5px solid #21262D",
-                              color: "#F1F3F5", fontSize: "12px", textAlign: "center",
-                            }}
-                          />
+                          {isLocked ? (
+                            <span style={{ fontSize: "12px", color: "#6B7280" }}>
+                              🔒 {pick.unit_size ?? "—"}u
+                            </span>
+                          ) : (
+                            <input
+                              type="number"
+                              min="0.1"
+                              step="0.5"
+                              defaultValue={unit}
+                              onBlur={async (e) => {
+                                if (!currentUser) return;
+                                const val = parseFloat(e.target.value);
+                                if (isNaN(val) || val <= 0) return;
+                                setMyPicks(prev => prev
+                                  ? prev.map((p: any) => p.id === pick.id ? { ...p, unit_size: val } : p)
+                                  : prev
+                                );
+                                await updateUnitSize(pick.id, currentUser.id, val);
+                              }}
+                              style={{
+                                width: "52px", padding: "3px 6px", borderRadius: "5px",
+                                background: "#0D1117", border: "0.5px solid #21262D",
+                                color: "#F1F3F5", fontSize: "12px", textAlign: "center",
+                              }}
+                            />
+                          )}
                         </div>
                       </div>
 
-                      {/* Row 3: status + P&L */}
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span style={{
-                          fontSize: "12px", fontWeight: 600, color: meta.color,
-                          background: `${meta.color}18`, padding: "2px 8px",
-                          borderRadius: "4px", border: `0.5px solid ${meta.color}40`,
-                        }}>
-                          {meta.label}
-                        </span>
+                      {/* Row 3: status + lock badge + P&L */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{
+                            fontSize: "12px", fontWeight: 600, color: meta.color,
+                            background: `${meta.color}18`, padding: "2px 8px",
+                            borderRadius: "4px", border: `0.5px solid ${meta.color}40`,
+                          }}>
+                            {meta.label}
+                          </span>
+                          {isLocked && (
+                            <span style={{ fontSize: "11px", color: "#6B7280" }}>🔒 Locked</span>
+                          )}
+                        </div>
                         <span style={{ fontSize: "13px", fontWeight: 600, color: pnl !== null ? (pnl >= 0 ? "#16A34A" : "#DC2626") : "#6B7280" }}>
                           {pnl !== null
                             ? (pnl >= 0 ? `+${pnl.toFixed(2)}u` : `${pnl.toFixed(2)}u`)
@@ -1335,6 +1349,7 @@ export default function BettingSlateClient({
                       const projWin = odds > 0 ? unit * (odds / 100) : unit * (100 / Math.abs(odds));
                       const oddsStr = odds > 0 ? `+${odds}` : `${odds}`;
                       const legs: any[] = parlay.legs ?? [];
+                      const isParlayLocked = parlay.result !== "pending";
                       return (
                         <div key={parlay.id} style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "10px", padding: "12px 14px" }}>
                           {/* Header */}
@@ -1342,15 +1357,17 @@ export default function BettingSlateClient({
                             <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.06em", color: "#EA6C0A", textTransform: "uppercase" }}>
                               Parlay · {legs.length} legs · {oddsStr}
                             </span>
-                            <button
-                              onClick={async () => {
-                                if (!currentUser) return;
-                                setMyParlays(prev => prev ? prev.filter((p: any) => p.id !== parlay.id) : prev);
-                                await deleteParlay(parlay.id, currentUser.id);
-                              }}
-                              style={{ background: "transparent", border: "none", cursor: "pointer", color: "#4B5563", fontSize: "16px", lineHeight: 1, padding: "0 2px" }}
-                              title="Delete parlay"
-                            >×</button>
+                            {!isParlayLocked && (
+                              <button
+                                onClick={async () => {
+                                  if (!currentUser) return;
+                                  setMyParlays(prev => prev ? prev.filter((p: any) => p.id !== parlay.id) : prev);
+                                  await deleteParlay(parlay.id, currentUser.id);
+                                }}
+                                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#4B5563", fontSize: "16px", lineHeight: 1, padding: "0 2px" }}
+                                title="Delete parlay"
+                              >×</button>
+                            )}
                           </div>
                           {/* Legs list */}
                           <div style={{ display: "flex", flexDirection: "column", gap: "3px", marginBottom: "10px" }}>
@@ -1361,28 +1378,37 @@ export default function BettingSlateClient({
                               </div>
                             ))}
                           </div>
-                          {/* Unit + P&L */}
+                          {/* Unit + status + P&L */}
                           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
                             <span style={{ fontSize: "11px", color: "#6B7280" }}>Units:</span>
-                            <input
-                              type="number"
-                              min="0.1"
-                              step="0.5"
-                              defaultValue={unit}
-                              onBlur={async (e) => {
-                                if (!currentUser) return;
-                                const val = parseFloat(e.target.value);
-                                if (isNaN(val) || val <= 0) return;
-                                setMyParlays(prev => prev ? prev.map((p: any) => p.id === parlay.id ? { ...p, unit_size: val } : p) : prev);
-                                await updateParlayUnit(parlay.id, currentUser.id, val);
-                              }}
-                              style={{ width: "52px", padding: "3px 6px", borderRadius: "5px", background: "#0D1117", border: "0.5px solid #21262D", color: "#F1F3F5", fontSize: "12px", textAlign: "center" }}
-                            />
-                            <span style={{
-                              fontSize: "12px", fontWeight: 600, color: meta.color,
-                              background: `${meta.color}18`, padding: "2px 8px",
-                              borderRadius: "4px", border: `0.5px solid ${meta.color}40`,
-                            }}>{meta.label}</span>
+                            {isParlayLocked ? (
+                              <span style={{ fontSize: "12px", color: "#6B7280" }}>🔒 {parlay.unit_size ?? "—"}u</span>
+                            ) : (
+                              <input
+                                type="number"
+                                min="0.1"
+                                step="0.5"
+                                defaultValue={unit}
+                                onBlur={async (e) => {
+                                  if (!currentUser) return;
+                                  const val = parseFloat(e.target.value);
+                                  if (isNaN(val) || val <= 0) return;
+                                  setMyParlays(prev => prev ? prev.map((p: any) => p.id === parlay.id ? { ...p, unit_size: val } : p) : prev);
+                                  await updateParlayUnit(parlay.id, currentUser.id, val);
+                                }}
+                                style={{ width: "52px", padding: "3px 6px", borderRadius: "5px", background: "#0D1117", border: "0.5px solid #21262D", color: "#F1F3F5", fontSize: "12px", textAlign: "center" }}
+                              />
+                            )}
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <span style={{
+                                fontSize: "12px", fontWeight: 600, color: meta.color,
+                                background: `${meta.color}18`, padding: "2px 8px",
+                                borderRadius: "4px", border: `0.5px solid ${meta.color}40`,
+                              }}>{meta.label}</span>
+                              {isParlayLocked && (
+                                <span style={{ fontSize: "11px", color: "#6B7280" }}>🔒 Locked</span>
+                              )}
+                            </div>
                             <span style={{ marginLeft: "auto", fontSize: "13px", fontWeight: 600, color: pnl !== null ? (pnl >= 0 ? "#16A34A" : "#DC2626") : "#6B7280" }}>
                               {pnl !== null
                                 ? (pnl >= 0 ? `+${pnl.toFixed(2)}u` : `${pnl.toFixed(2)}u`)
