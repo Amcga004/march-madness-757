@@ -170,6 +170,27 @@ export default async function PropsPage() {
     fetch(`https://statsapi.mlb.com/api/v1/stats?stats=season&group=pitching&season=2026&sportId=1&limit=1000&playerPool=All`, { next: { revalidate: 3600 } }).then(r => r.json()).catch(() => ({ splits: [] })),
   ]);
 
+  // DEBUG: Check Dunks & Threes API response structure for today
+  try {
+    const dtKey = process.env.DUNKS_AND_THREES_API_KEY;
+    if (dtKey) {
+      const dtRes = await fetch(
+        `https://dunksandthrees.com/api/v1/game-predictions?date=${today}`,
+        { headers: { Authorization: dtKey }, cache: "no-store" }
+      ).then(r => r.json()).catch(() => null);
+
+      if (dtRes && Array.isArray(dtRes) && dtRes.length > 0) {
+        console.log("[dt-debug] Total games:", dtRes.length);
+        console.log("[dt-debug] First game keys:", Object.keys(dtRes[0]).join(", "));
+        console.log("[dt-debug] First game sample:", JSON.stringify(dtRes[0]).slice(0, 800));
+      } else {
+        console.log("[dt-debug] Response:", JSON.stringify(dtRes).slice(0, 400));
+      }
+    }
+  } catch (e) {
+    console.log("[dt-debug] Error:", e);
+  }
+
   // Build consensus and signals lookup maps
   function normalizeTeam(name: string) {
     return name.toLowerCase().trim().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ");
