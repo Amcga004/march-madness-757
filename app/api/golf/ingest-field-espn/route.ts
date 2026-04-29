@@ -96,37 +96,72 @@ export async function POST(req: Request) {
     const name: string = comp?.athlete?.displayName ?? comp?.team?.displayName ?? ''
     const externalId: string = comp?.athlete?.id ?? comp?.team?.id ?? ''
 
-    if (!name || !externalId) {
-      console.warn('[golf-ingest] Skipping competitor missing name/id:', JSON.stringify(comp).slice(0, 200))
+    if (!name) {
       skipped++
       continue
     }
 
-    const { data: competitorRow, error: compError } = await supabase
-      .from('competitors')
-      .upsert(
-        { name, external_id: externalId, sport_id: PGA_SPORT_ID },
-        { onConflict: 'external_id', ignoreDuplicates: false }
-      )
-      .select('id')
-      .maybeSingle()
+    // Step 1: Try to find existing competitor by external_id first, then by name
+    let competitorId: string | null = null
 
-    if (compError) {
-      const msg = `competitor upsert error for "${name}" (${externalId}): ${compError.message}`
-      console.error('[golf-ingest]', msg)
-      errors.push(msg)
+    if (externalId) {
+      // Try exact external_id match
+      const { data: byExtId } = await supabase
+        .from('competitors')
+        .select('id')
+        .eq('external_id', externalId)
+        .maybeSingle()
+
+      if (byExtId) {
+        competitorId = byExtId.id
+      }
+    }
+
+    if (!competitorId) {
+      // Try name match
+      const { data: byName } = await supabase
+        .from('competitors')
+        .select('id, external_id')
+        .eq('name', name)
+        .eq('sport_id', PGA_SPORT_ID)
+        .maybeSingle()
+
+      if (byName) {
+        competitorId = byName.id
+        // If we now have an externalId and the row has none, update it
+        if (externalId && !byName.external_id) {
+          await supabase
+            .from('competitors')
+            .update({ external_id: externalId })
+            .eq('id', competitorId)
+        }
+      }
+    }
+
+    if (!competitorId && name) {
+      // Insert new competitor
+      const { data: newComp, error: insertError } = await supabase
+        .from('competitors')
+        .insert({ name, external_id: externalId || null, sport_id: PGA_SPORT_ID })
+        .select('id')
+        .maybeSingle()
+
+      if (insertError || !newComp) {
+        const msg = `Failed to insert competitor "${name}": ${insertError?.message}`
+        console.error('[golf-ingest]', msg)
+        errors.push(msg)
+        skipped++
+        continue
+      }
+      competitorId = newComp.id
+    }
+
+    if (!competitorId) {
       skipped++
       continue
     }
 
-    if (!competitorRow) {
-      const msg = `competitor upsert returned null for "${name}" (${externalId})`
-      console.error('[golf-ingest]', msg)
-      errors.push(msg)
-      skipped++
-      continue
-    }
-
+    // Step 2: Always write event_competitors row
     const seedOrder: number | null =
       typeof comp?.order === 'number' ? comp.order :
       typeof comp?.sortOrder === 'number' ? comp.sortOrder : null
@@ -136,7 +171,7 @@ export async function POST(req: Request) {
       .upsert(
         {
           event_id: eventId,
-          competitor_id: competitorRow.id,
+          competitor_id: competitorId,
           is_active: true,
           seed_order: seedOrder,
         },
