@@ -56,6 +56,7 @@ export default async function GameDetailPage({
   params: Promise<{ gameId: string }>;
   searchParams: Promise<{ sport?: string; date?: string }>;
 }) {
+  try {
   const { gameId } = await params;
   const sp = await searchParams;
   const sportKey = sp.sport ?? "nba";
@@ -349,6 +350,19 @@ export default async function GameDetailPage({
   // Pre-game enrichment — all wrapped in try/catch so any ESPN shape change is silent
   let espnHomeWinPct: number | null = null;
   let espnAwayWinPct: number | null = null;
+  let liveSituation: {
+    inning: string | null;
+    inningHalf: string | null;
+    outs: number | null;
+    balls: number | null;
+    strikes: number | null;
+    onFirst: boolean;
+    onSecond: boolean;
+    onThird: boolean;
+    lastPlay: string | null;
+    currentPitcher: { name: string; line: string } | null;
+    currentBatter: { name: string; line: string } | null;
+  } | null = null;
   let consensusHomeWinPct: number | null = null;
   let consensusAwayWinPct: number | null = null;
   let awaySeasonStats: Record<string, string> = {};
@@ -372,12 +386,16 @@ export default async function GameDetailPage({
     const buildStatMap = (homeAway: string): Record<string, string> => {
       const team = bsTeams.find((t: any) => t?.homeAway === homeAway);
       const result: Record<string, string> = {};
-      for (const group of (team?.statistics ?? [])) {
-        for (const stat of (group?.stats ?? [])) {
-          if (stat?.name && stat?.displayValue &&
-              stat.displayValue !== "0" && stat.displayValue !== "0.0") {
-            result[stat.name] = stat.displayValue;
-          }
+      const statistics: any[] = Array.isArray(team?.statistics) ? team.statistics : [];
+      for (const stat of statistics) {
+        const name: string = stat?.label ?? stat?.name ?? "";
+        const val: string = stat?.displayValue ?? "";
+        if (name && val && val !== "0" && val !== "0.0" && val !== "-" && val !== "--") {
+          result[name] = val;
+        }
+        // also index by abbreviation for sport-specific key lookups
+        if (stat?.abbreviation && val && val !== "0" && val !== "0.0") {
+          result[stat.abbreviation] = val;
         }
       }
       return result;
@@ -411,6 +429,66 @@ export default async function GameDetailPage({
         atVs: e.atVs ?? "vs",
       })),
     }));
+
+    // Extract live MLB situation
+    if (isLive && sportKey === "mlb" && summaryRaw?.situation) {
+      const sit = summaryRaw.situation;
+      liveSituation = {
+        inning: sit?.period?.displayValue ?? sit?.displayClock ?? null,
+        inningHalf: sit?.isTopHalf ? "Top" : sit?.isBottomHalf ? "Bot" : null,
+        outs: sit?.outs ?? null,
+        balls: sit?.balls ?? null,
+        strikes: sit?.strikes ?? null,
+        onFirst: !!(sit?.onFirst),
+        onSecond: !!(sit?.onSecond),
+        onThird: !!(sit?.onThird),
+        lastPlay: sit?.lastPlay?.text ?? sit?.lastPlay ?? null,
+        currentPitcher: sit?.pitcher ? {
+          name: sit.pitcher.athlete?.displayName ?? sit.pitcher.displayName ?? "",
+          line: sit.pitcher.stats ?? sit.pitcher.summary ?? "",
+        } : null,
+        currentBatter: sit?.batter ? {
+          name: sit.batter.athlete?.displayName ?? sit.batter.displayName ?? "",
+          line: sit.batter.stats ?? sit.batter.summary ?? "",
+        } : null,
+      };
+    }
+
+    // Extract live NBA situation
+    if (isLive && sportKey === "nba" && summaryRaw?.situation) {
+      const sit = summaryRaw.situation;
+      liveSituation = {
+        inning: sit?.period?.displayValue ?? null,
+        inningHalf: null,
+        outs: null,
+        balls: null,
+        strikes: null,
+        onFirst: false,
+        onSecond: false,
+        onThird: false,
+        lastPlay: sit?.lastPlay?.text ?? sit?.lastPlay ?? null,
+        currentPitcher: null,
+        currentBatter: null,
+      };
+    }
+
+    // Extract live NHL situation
+    if (isLive && sportKey === "nhl" && summaryRaw?.situation) {
+      const sit = summaryRaw.situation;
+      liveSituation = {
+        inning: sit?.period?.displayValue ?? null,
+        inningHalf: null,
+        outs: null,
+        balls: null,
+        strikes: null,
+        onFirst: false,
+        onSecond: false,
+        onThird: false,
+        lastPlay: sit?.lastPlay?.text ?? sit?.lastPlay ?? null,
+        currentPitcher: null,
+        currentBatter: null,
+      };
+    }
   } catch { /* silently ignore — pre-game enrichment is best-effort */ }
 
 
@@ -524,6 +602,117 @@ export default async function GameDetailPage({
           </div>
         )}
       </div>
+
+      {/* Live situation card (MLB bases/count, NBA/NHL last play) */}
+      {isLive && liveSituation && (
+        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+            <span style={{ background: "#DC2626", color: "white", fontSize: "10px", fontWeight: 700, padding: "2px 6px", borderRadius: "4px", letterSpacing: "0.08em" }}>● LIVE</span>
+            {liveSituation.inningHalf && liveSituation.inning && (
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#EA6C0A" }}>
+                {liveSituation.inningHalf} {liveSituation.inning}
+              </span>
+            )}
+            {!liveSituation.inningHalf && liveSituation.inning && (
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#EA6C0A" }}>
+                {liveSituation.inning}
+              </span>
+            )}
+            {liveSituation.outs !== null && (
+              <span style={{ fontSize: "12px", color: "#6B7280" }}>· {liveSituation.outs} out{liveSituation.outs !== 1 ? "s" : ""}</span>
+            )}
+          </div>
+
+          {/* MLB: Bases + Count */}
+          {sportKey === "mlb" && (
+            <div style={{ display: "flex", alignItems: "center", gap: "20px", marginBottom: "12px" }}>
+              {/* Base diamond */}
+              <div style={{ position: "relative", width: "52px", height: "52px", flexShrink: 0 }}>
+                {/* Second base (top) */}
+                <div style={{
+                  position: "absolute", top: "0px", left: "50%", transform: "translateX(-50%) rotate(45deg)",
+                  width: "16px", height: "16px",
+                  background: liveSituation.onSecond ? "#EA6C0A" : "#21262D",
+                  border: `1px solid ${liveSituation.onSecond ? "#EA6C0A" : "#4B5563"}`,
+                }} />
+                {/* Third base (left) */}
+                <div style={{
+                  position: "absolute", top: "50%", left: "2px", transform: "translateY(-50%) rotate(45deg)",
+                  width: "16px", height: "16px",
+                  background: liveSituation.onThird ? "#EA6C0A" : "#21262D",
+                  border: `1px solid ${liveSituation.onThird ? "#EA6C0A" : "#4B5563"}`,
+                }} />
+                {/* First base (right) */}
+                <div style={{
+                  position: "absolute", top: "50%", right: "2px", transform: "translateY(-50%) rotate(45deg)",
+                  width: "16px", height: "16px",
+                  background: liveSituation.onFirst ? "#EA6C0A" : "#21262D",
+                  border: `1px solid ${liveSituation.onFirst ? "#EA6C0A" : "#4B5563"}`,
+                }} />
+                {/* Home plate (bottom) */}
+                <div style={{
+                  position: "absolute", bottom: "0px", left: "50%", transform: "translateX(-50%) rotate(45deg)",
+                  width: "16px", height: "16px",
+                  background: "#21262D",
+                  border: "1px solid #4B5563",
+                }} />
+              </div>
+
+              {/* Count */}
+              {(liveSituation.balls !== null || liveSituation.strikes !== null) && (
+                <div style={{ display: "flex", gap: "12px" }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "10px", color: "#4B5563", marginBottom: "2px" }}>BALLS</div>
+                    <div style={{ fontSize: "20px", fontWeight: 700, color: "#16A34A" }}>{liveSituation.balls ?? "—"}</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "10px", color: "#4B5563", marginBottom: "2px" }}>STRIKES</div>
+                    <div style={{ fontSize: "20px", fontWeight: 700, color: "#DC2626" }}>{liveSituation.strikes ?? "—"}</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "10px", color: "#4B5563", marginBottom: "2px" }}>OUTS</div>
+                    <div style={{ fontSize: "20px", fontWeight: 700, color: "#D97706" }}>{liveSituation.outs ?? "—"}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Last play */}
+          {liveSituation.lastPlay && (
+            <div style={{ fontSize: "12px", color: "#94A3B8", padding: "8px", background: "#0D1117", borderRadius: "6px", marginBottom: "10px", lineHeight: "1.5" }}>
+              <span style={{ color: "#4B5563", fontSize: "10px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Last play: </span>
+              {liveSituation.lastPlay}
+            </div>
+          )}
+
+          {/* MLB: Current pitcher + batter */}
+          {sportKey === "mlb" && (liveSituation.currentPitcher || liveSituation.currentBatter) && (
+            <div style={{ display: "flex", gap: "12px" }}>
+              {liveSituation.currentPitcher && (
+                <div style={{ flex: 1, background: "#0D1117", borderRadius: "6px", padding: "8px" }}>
+                  <div style={{ fontSize: "10px", color: "#4B5563", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "3px" }}>Pitching</div>
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#F1F3F5" }}>{liveSituation.currentPitcher.name}</div>
+                  {liveSituation.currentPitcher.line && (
+                    <div style={{ fontSize: "11px", color: "#6B7280", marginTop: "2px" }}>{liveSituation.currentPitcher.line}</div>
+                  )}
+                </div>
+              )}
+              {liveSituation.currentBatter && (
+                <div style={{ flex: 1, background: "#0D1117", borderRadius: "6px", padding: "8px" }}>
+                  <div style={{ fontSize: "10px", color: "#4B5563", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "3px" }}>Batting</div>
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#F1F3F5" }}>{liveSituation.currentBatter.name}</div>
+                  {liveSituation.currentBatter.line && (
+                    <div style={{ fontSize: "11px", color: "#6B7280", marginTop: "2px" }}>{liveSituation.currentBatter.line}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* NBA/NHL: last play only — already shown above */}
+        </div>
+      )}
 
       {/* ── LIVE/FINAL: Box Score section (above model edge) ── */}
       {(isLive || isFinal) && playerBoxTeams.length > 0 && (
@@ -675,13 +864,13 @@ export default async function GameDetailPage({
               {espnAwayWinPct !== null && (
                 <div style={{ fontSize: "11px", color: "#6B7280", marginBottom: "3px" }}>
                   <span style={{ color: "#4B5563" }}>ESPN Analytics: </span>
-                  {awayName.split(" ").pop()} {espnAwayWinPct?.toFixed(1) ?? "—"}% / {homeName.split(" ").pop()} {espnHomeWinPct?.toFixed(1) ?? "—"}%
+                  {awayName.split(" ").pop()} {espnAwayWinPct != null ? Number(espnAwayWinPct).toFixed(1) : "—"}% / {homeName.split(" ").pop()} {espnHomeWinPct != null ? Number(espnHomeWinPct).toFixed(1) : "—"}%
                 </div>
               )}
               {consensusAwayWinPct !== null && (
                 <div style={{ fontSize: "11px", fontWeight: 600, color: "#EA6C0A" }}>
                   <span style={{ color: "#4B5563", fontWeight: 400 }}>Consensus: </span>
-                  {awayName.split(" ").pop()} {consensusAwayWinPct?.toFixed(1) ?? "—"}% / {homeName.split(" ").pop()} {consensusHomeWinPct?.toFixed(1) ?? "—"}%
+                  {awayName.split(" ").pop()} {consensusAwayWinPct != null ? Number(consensusAwayWinPct).toFixed(1) : "—"}% / {homeName.split(" ").pop()} {consensusHomeWinPct != null ? Number(consensusHomeWinPct).toFixed(1) : "—"}%
                 </div>
               )}
             </div>
@@ -1150,4 +1339,16 @@ export default async function GameDetailPage({
       )}
     </div>
   );
+  } catch (err: any) {
+    return (
+      <div style={{ maxWidth: "680px", margin: "0 auto", padding: "32px 16px", color: "#F1F3F5", background: "#0D1117", minHeight: "100vh" }}>
+        <div style={{ background: "#DC262618", border: "1px solid #DC2626", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+          <div style={{ fontSize: "13px", color: "#DC2626", fontWeight: 600, marginBottom: "8px" }}>Server Error</div>
+          <div style={{ fontSize: "12px", color: "#F1F3F5", marginBottom: "8px" }}>{err?.message ?? "Unknown error"}</div>
+          <pre style={{ fontSize: "10px", color: "#6B7280", whiteSpace: "pre-wrap", overflow: "auto" }}>{err?.stack ?? ""}</pre>
+        </div>
+        <a href="/betting" style={{ fontSize: "13px", color: "#EA6C0A" }}>← Back to betting</a>
+      </div>
+    );
+  }
 }

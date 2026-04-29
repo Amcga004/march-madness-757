@@ -53,15 +53,17 @@ export default function DraftBoardGrid({ picks, rosterSize, managers }: Props) {
                 </div>
 
                 {order.map((manager, i) => {
-                  const isEven = round % 2 === 0
-                  const roundPick = isEven ? managers.length - i : i + 1
-                  const pick = pickMap.get(`${round}-${roundPick}`)
+                  // order is already reversed for even rounds
+                  // snakeRoundPick = manager's position in the original (non-reversed) draft order for this round
+                  const managerOriginalIndex = managers.indexOf(manager)
+                  const snakeRoundPick = round % 2 === 1 ? managerOriginalIndex + 1 : managers.length - managerOriginalIndex
+                  const pick = pickMap.get(`${round}-${snakeRoundPick}`)
                   const theme = getManagerTheme(manager)
                   const pickNum = overallPickNum(round, i + 1)
 
                   return (
                     <div
-                      key={`${round}-${roundPick}-${manager}`}
+                      key={`${round}-${snakeRoundPick}-${manager}`}
                       className="min-h-[60px] rounded-lg border border-[#cfd9c8] bg-white px-2.5 py-2"
                     >
                       <div className="mb-1 flex items-center justify-between gap-1">
