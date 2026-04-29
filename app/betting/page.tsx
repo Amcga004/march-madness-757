@@ -98,7 +98,7 @@ export default async function BettingPage({
   const { data: oddsData } = await oddsQuery;
 
   function normalizeTeam(name: string) {
-    return name.toLowerCase().trim()
+    return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
       .replace(/[^a-z0-9 ]/g, '')
       .replace(/\s+/g, ' ');
   }

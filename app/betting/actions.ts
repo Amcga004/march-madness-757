@@ -64,7 +64,7 @@ export async function fetchSlateData(date: string, sport: string, userId: string
   ].filter(Boolean);
 
   function normalizeTeam(name: string) {
-    return name.toLowerCase().trim()
+    return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
       .replace(/[^a-z0-9 ]/g, '')
       .replace(/\s+/g, ' ');
   }

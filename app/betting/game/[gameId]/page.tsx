@@ -101,7 +101,7 @@ export default async function GameDetailPage({
   const awayRecord = awayComp?.records?.[0]?.summary ?? null;
 
   function normalizeTeam(name: string) {
-    return name.toLowerCase().trim().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ");
+    return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ");
   }
   const gameKey = `${normalizeTeam(awayName)}|${normalizeTeam(homeName)}`;
 
