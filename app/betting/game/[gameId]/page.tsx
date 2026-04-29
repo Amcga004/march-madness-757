@@ -365,6 +365,8 @@ export default async function GameDetailPage({
   } | null = null;
   let consensusHomeWinPct: number | null = null;
   let consensusAwayWinPct: number | null = null;
+  let modelHomePct: number | null = null;
+  let modelAwayPct: number | null = null;
   let awaySeasonStats: Record<string, string> = {};
   let homeSeasonStats: Record<string, string> = {};
   let leadersByTeam: any[] = [];
@@ -376,8 +378,13 @@ export default async function GameDetailPage({
     espnAwayWinPct = summaryRaw?.predictor?.awayTeam?.gameProjection ?? null;
 
     // Consensus: average of our model + ESPN
-    if (consensus?.consensus_home_win_prob != null && espnHomeWinPct != null) {
-      consensusHomeWinPct = Math.round(((consensus.consensus_home_win_prob * 100) + espnHomeWinPct) / 2 * 10) / 10;
+    modelHomePct = consensus?.consensus_home_win_prob != null ? consensus.consensus_home_win_prob * 100 : null;
+    modelAwayPct = consensus?.consensus_away_win_prob != null ? consensus.consensus_away_win_prob * 100 : null;
+    if (modelHomePct != null && espnHomeWinPct != null && !isNaN(modelHomePct) && !isNaN(espnHomeWinPct)) {
+      consensusHomeWinPct = Math.round(((modelHomePct + espnHomeWinPct) / 2) * 10) / 10;
+      consensusAwayWinPct = Math.round((100 - consensusHomeWinPct) * 10) / 10;
+    } else if (modelHomePct != null && !isNaN(modelHomePct)) {
+      consensusHomeWinPct = Math.round(modelHomePct * 10) / 10;
       consensusAwayWinPct = Math.round((100 - consensusHomeWinPct) * 10) / 10;
     }
 
@@ -811,84 +818,87 @@ export default async function GameDetailPage({
         </div>
       )}
 
-      {/* Model edge section */}
+      {/* Model Edge card — restructured */}
       {consensus && (
-        <div style={{
-          background: "#161B22",
-          border: "1px solid #21262D",
-          borderRadius: "12px",
-          padding: "16px",
-          marginBottom: "16px",
-        }}>
-          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: (isLive || isFinal) ? "4px" : "12px" }}>
-            Model Edge · {MODEL_LABELS[consensus.model_source] ?? consensus.model_source}
+        <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>
+            Model Edge{(isLive || isFinal) ? " · Pre-game prediction" : ""}
           </div>
-          {(isLive || isFinal) && (
-            <div style={{ fontSize: "10px", color: "#6B7280", marginBottom: "12px" }}>Pre-game prediction</div>
-          )}
 
-          {/* Win probabilities */}
+          {/* Large consensus boxes — the headline signal */}
           <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
             {[
-              { team: awayName, prob: consensus.consensus_away_win_prob, signal: awaySignal },
-              { team: homeName, prob: consensus.consensus_home_win_prob, signal: homeSignal },
-            ].map(({ team, prob, signal }) => (
+              { team: awayName, consensusProb: consensusAwayWinPct, modelProb: modelAwayPct, signal: awaySignal },
+              { team: homeName, consensusProb: consensusHomeWinPct, modelProb: modelHomePct, signal: homeSignal },
+            ].map(({ team, consensusProb, modelProb, signal }) => (
               <div key={team} style={{
                 flex: 1,
                 background: "#0D1117",
                 borderRadius: "8px",
-                padding: "10px",
+                padding: "12px 10px",
                 border: signal ? `1px solid ${TIER_CONFIG[signal.tier]?.color ?? "#21262D"}40` : "1px solid #21262D",
               }}>
-                <div style={{ fontSize: "11px", color: "#6B7280", marginBottom: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: "11px", color: "#6B7280", marginBottom: "6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {team.split(" ").pop()}
                 </div>
-                <div style={{ fontSize: "20px", fontWeight: 700, color: "#F1F3F5" }}>{fmtPct(prob)}</div>
+                {/* Consensus is the headline number */}
+                <div style={{ fontSize: "24px", fontWeight: 700, color: "#F1F3F5", marginBottom: "2px" }}>
+                  {consensusProb != null ? `${consensusProb.toFixed(1)}%` : modelProb != null ? `${modelProb.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>
+                  {consensusProb != null ? "Consensus" : "Model"}
+                </div>
                 {signal && (
-                  <>
-                    <div style={{ fontSize: "12px", color: TIER_CONFIG[signal.tier]?.color ?? "#6B7280", fontWeight: 600, marginTop: "4px" }}>
-                      {signal.edge_pct > 0 ? "+" : ""}{signal.edge_pct}% edge
-                    </div>
-                    <div style={{ fontSize: "10px", color: "#6B7280", marginTop: "2px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "4px" }}>
+                    <span style={{ fontSize: "12px", color: TIER_CONFIG[signal.tier]?.color ?? "#6B7280", fontWeight: 700 }}>
+                      {signal.edge_pct > 0 ? "+" : ""}{signal.edge_pct}%
+                    </span>
+                    <span style={{ fontSize: "10px", color: TIER_CONFIG[signal.tier]?.color ?? "#6B7280" }}>
                       {TIER_CONFIG[signal.tier]?.label}
-                    </div>
-                  </>
+                    </span>
+                  </div>
                 )}
               </div>
             ))}
           </div>
 
-          {/* ESPN Analytics + Consensus (pre-game) */}
-          {isPreGame && (espnAwayWinPct !== null || consensusAwayWinPct !== null) && (
-            <div style={{ padding: "8px 0 4px", borderTop: "0.5px solid #21262D", marginTop: "4px" }}>
-              {espnAwayWinPct !== null && (
-                <div style={{ fontSize: "11px", color: "#6B7280", marginBottom: "3px" }}>
-                  <span style={{ color: "#4B5563" }}>ESPN Analytics: </span>
-                  {awayName.split(" ").pop()} {espnAwayWinPct != null ? Number(espnAwayWinPct).toFixed(1) : "—"}% / {homeName.split(" ").pop()} {espnHomeWinPct != null ? Number(espnHomeWinPct).toFixed(1) : "—"}%
-                </div>
-              )}
-              {consensusAwayWinPct !== null && (
-                <div style={{ fontSize: "11px", fontWeight: 600, color: "#EA6C0A" }}>
-                  <span style={{ color: "#4B5563", fontWeight: 400 }}>Consensus: </span>
-                  {awayName.split(" ").pop()} {consensusAwayWinPct != null ? Number(consensusAwayWinPct).toFixed(1) : "—"}% / {homeName.split(" ").pop()} {consensusHomeWinPct != null ? Number(consensusHomeWinPct).toFixed(1) : "—"}%
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Market vs model comparison */}
-          <div style={{ display: "flex", gap: "8px" }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "10px", color: "#4B5563", marginBottom: "2px" }}>Market implied</div>
-              <div style={{ fontSize: "12px", color: "#6B7280" }}>
-                {awayName.split(" ").pop()} {fmtPct(consensus.market_implied_away_prob)} / {homeName.split(" ").pop()} {fmtPct(consensus.market_implied_home_prob)}
+          {/* Breakdown rows — ESPN / Our model / Market */}
+          <div style={{ borderTop: "0.5px solid #21262D", paddingTop: "10px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            {/* ESPN Analytics */}
+            {espnAwayWinPct != null && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "11px", color: "#4B5563" }}>ESPN Analytics</span>
+                <span style={{ fontSize: "11px", color: "#9CA3AF" }}>
+                  {awayName.split(" ").pop()} {Number(espnAwayWinPct).toFixed(1)}% · {homeName.split(" ").pop()} {Number(espnHomeWinPct ?? 0).toFixed(1)}%
+                </span>
               </div>
-            </div>
-            <div style={{ flex: 1, textAlign: "right" }}>
-              <div style={{ fontSize: "10px", color: "#4B5563", marginBottom: "2px" }}>Confidence</div>
-              <div style={{ fontSize: "12px", color: consensus.confidence_tier === "high" ? "#65A30D" : "#6B7280" }}>
+            )}
+            {/* Our model */}
+            {modelAwayPct != null && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "11px", color: "#4B5563" }}>
+                  {MODEL_LABELS[consensus.model_source] ?? "Model"}
+                </span>
+                <span style={{ fontSize: "11px", color: "#9CA3AF" }}>
+                  {awayName.split(" ").pop()} {modelAwayPct.toFixed(1)}% · {homeName.split(" ").pop()} {modelHomePct != null ? modelHomePct.toFixed(1) : "—"}%
+                </span>
+              </div>
+            )}
+            {/* Market implied */}
+            {consensus.market_implied_away_prob != null && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "11px", color: "#4B5563" }}>Market implied</span>
+                <span style={{ fontSize: "11px", color: "#6B7280" }}>
+                  {awayName.split(" ").pop()} {fmtPct(consensus.market_implied_away_prob)} · {homeName.split(" ").pop()} {fmtPct(consensus.market_implied_home_prob)}
+                </span>
+              </div>
+            )}
+            {/* Confidence */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "2px" }}>
+              <span style={{ fontSize: "11px", color: "#4B5563" }}>Confidence</span>
+              <span style={{ fontSize: "11px", fontWeight: 600, color: consensus.confidence_tier === "high" ? "#65A30D" : "#6B7280" }}>
                 {consensus.confidence_tier === "high" ? "High" : consensus.confidence_tier === "market_only" ? "Market only" : "Low"}
-              </div>
+              </span>
             </div>
           </div>
         </div>
@@ -927,114 +937,6 @@ export default async function GameDetailPage({
         <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "12px 16px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ fontSize: "14px" }}>🔒</span>
           <span style={{ fontSize: "12px", color: "#6B7280" }}>Betting closed — game is in progress</span>
-        </div>
-      )}
-
-      {/* Moneyline odds (pre-game only) */}
-      {!isLive && !isFinal && h2hRows.length > 0 && (
-        <div style={{
-          background: "#161B22",
-          border: "1px solid #21262D",
-          borderRadius: "12px",
-          padding: "16px",
-          marginBottom: "16px",
-        }}>
-          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
-            Moneyline
-          </div>
-          {/* Header */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px", gap: "8px", marginBottom: "6px" }}>
-            <span style={{ fontSize: "10px", color: "#4B5563" }}>Book</span>
-            <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>{awayName.split(" ").pop()}</span>
-            <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>{homeName.split(" ").pop()}</span>
-          </div>
-          {h2hRows.map((row: any) => (
-            <div key={row.bookmaker} style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 80px 80px",
-              gap: "8px",
-              padding: "6px 0",
-              borderTop: "0.5px solid #21262D",
-            }}>
-              <span style={{ fontSize: "12px", color: "#6B7280" }}>{BOOK_LABELS[row.bookmaker] ?? row.bookmaker}</span>
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5", textAlign: "center" }}>{fmtOdds(row.away_price)}</span>
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5", textAlign: "center" }}>{fmtOdds(row.home_price)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Spreads (pre-game only) */}
-      {!isLive && !isFinal && spreadsRows.length > 0 && (
-        <div style={{
-          background: "#161B22",
-          border: "1px solid #21262D",
-          borderRadius: "12px",
-          padding: "16px",
-          marginBottom: "16px",
-        }}>
-          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
-            Spread
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px", gap: "8px", marginBottom: "6px" }}>
-            <span style={{ fontSize: "10px", color: "#4B5563" }}>Book</span>
-            <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>{awayName.split(" ").pop()}</span>
-            <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>{homeName.split(" ").pop()}</span>
-          </div>
-          {spreadsRows.map((row: any) => (
-            <div key={row.bookmaker} style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 90px 90px",
-              gap: "8px",
-              padding: "6px 0",
-              borderTop: "0.5px solid #21262D",
-            }}>
-              <span style={{ fontSize: "12px", color: "#6B7280" }}>{BOOK_LABELS[row.bookmaker] ?? row.bookmaker}</span>
-              <span style={{ fontSize: "12px", color: "#F1F3F5", textAlign: "center" }}>
-                {row.away_spread != null ? (row.away_spread > 0 ? `+${row.away_spread}` : row.away_spread) : "—"}
-                {row.away_price != null && <span style={{ color: "#6B7280", fontSize: "10px" }}> ({fmtOdds(row.away_price)})</span>}
-              </span>
-              <span style={{ fontSize: "12px", color: "#F1F3F5", textAlign: "center" }}>
-                {row.home_spread != null ? (row.home_spread > 0 ? `+${row.home_spread}` : row.home_spread) : "—"}
-                {row.home_price != null && <span style={{ color: "#6B7280", fontSize: "10px" }}> ({fmtOdds(row.home_price)})</span>}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Totals (pre-game only) */}
-      {!isLive && !isFinal && totalsRows.length > 0 && (
-        <div style={{
-          background: "#161B22",
-          border: "1px solid #21262D",
-          borderRadius: "12px",
-          padding: "16px",
-          marginBottom: "16px",
-        }}>
-          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
-            Total (O/U)
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 80px 80px", gap: "8px", marginBottom: "6px" }}>
-            <span style={{ fontSize: "10px", color: "#4B5563" }}>Book</span>
-            <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>Line</span>
-            <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>Over</span>
-            <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>Under</span>
-          </div>
-          {totalsRows.map((row: any) => (
-            <div key={row.bookmaker} style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 60px 80px 80px",
-              gap: "8px",
-              padding: "6px 0",
-              borderTop: "0.5px solid #21262D",
-            }}>
-              <span style={{ fontSize: "12px", color: "#6B7280" }}>{BOOK_LABELS[row.bookmaker] ?? row.bookmaker}</span>
-              <span style={{ fontSize: "12px", color: "#EA6C0A", fontWeight: 600, textAlign: "center" }}>{row.line_value ?? "—"}</span>
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5", textAlign: "center" }}>{fmtOdds(row.over_price)}</span>
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5", textAlign: "center" }}>{fmtOdds(row.under_price)}</span>
-            </div>
-          ))}
         </div>
       )}
 
@@ -1201,6 +1103,80 @@ export default async function GameDetailPage({
           </div>
         );
       })()}
+
+      {/* Betting Lines — collapsible, pre-game only */}
+      {!isLive && !isFinal && (h2hRows.length > 0 || spreadsRows.length > 0 || totalsRows.length > 0) && (
+        <details style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", marginBottom: "16px" }}>
+          <summary style={{ padding: "14px 16px", cursor: "pointer", fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", listStyle: "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>Betting Lines</span>
+            <span style={{ fontSize: "14px", color: "#4B5563" }}>›</span>
+          </summary>
+          <div style={{ padding: "0 16px 16px" }}>
+            {/* Moneyline */}
+            {h2hRows.length > 0 && (
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ fontSize: "10px", color: "#4B5563", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "8px", paddingTop: "4px" }}>Moneyline</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px", gap: "8px", marginBottom: "4px" }}>
+                  <span style={{ fontSize: "10px", color: "#4B5563" }}>Book</span>
+                  <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>{awayName.split(" ").pop()}</span>
+                  <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>{homeName.split(" ").pop()}</span>
+                </div>
+                {h2hRows.map((row: any) => (
+                  <div key={row.bookmaker} style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px", gap: "8px", padding: "5px 0", borderTop: "0.5px solid #21262D" }}>
+                    <span style={{ fontSize: "12px", color: "#6B7280" }}>{BOOK_LABELS[row.bookmaker] ?? row.bookmaker}</span>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5", textAlign: "center" }}>{fmtOdds(row.away_price)}</span>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5", textAlign: "center" }}>{fmtOdds(row.home_price)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Spread */}
+            {spreadsRows.length > 0 && (
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ fontSize: "10px", color: "#4B5563", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "8px" }}>Spread</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px", gap: "8px", marginBottom: "4px" }}>
+                  <span style={{ fontSize: "10px", color: "#4B5563" }}>Book</span>
+                  <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>{awayName.split(" ").pop()}</span>
+                  <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>{homeName.split(" ").pop()}</span>
+                </div>
+                {spreadsRows.map((row: any) => (
+                  <div key={row.bookmaker} style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px", gap: "8px", padding: "5px 0", borderTop: "0.5px solid #21262D" }}>
+                    <span style={{ fontSize: "12px", color: "#6B7280" }}>{BOOK_LABELS[row.bookmaker] ?? row.bookmaker}</span>
+                    <span style={{ fontSize: "12px", color: "#F1F3F5", textAlign: "center" }}>
+                      {row.away_spread != null ? (row.away_spread > 0 ? `+${row.away_spread}` : row.away_spread) : "—"}
+                      {row.away_price != null && <span style={{ color: "#6B7280", fontSize: "10px" }}> ({fmtOdds(row.away_price)})</span>}
+                    </span>
+                    <span style={{ fontSize: "12px", color: "#F1F3F5", textAlign: "center" }}>
+                      {row.home_spread != null ? (row.home_spread > 0 ? `+${row.home_spread}` : row.home_spread) : "—"}
+                      {row.home_price != null && <span style={{ color: "#6B7280", fontSize: "10px" }}> ({fmtOdds(row.home_price)})</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Totals */}
+            {totalsRows.length > 0 && (
+              <div>
+                <div style={{ fontSize: "10px", color: "#4B5563", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "8px" }}>Total (O/U)</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 80px 80px", gap: "8px", marginBottom: "4px" }}>
+                  <span style={{ fontSize: "10px", color: "#4B5563" }}>Book</span>
+                  <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>Line</span>
+                  <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>Over</span>
+                  <span style={{ fontSize: "10px", color: "#4B5563", textAlign: "center" }}>Under</span>
+                </div>
+                {totalsRows.map((row: any) => (
+                  <div key={row.bookmaker} style={{ display: "grid", gridTemplateColumns: "1fr 60px 80px 80px", gap: "8px", padding: "5px 0", borderTop: "0.5px solid #21262D" }}>
+                    <span style={{ fontSize: "12px", color: "#6B7280" }}>{BOOK_LABELS[row.bookmaker] ?? row.bookmaker}</span>
+                    <span style={{ fontSize: "12px", color: "#EA6C0A", fontWeight: 600, textAlign: "center" }}>{row.line_value ?? "—"}</span>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5", textAlign: "center" }}>{fmtOdds(row.over_price)}</span>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5", textAlign: "center" }}>{fmtOdds(row.under_price)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </details>
+      )}
 
       {/* ── Team Stats (live/final, after model edge) ── */}
       {(isLive || isFinal) && sportKey === "nba" && boxscoreTeams.length >= 2 && (() => {
