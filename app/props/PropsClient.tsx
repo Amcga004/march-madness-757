@@ -316,6 +316,9 @@ export default function PropsClient({ date, mlbGameProps, nbaGames, nhlGames }: 
   return (
     <div style={{ maxWidth: "720px", margin: "0 auto", padding: "16px", background: "#0D1117", minHeight: "100vh", color: "#F1F3F5", fontFamily: "system-ui, sans-serif" }}>
       <div style={{ marginBottom: "16px" }}>
+        <a href="/betting" style={{ fontSize: "12px", color: "#6B7280", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px", marginBottom: "10px" }}>
+          ← Betting
+        </a>
         <div style={{ fontSize: "18px", fontWeight: 700, color: "#F1F3F5" }}>Props Board</div>
         <div style={{ fontSize: "12px", color: "#6B7280" }}>{dateLabel}</div>
       </div>

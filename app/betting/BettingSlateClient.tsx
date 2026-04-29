@@ -10,7 +10,6 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/browser";
 import AuthButton from "@/app/components/AuthButton";
 import GolfTournamentCard from "./GolfTournamentCard";
@@ -362,8 +361,8 @@ export default function BettingSlateClient({
         </a>
         <div className="nav-links" style={{ display: "flex", alignItems: "center", gap: "20px" }}>
           {navLink("/betting", "Betting", pathname === "/betting")}
+          {navLink("/props", "Props", pathname === "/props")}
           {navLink("/fantasy", "Fantasy", pathname === "/fantasy")}
-          <Link href="/props" style={{ fontSize: "12px", color: "#6B7280", textDecoration: "none", padding: "4px 10px", borderRadius: "12px", border: "1px solid #21262D", display: "inline-block" }}>Props ↗</Link>
           {currentUser && (
             <button onClick={() => setActiveTab(t => t === "picks" ? "slate" : "picks")} style={{
               fontSize: "13px",

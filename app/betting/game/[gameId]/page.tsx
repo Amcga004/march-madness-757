@@ -252,8 +252,13 @@ export default async function GameDetailPage({
 
       // News (up to 3)
       const newsList = Array.isArray(summaryRaw.news) ? summaryRaw.news : [];
-      for (const n of newsList.slice(0, 3)) {
-        if (n?.headline) newsItems.push({ headline: String(n.headline) });
+      for (const n of newsList.slice(0, 5)) {
+        if (n?.headline) {
+          const h = String(n.headline);
+          const isSeriesResult = /win(s)? (the |series|in \d)/i.test(h) || /clinch/i.test(h) || /eliminat/i.test(h);
+          if (!isSeriesResult) newsItems.push({ headline: h });
+          if (newsItems.length >= 3) break;
+        }
       }
 
       // Live win probability
@@ -378,14 +383,23 @@ export default async function GameDetailPage({
     espnAwayWinPct = summaryRaw?.predictor?.awayTeam?.gameProjection ?? null;
 
     // Consensus: average of our model + ESPN
-    modelHomePct = consensus?.consensus_home_win_prob != null ? consensus.consensus_home_win_prob * 100 : null;
-    modelAwayPct = consensus?.consensus_away_win_prob != null ? consensus.consensus_away_win_prob * 100 : null;
-    if (modelHomePct != null && espnHomeWinPct != null && !isNaN(modelHomePct) && !isNaN(espnHomeWinPct)) {
-      consensusHomeWinPct = Math.round(((modelHomePct + espnHomeWinPct) / 2) * 10) / 10;
+    const rawModelHome = consensus?.consensus_home_win_prob;
+    const rawModelAway = consensus?.consensus_away_win_prob;
+    modelHomePct = (rawModelHome != null && !isNaN(Number(rawModelHome))) ? Number(rawModelHome) * 100 : null;
+    modelAwayPct = (rawModelAway != null && !isNaN(Number(rawModelAway))) ? Number(rawModelAway) * 100 : null;
+
+    const espnH = (espnHomeWinPct != null && !isNaN(Number(espnHomeWinPct))) ? Number(espnHomeWinPct) : null;
+    const espnA = (espnAwayWinPct != null && !isNaN(Number(espnAwayWinPct))) ? Number(espnAwayWinPct) : null;
+
+    if (modelHomePct != null && espnH != null) {
+      consensusHomeWinPct = Math.round(((modelHomePct + espnH) / 2) * 10) / 10;
       consensusAwayWinPct = Math.round((100 - consensusHomeWinPct) * 10) / 10;
-    } else if (modelHomePct != null && !isNaN(modelHomePct)) {
+    } else if (modelHomePct != null) {
       consensusHomeWinPct = Math.round(modelHomePct * 10) / 10;
       consensusAwayWinPct = Math.round((100 - consensusHomeWinPct) * 10) / 10;
+    } else if (espnH != null) {
+      consensusHomeWinPct = Math.round(espnH * 10) / 10;
+      consensusAwayWinPct = espnA != null ? Math.round(espnA * 10) / 10 : Math.round((100 - consensusHomeWinPct) * 10) / 10;
     }
 
     // Team season stats from boxscore.teams[].statistics[].stats[]
@@ -907,8 +921,15 @@ export default async function GameDetailPage({
       {/* Season Series (pre-game, above odds) */}
       {isPreGame && seasonSeries?.summary && (
         <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", padding: "14px 16px", marginBottom: "16px", textAlign: "center" }}>
-          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>Season Series</div>
+          <div style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
+            {seasonSeries.title?.toLowerCase().includes("playoff") || seasonSeries.title?.toLowerCase().includes("post")
+              ? "Playoff Series"
+              : "Regular Season H2H"}
+          </div>
           <div style={{ fontSize: "18px", fontWeight: 700, color: "#F1F3F5" }}>{seasonSeries.summary}</div>
+          {seasonSeries.title && (
+            <div style={{ fontSize: "10px", color: "#4B5563", marginTop: "4px" }}>{seasonSeries.title}</div>
+          )}
         </div>
       )}
 
