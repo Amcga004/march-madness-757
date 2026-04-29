@@ -27,6 +27,10 @@
     {
       "path": "/api/golf/sync-live-cron",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/props/lineup-sync",
+      "schedule": "*/10 * * * *"
     }
   ]
 }
