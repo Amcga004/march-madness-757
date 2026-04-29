@@ -106,8 +106,22 @@ function buildBatterProjection(
   const projectedTotalBases = xslg != null ? Math.round(xslg * AVG_PA_PER_GAME * 10) / 10 : null;
 
   const oppHr9Factor = oppHr9 != null ? 1 + (oppHr9 - LEAGUE_AVG_HR9) / LEAGUE_AVG_HR9 : 1;
-  const hrProb = barrelPct != null ? Math.round(barrelPct * 0.055 * oppHr9Factor * 1000) / 1000 : null;
-  const rbiProb = xwoba != null ? Math.round(xwoba * 0.25 * 100) / 100 : null;
+  const avgPA = AVG_PA_PER_GAME;
+  // Slot factor: cleanup (3-5) gets RBI bump, top/bottom of order slightly lower
+  const slotFactor = slot <= 2 ? 0.90 : slot <= 5 ? 1.10 : slot <= 7 ? 1.00 : 0.85;
+
+  // HR: conservative — DK implies ~12%, we target ~8-10%
+  const hrPerPA = barrelPct != null
+    ? (barrelPct / 100) * 0.42 * oppHr9Factor
+    : (xslg != null ? xslg * 0.03 : null);
+  const hrProb = hrPerPA != null
+    ? Math.round((1 - Math.pow(1 - hrPerPA, avgPA)) * 1000) / 1000
+    : null;
+
+  // RBI: conservative — DK implies ~28-30%, we target ~22-25%
+  const rbiProb = xwoba != null
+    ? Math.min(0.45, Math.round(xwoba * 0.70 * slotFactor * 1000) / 1000)
+    : null;
 
   return { name, team, slot, position, isProjected: (player as any)?.isProjected ?? false, xwoba, xba, xslg, barrelPct, hardHitPct, exitVelo, projectedTotalBases, hrProb, rbiProb };
 }
