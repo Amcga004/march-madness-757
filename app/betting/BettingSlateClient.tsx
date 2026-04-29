@@ -90,7 +90,13 @@ export default function BettingSlateClient({
 
   const [currentUser, setCurrentUser] = useState(user);
   const userRef = useRef(currentUser);
-  const [activeTab, setActiveTab] = useState<"slate" | "picks">("slate");
+  const [activeTab, setActiveTab] = useState<"slate" | "picks">(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "picks") return "picks";
+    }
+    return "slate";
+  });
   const [slipModal, setSlipModal] = useState<{ game: any; selectedSide: "home" | "away" } | null>(null);
   const [myPicks, setMyPicks] = useState<any[] | null>(null);
   const [savingPick, setSavingPick] = useState(false);
@@ -313,14 +319,21 @@ export default function BettingSlateClient({
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 2px;
+        gap: 3px;
         color: #6B7280;
         text-decoration: none;
-        font-size: 10px;
+        font-size: 11px;
+        font-weight: 500;
         flex: 1;
-        padding: 4px 0;
+        padding: 6px 0;
+        min-height: 52px;
+        justify-content: center;
+        cursor: pointer;
+        background: none;
+        border: none;
       }
       .mobile-tab.active { color: #EA6C0A; }
+      .mobile-tab-icon { font-size: 20px; line-height: 1; }
     `}</style>
     <div className="betting-page-root" style={{
       width: "100%",
@@ -1561,20 +1574,33 @@ export default function BettingSlateClient({
       })()}
 
       {/* Mobile bottom tab bar */}
-      <nav className="mobile-bottom-nav">
-        <a href="/betting" className="mobile-tab active">
-          <span>📊</span>
+      <div className="mobile-bottom-nav">
+        <a href="/betting" className={`mobile-tab${pathname === "/betting" ? " active" : ""}`}>
+          <span className="mobile-tab-icon">📊</span>
           <span>Betting</span>
         </a>
-        <a href="/fantasy/golf" className="mobile-tab">
-          <span>🏆</span>
+        <a href="/props" className={`mobile-tab${pathname === "/props" ? " active" : ""}`}>
+          <span className="mobile-tab-icon">⚾</span>
+          <span>Props</span>
+        </a>
+        <a href="/fantasy" className={`mobile-tab${pathname === "/fantasy" ? " active" : ""}`}>
+          <span className="mobile-tab-icon">🏆</span>
           <span>Fantasy</span>
         </a>
-        <a href="/betting?tab=picks" className="mobile-tab">
-          <span>⭐</span>
+        <button
+          className={`mobile-tab${activeTab === "picks" ? " active" : ""}`}
+          onClick={() => {
+            if (pathname !== "/betting") {
+              window.location.href = "/betting?tab=picks";
+            } else {
+              setActiveTab(t => t === "picks" ? "slate" : "picks");
+            }
+          }}
+        >
+          <span className="mobile-tab-icon">⭐</span>
           <span>My Picks</span>
-        </a>
-      </nav>
+        </button>
+      </div>
     </div>
     </>
   );
