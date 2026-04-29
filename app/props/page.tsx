@@ -320,8 +320,30 @@ export default async function PropsPage() {
       const homeFg = homePitcherName ? fgPitcherMap.get(homePitcherName.toLowerCase()) ?? null : null;
       const awayFg = awayPitcherName ? fgPitcherMap.get(awayPitcherName.toLowerCase()) ?? null : null;
 
-      const homePitcher = homePitcherName ? buildPitcherProjection(homePitcherName, homeTeam, homeFg, mlbPitcherStatsMap.get(homePitcherName.toLowerCase()) ?? null) : null;
-      const awayPitcher = awayPitcherName ? buildPitcherProjection(awayPitcherName, awayTeam, awayFg, mlbPitcherStatsMap.get(awayPitcherName.toLowerCase()) ?? null) : null;
+      if (homePitcherName && !homeFg) console.log("[fg-miss] home pitcher not found:", homePitcherName);
+      if (awayPitcherName && !awayFg) console.log("[fg-miss] away pitcher not found:", awayPitcherName);
+
+      // Fuzzy fallback: match by last name if exact match fails
+      function fuzzyFgLookup(name: string | null): any {
+        if (!name) return null;
+        const exact = fgPitcherMap.get(name.toLowerCase());
+        if (exact) return exact;
+        const lastName = name.toLowerCase().split(" ").pop() ?? "";
+        if (lastName.length < 3) return null;
+        for (const [key, val] of fgPitcherMap) {
+          if (key.endsWith(" " + lastName) || key === lastName) return val;
+        }
+        return null;
+      }
+
+      const homeFgResolved = homeFg ?? fuzzyFgLookup(homePitcherName);
+      const awayFgResolved = awayFg ?? fuzzyFgLookup(awayPitcherName);
+
+      if (homePitcherName && !homeFgResolved) console.log("[fg-still-miss] home:", homePitcherName);
+      if (awayPitcherName && !awayFgResolved) console.log("[fg-still-miss] away:", awayPitcherName);
+
+      const homePitcher = homePitcherName ? buildPitcherProjection(homePitcherName, homeTeam, homeFgResolved, mlbPitcherStatsMap.get(homePitcherName.toLowerCase()) ?? null) : null;
+      const awayPitcher = awayPitcherName ? buildPitcherProjection(awayPitcherName, awayTeam, awayFgResolved, mlbPitcherStatsMap.get(awayPitcherName.toLowerCase()) ?? null) : null;
 
       // F5 win prob for home team
       const homeF5WinProb =
