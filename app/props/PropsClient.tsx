@@ -42,31 +42,64 @@ function StatRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PitcherCard({ pitcher, label, f5WinProb }: { pitcher: PitcherProjection; label: string; f5WinProb: number | null }) {
+function PitcherCard({ pitcher, label, f5WinProb }: { pitcher: any; label: string; f5WinProb: number | null }) {
+  const [expanded, setExpanded] = useState(false);
+  const wl = (pitcher.wins != null && pitcher.losses != null) ? `${pitcher.wins}-${pitcher.losses}` : null;
+
   return (
-    <details style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "10px", marginBottom: "8px", overflow: "hidden" }}>
-      <summary style={{ padding: "10px 12px", cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+    <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "10px", marginBottom: "8px", overflow: "hidden" }}>
+      <div style={{ padding: "10px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }} onClick={() => setExpanded(e => !e)}>
         <div>
-          <div style={{ fontSize: "9px", color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
-          <div style={{ fontSize: "13px", fontWeight: 600, color: "#F1F3F5", marginTop: "1px" }}>{pitcher.name}</div>
+          <div style={{ fontSize: "9px", color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.04em" }}>{label}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "1px" }}>
+            <span style={{ fontSize: "13px", fontWeight: 700, color: "#F1F3F5" }}>{pitcher.name}</span>
+            {wl && <span style={{ fontSize: "10px", color: "#6B7280" }}>{wl}</span>}
+            {pitcher.era && <span style={{ fontSize: "10px", color: "#6B7280" }}>ERA {pitcher.era}</span>}
+            {pitcher.whip && <span style={{ fontSize: "10px", color: "#6B7280" }}>WHIP {pitcher.whip}</span>}
+          </div>
         </div>
-        <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <ProjPill label="Proj K" value={fmt(pitcher.projectedKs, 1)} />
-          <ProjPill label="Proj H" value={fmt(pitcher.projectedHits, 1)} />
-          <ProjPill label="Proj ER" value={fmt(pitcher.projectedER, 1)} />
-          {f5WinProb != null && (
-            <ProjPill label="F5 Win" value={pct(f5WinProb, 0)} highlight={f5WinProb >= 0.55} />
-          )}
-        </div>
-      </summary>
-      <div style={{ padding: "8px 12px 12px", borderTop: "1px solid #21262D" }}>
-        <StatRow label="xFIP" value={fmt(pitcher.xfip)} />
-        <StatRow label="K%" value={pct(pitcher.kPct)} />
-        <StatRow label="BB%" value={pct(pitcher.bbPct)} />
-        <StatRow label="SwStr%" value={pct(pitcher.swStrPct)} />
-        <StatRow label="HR/9" value={fmt(pitcher.hr9)} />
+        <span style={{ fontSize: "11px", color: "#4B5563" }}>{expanded ? "▴" : "▾"}</span>
       </div>
-    </details>
+
+      <div style={{ padding: "0 12px 10px", display: "flex", gap: "6px", flexWrap: "wrap" as const }}>
+        <div style={{ background: "#0D1117", borderRadius: "6px", padding: "5px 10px", textAlign: "center" as const, minWidth: "52px" }}>
+          <div style={{ fontSize: "14px", fontWeight: 700, color: "#EA6C0A" }}>{pitcher.projectedKs != null ? pitcher.projectedKs.toFixed(1) : "—"}</div>
+          <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase" as const }}>Proj K</div>
+        </div>
+        <div style={{ background: "#0D1117", borderRadius: "6px", padding: "5px 10px", textAlign: "center" as const, minWidth: "52px" }}>
+          <div style={{ fontSize: "14px", fontWeight: 700, color: "#F1F3F5" }}>{pitcher.projectedHits != null ? pitcher.projectedHits.toFixed(1) : "—"}</div>
+          <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase" as const }}>Proj H</div>
+        </div>
+        <div style={{ background: "#0D1117", borderRadius: "6px", padding: "5px 10px", textAlign: "center" as const, minWidth: "52px" }}>
+          <div style={{ fontSize: "14px", fontWeight: 700, color: "#F1F3F5" }}>{pitcher.projectedER != null ? pitcher.projectedER.toFixed(1) : "—"}</div>
+          <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase" as const }}>Proj ER</div>
+        </div>
+        {f5WinProb != null && (
+          <div style={{ background: "#0D1117", borderRadius: "6px", padding: "5px 10px", textAlign: "center" as const, minWidth: "52px" }}>
+            <div style={{ fontSize: "14px", fontWeight: 700, color: f5WinProb >= 0.55 ? "#16A34A" : "#F1F3F5" }}>{(f5WinProb * 100).toFixed(0)}%</div>
+            <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase" as const }}>F5 Win</div>
+          </div>
+        )}
+      </div>
+
+      {expanded && (
+        <div style={{ padding: "8px 12px 12px", borderTop: "0.5px solid #21262D" }}>
+          <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: "6px" }}>Advanced Stats</div>
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" as const }}>
+            {pitcher.xfip != null && <div style={{ background: "#0D1117", borderRadius: "5px", padding: "4px 8px", fontSize: "11px", color: "#9CA3AF" }}>xFIP <span style={{ color: "#F1F3F5", fontWeight: 600 }}>{pitcher.xfip.toFixed(2)}</span></div>}
+            {pitcher.kPct != null && <div style={{ background: "#0D1117", borderRadius: "5px", padding: "4px 8px", fontSize: "11px", color: "#9CA3AF" }}>K% <span style={{ color: "#F1F3F5", fontWeight: 600 }}>{(pitcher.kPct * 100).toFixed(1)}%</span></div>}
+            {pitcher.bbPct != null && <div style={{ background: "#0D1117", borderRadius: "5px", padding: "4px 8px", fontSize: "11px", color: "#9CA3AF" }}>BB% <span style={{ color: "#F1F3F5", fontWeight: 600 }}>{(pitcher.bbPct * 100).toFixed(1)}%</span></div>}
+            {pitcher.swStrPct != null && <div style={{ background: "#0D1117", borderRadius: "5px", padding: "4px 8px", fontSize: "11px", color: "#9CA3AF" }}>SwStr% <span style={{ color: "#F1F3F5", fontWeight: 600 }}>{(pitcher.swStrPct * 100).toFixed(1)}%</span></div>}
+            {pitcher.hr9 != null && <div style={{ background: "#0D1117", borderRadius: "5px", padding: "4px 8px", fontSize: "11px", color: "#9CA3AF" }}>HR/9 <span style={{ color: "#F1F3F5", fontWeight: 600 }}>{pitcher.hr9.toFixed(2)}</span></div>}
+            {pitcher.inningsPitched && <div style={{ background: "#0D1117", borderRadius: "5px", padding: "4px 8px", fontSize: "11px", color: "#9CA3AF" }}>IP <span style={{ color: "#F1F3F5", fontWeight: 600 }}>{pitcher.inningsPitched}</span></div>}
+            {pitcher.strikeOuts != null && <div style={{ background: "#0D1117", borderRadius: "5px", padding: "4px 8px", fontSize: "11px", color: "#9CA3AF" }}>K <span style={{ color: "#F1F3F5", fontWeight: 600 }}>{pitcher.strikeOuts}</span></div>}
+          </div>
+          <p style={{ fontSize: "10px", color: "#4B5563", margin: "8px 0 0", lineHeight: 1.5 }}>
+            Projections use season K%, xFIP, and opposing lineup profile. F5 uses xFIP differential only.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -76,9 +109,25 @@ function BatterRow({ batter }: { batter: BatterProjection }) {
       <summary style={{ padding: "8px 10px", cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: "6px" }}>
         <span style={{ fontSize: "10px", color: "#4B5563", minWidth: "18px", textAlign: "right" }}>#{batter.slot}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ fontSize: "12px", color: "#F1F3F5", fontWeight: 500 }}>{batter.name}</span>
-          {batter.isProjected && <span style={{ fontSize: "9px", color: "#4B5563", marginLeft: "3px" }}>*</span>}
-          <span style={{ fontSize: "10px", color: "#6B7280", marginLeft: "5px" }}>{batter.position}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <span style={{ fontSize: "12px", color: "#F1F3F5", fontWeight: 600 }}>{batter.name}</span>
+            {batter.isProjected && <span style={{ fontSize: "9px", color: "#4B5563" }}>*</span>}
+            <span style={{ fontSize: "10px", color: "#4B5563", marginLeft: "2px" }}>{batter.position}</span>
+          </div>
+          <div style={{ display: "flex", gap: "6px", marginTop: "2px", flexWrap: "wrap" as const }}>
+            {batter.xwoba != null && (
+              <span style={{ fontSize: "9px", color: "#6B7280" }}>xwOBA <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{batter.xwoba.toFixed(3)}</span></span>
+            )}
+            {batter.seasonAVG && (
+              <span style={{ fontSize: "9px", color: "#6B7280" }}>AVG <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{batter.seasonAVG}</span></span>
+            )}
+            {batter.seasonHR != null && (
+              <span style={{ fontSize: "9px", color: "#6B7280" }}>HR <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{batter.seasonHR}</span></span>
+            )}
+            {batter.seasonRBI != null && (
+              <span style={{ fontSize: "9px", color: "#6B7280" }}>RBI <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{batter.seasonRBI}</span></span>
+            )}
+          </div>
         </div>
         <div style={{ display: "flex", gap: "4px" }}>
           <ProjPill label="TB" value={fmt(batter.projectedTotalBases, 1)} />

@@ -21,6 +21,13 @@ export interface PitcherProjection {
   projectedKs: number | null;
   projectedHits: number | null;
   projectedER: number | null;
+  // Season stats
+  wins: number | null;
+  losses: number | null;
+  era: string | null;
+  whip: string | null;
+  strikeOuts: number | null;
+  inningsPitched: string | null;
 }
 
 export interface BatterProjection {
@@ -38,6 +45,10 @@ export interface BatterProjection {
   projectedTotalBases: number | null;
   hrProb: number | null;
   rbiProb: number | null;
+  // Season stats for display
+  seasonAVG: string | null;
+  seasonHR: number | null;
+  seasonRBI: number | null;
 }
 
 export interface GameProps {
@@ -70,7 +81,7 @@ export interface GameProps {
 export interface NBAGameInfo { homeTeam: string; awayTeam: string; gameTime: string; }
 export interface NHLGameInfo { homeTeam: string; awayTeam: string; gameTime: string; }
 
-function buildPitcherProjection(name: string, team: string, fg: any): PitcherProjection {
+function buildPitcherProjection(name: string, team: string, fg: any, mlbStats?: any): PitcherProjection {
   const kPct = fg ? (parseFloat(fg["K%"] ?? "") || null) : null;
   const bbPct = fg ? (parseFloat(fg["BB%"] ?? "") || null) : null;
   const xfip = fg ? (parseFloat(fg["xFIP"] ?? "") || null) : null;
@@ -83,7 +94,15 @@ function buildPitcherProjection(name: string, team: string, fg: any): PitcherPro
     : null;
   const projectedER = xfip != null ? Math.round(xfip * AVG_IP / 9 * 10) / 10 : null;
 
-  return { name, team, xfip, kPct, bbPct, swStrPct, hr9, projectedKs, projectedHits, projectedER };
+  return {
+    name, team, xfip, kPct, bbPct, swStrPct, hr9, projectedKs, projectedHits, projectedER,
+    wins: mlbStats?.wins ?? null,
+    losses: mlbStats?.losses ?? null,
+    era: mlbStats?.era ?? null,
+    whip: mlbStats?.whip ?? null,
+    strikeOuts: mlbStats?.strikeOuts ?? null,
+    inningsPitched: mlbStats?.inningsPitched ?? null,
+  };
 }
 
 function buildBatterProjection(
@@ -105,6 +124,11 @@ function buildBatterProjection(
 
   const projectedTotalBases = xslg != null ? Math.round(xslg * AVG_PA_PER_GAME * 10) / 10 : null;
 
+  // Season stats from Savant CSV
+  const seasonAVG = sv ? (sv.ba ?? sv.batting_avg ?? sv.avg ?? null) : null;
+  const seasonHR = sv ? (parseInt(sv.home_run ?? sv.hr ?? "") || null) : null;
+  const seasonRBI = sv ? (parseInt(sv.rbi ?? "") || null) : null;
+
   const oppHr9Factor = oppHr9 != null ? 1 + (oppHr9 - LEAGUE_AVG_HR9) / LEAGUE_AVG_HR9 : 1;
   const avgPA = AVG_PA_PER_GAME;
   // Slot factor: cleanup (3-5) gets RBI bump, top/bottom of order slightly lower
@@ -123,7 +147,7 @@ function buildBatterProjection(
     ? Math.min(0.45, Math.round(xwoba * 0.70 * slotFactor * 1000) / 1000)
     : null;
 
-  return { name, team, slot, position, isProjected: (player as any)?.isProjected ?? false, xwoba, xba, xslg, barrelPct, hardHitPct, exitVelo, projectedTotalBases, hrProb, rbiProb };
+  return { name, team, slot, position, isProjected: (player as any)?.isProjected ?? false, xwoba, xba, xslg, barrelPct, hardHitPct, exitVelo, projectedTotalBases, hrProb, rbiProb, seasonAVG, seasonHR, seasonRBI };
 }
 
 export default async function PropsPage() {
@@ -132,7 +156,7 @@ export default async function PropsPage() {
 
   const supabase = createServiceClient();
 
-  const [scheduleRes, savantBattersRes, savantPitchersRes, fgPitchersRes, nbaScheduleRes, nhlScheduleRes, consensusRes, signalsRes] = await Promise.all([
+  const [scheduleRes, savantBattersRes, savantPitchersRes, fgPitchersRes, nbaScheduleRes, nhlScheduleRes, consensusRes, signalsRes, pitcherStatsRes] = await Promise.all([
     fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${today}&hydrate=probablePitcher,lineups`, { cache: "no-store" }).then(r => r.json()).catch(() => ({ dates: [] })),
     fetch(`https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2026&min=20&position=&team=&csv=true`, { next: { revalidate: 3600 } }).then(r => r.text()).catch(() => ""),
     fetch(`https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=pitcher&year=2026&min=10&position=&team=&csv=true`, { next: { revalidate: 3600 } }).then(r => r.text()).catch(() => ""),
@@ -141,6 +165,7 @@ export default async function PropsPage() {
     fetch(`https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${dateStr}`, { cache: "no-store" }).then(r => r.json()).catch(() => ({ events: [] })),
     supabase.from("consensus").select("*").eq("game_date", today).eq("sport_key", "mlb"),
     supabase.from("signals").select("*").eq("game_date", today).eq("sport_key", "mlb").eq("suppressed", false),
+    fetch(`https://statsapi.mlb.com/api/v1/stats?stats=season&group=pitching&season=2026&sportId=1&limit=500`, { next: { revalidate: 3600 } }).then(r => r.json()).catch(() => ({ splits: [] })),
   ]);
 
   // Build consensus and signals lookup maps
@@ -225,6 +250,25 @@ export default async function PropsPage() {
     if (n1) { savantPitcherMap.set(n1, p); savantPitcherMap.set(n2, p); }
   }
 
+  // Build pitcher stats map by player name
+  const mlbPitcherStatsMap = new Map<string, any>();
+  for (const split of pitcherStatsRes?.people ?? pitcherStatsRes?.stats?.[0]?.splits ?? []) {
+    const name = (split.player?.fullName ?? split.person?.fullName ?? "").toLowerCase();
+    const stat = split.stat ?? {};
+    if (name) {
+      mlbPitcherStatsMap.set(name, {
+        wins: stat.wins ?? null,
+        losses: stat.losses ?? null,
+        era: stat.era ?? null,
+        whip: stat.whip ?? null,
+        strikeOuts: stat.strikeOuts ?? null,
+        inningsPitched: stat.inningsPitched ?? null,
+        hitsPer9Inn: stat.hitsPer9Inn ?? null,
+        obp: stat.obp ?? null,
+      });
+    }
+  }
+
   // Fetch roster for a team as lineup fallback (top PA players)
   async function fetchTeamRoster(teamId: number): Promise<any[]> {
     try {
@@ -272,13 +316,13 @@ export default async function PropsPage() {
       const homeFg = homePitcherName ? fgPitcherMap.get(homePitcherName.toLowerCase()) ?? null : null;
       const awayFg = awayPitcherName ? fgPitcherMap.get(awayPitcherName.toLowerCase()) ?? null : null;
 
-      const homePitcher = homePitcherName ? buildPitcherProjection(homePitcherName, homeTeam, homeFg) : null;
-      const awayPitcher = awayPitcherName ? buildPitcherProjection(awayPitcherName, awayTeam, awayFg) : null;
+      const homePitcher = homePitcherName ? buildPitcherProjection(homePitcherName, homeTeam, homeFg, mlbPitcherStatsMap.get(homePitcherName.toLowerCase()) ?? null) : null;
+      const awayPitcher = awayPitcherName ? buildPitcherProjection(awayPitcherName, awayTeam, awayFg, mlbPitcherStatsMap.get(awayPitcherName.toLowerCase()) ?? null) : null;
 
       // F5 win prob for home team
       const homeF5WinProb =
         homePitcher?.xfip != null && awayPitcher?.xfip != null
-          ? Math.max(0.28, Math.min(0.72, 0.5 + (awayPitcher.xfip - homePitcher.xfip) * 0.12))
+          ? Math.max(0.36, Math.min(0.64, 0.5 + (awayPitcher.xfip - homePitcher.xfip) * 0.06))
           : null;
 
       const homeLineupRaw: any[] = game.lineups?.homePlayers ?? [];
