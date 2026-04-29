@@ -158,7 +158,7 @@ export default async function PropsPage() {
 
   const supabase = createServiceClient();
 
-  const [scheduleRes, savantBattersRes, savantPitchersRes, fgPitchersRes, nbaScheduleRes, nhlScheduleRes, consensusRes, signalsRes, pitcherStatsRes] = await Promise.all([
+  const [scheduleRes, savantBattersRes, savantPitchersRes, fgPitchersRes, nbaScheduleRes, nhlScheduleRes, consensusRes, signalsRes, pitcherStatsRes, dtGamesRes, dtPlayersRes, dtProjectionsRes] = await Promise.all([
     fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${today}&hydrate=probablePitcher,lineups`, { cache: "no-store" }).then(r => r.json()).catch(() => ({ dates: [] })),
     fetch(`https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2026&min=20&position=&team=&csv=true`, { next: { revalidate: 3600 } }).then(r => r.text()).catch(() => ""),
     fetch(`https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=pitcher&year=2026&min=10&position=&team=&csv=true`, { next: { revalidate: 3600 } }).then(r => r.text()).catch(() => ""),
@@ -168,27 +168,29 @@ export default async function PropsPage() {
     supabase.from("consensus").select("*").eq("game_date", today).eq("sport_key", "mlb"),
     supabase.from("signals").select("*").eq("game_date", today).eq("sport_key", "mlb").eq("suppressed", false),
     fetch(`https://statsapi.mlb.com/api/v1/stats?stats=season&group=pitching&season=2026&sportId=1&limit=1000&playerPool=All`, { next: { revalidate: 3600 } }).then(r => r.json()).catch(() => ({ splits: [] })),
+    fetch(
+      `https://dunksandthrees.com/api/v1/game-predictions?date=${today}`,
+      { headers: { Authorization: process.env.DUNKS_AND_THREES_API_KEY ?? "" }, cache: "no-store" }
+    ).then(r => r.json()).catch(() => []),
+    fetch(
+      `https://dunksandthrees.com/api/v1/players?season=2026&seasontype=4`,
+      { headers: { Authorization: process.env.DUNKS_AND_THREES_API_KEY ?? "" }, next: { revalidate: 3600 } }
+    ).then(r => r.json()).catch(() => null),
+    fetch(
+      `https://dunksandthrees.com/api/v1/player-projections?date=${today}`,
+      { headers: { Authorization: process.env.DUNKS_AND_THREES_API_KEY ?? "" }, cache: "no-store" }
+    ).then(r => r.json()).catch(() => null),
   ]);
 
-  // DEBUG: Check Dunks & Threes API response structure for today
-  try {
-    const dtKey = process.env.DUNKS_AND_THREES_API_KEY;
-    if (dtKey) {
-      const dtRes = await fetch(
-        `https://dunksandthrees.com/api/v1/game-predictions?date=${today}`,
-        { headers: { Authorization: dtKey }, cache: "no-store" }
-      ).then(r => r.json()).catch(() => null);
-
-      if (dtRes && Array.isArray(dtRes) && dtRes.length > 0) {
-        console.log("[dt-debug] Total games:", dtRes.length);
-        console.log("[dt-debug] First game keys:", Object.keys(dtRes[0]).join(", "));
-        console.log("[dt-debug] First game sample:", JSON.stringify(dtRes[0]).slice(0, 800));
-      } else {
-        console.log("[dt-debug] Response:", JSON.stringify(dtRes).slice(0, 400));
-      }
-    }
-  } catch (e) {
-    console.log("[dt-debug] Error:", e);
+  console.log("[dt-players] response type:", typeof dtPlayersRes, Array.isArray(dtPlayersRes) ? "array len:" + dtPlayersRes?.length : JSON.stringify(dtPlayersRes)?.slice(0, 300));
+  console.log("[dt-projections] response type:", typeof dtProjectionsRes, Array.isArray(dtProjectionsRes) ? "array len:" + dtProjectionsRes?.length : JSON.stringify(dtProjectionsRes)?.slice(0, 300));
+  if (Array.isArray(dtPlayersRes) && dtPlayersRes.length > 0) {
+    console.log("[dt-players] first player keys:", Object.keys(dtPlayersRes[0]).join(", "));
+    console.log("[dt-players] first player sample:", JSON.stringify(dtPlayersRes[0]).slice(0, 600));
+  }
+  if (Array.isArray(dtProjectionsRes) && dtProjectionsRes.length > 0) {
+    console.log("[dt-projections] first item keys:", Object.keys(dtProjectionsRes[0]).join(", "));
+    console.log("[dt-projections] first item sample:", JSON.stringify(dtProjectionsRes[0]).slice(0, 600));
   }
 
   // Build consensus and signals lookup maps
