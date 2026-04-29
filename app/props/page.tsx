@@ -1,5 +1,6 @@
 import PropsClient from "./PropsClient";
 import { getLogicalGameDate } from "@/lib/utils/dateUtils";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,17 @@ export interface GameProps {
   homeF5WinProb: number | null;
   yrfiProb: number | null;
   hasLineups: boolean;
+  // Logos + records
+  homeLogo: string | null;
+  awayLogo: string | null;
+  homeRecord: string | null;
+  awayRecord: string | null;
+  // Consensus + signals
+  consensusHomeWinProb: number | null;
+  consensusAwayWinProb: number | null;
+  marketHomeWinProb: number | null;
+  marketAwayWinProb: number | null;
+  bestEdgeSignal: { side: string; teamName: string; edgePct: number; tier: string } | null;
 }
 
 export interface NBAGameInfo { homeTeam: string; awayTeam: string; gameTime: string; }
@@ -84,12 +96,12 @@ function buildBatterProjection(
   const name: string = player?.fullName ?? player?.person?.fullName ?? "";
   const position: string = player?.primaryPosition?.abbreviation ?? player?.position?.abbreviation ?? "?";
 
-  const xwoba = sv ? (parseFloat(sv.xwoba ?? "") || null) : null;
-  const xba = sv ? (parseFloat(sv.xba ?? "") || null) : null;
-  const xslg = sv ? (parseFloat(sv.xslg ?? "") || null) : null;
-  const barrelPct = sv ? (parseFloat(sv.barrel_batted_rate ?? sv["barrel%"] ?? "") || null) : null;
-  const hardHitPct = sv ? (parseFloat(sv.hard_hit_percent ?? "") || null) : null;
-  const exitVelo = sv ? (parseFloat(sv.avg_hit_speed ?? sv.exit_velocity_avg ?? "") || null) : null;
+  const xwoba = sv ? (parseFloat(sv.xwoba ?? sv.est_woba ?? "") || null) : null;
+  const xba = sv ? (parseFloat(sv.xba ?? sv.est_ba ?? "") || null) : null;
+  const xslg = sv ? (parseFloat(sv.xslg ?? sv.est_slg ?? "") || null) : null;
+  const barrelPct = sv ? (parseFloat(sv.barrel_batted_rate ?? sv.brl_percent ?? sv["barrel%"] ?? sv.barrel_rate ?? "") || null) : null;
+  const hardHitPct = sv ? (parseFloat(sv.hard_hit_percent ?? sv.hard_hit ?? sv.hh_percent ?? "") || null) : null;
+  const exitVelo = sv ? (parseFloat(sv.avg_hit_speed ?? sv.launch_speed ?? sv.exit_velocity_avg ?? sv.avg_exit_velocity ?? "") || null) : null;
 
   const projectedTotalBases = xslg != null ? Math.round(xslg * AVG_PA_PER_GAME * 10) / 10 : null;
 
@@ -104,14 +116,59 @@ export default async function PropsPage() {
   const today = getLogicalGameDate();
   const dateStr = today.replace(/-/g, "");
 
-  const [scheduleRes, savantBattersRes, savantPitchersRes, fgPitchersRes, nbaScheduleRes, nhlScheduleRes] = await Promise.all([
+  const supabase = createServiceClient();
+
+  const [scheduleRes, savantBattersRes, savantPitchersRes, fgPitchersRes, nbaScheduleRes, nhlScheduleRes, consensusRes, signalsRes] = await Promise.all([
     fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${today}&hydrate=probablePitcher,lineups`, { cache: "no-store" }).then(r => r.json()).catch(() => ({ dates: [] })),
     fetch(`https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2026&min=20&position=&team=&csv=true`, { next: { revalidate: 3600 } }).then(r => r.text()).catch(() => ""),
     fetch(`https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=pitcher&year=2026&min=10&position=&team=&csv=true`, { next: { revalidate: 3600 } }).then(r => r.text()).catch(() => ""),
     fetch(`https://www.fangraphs.com/api/leaders/major-league/data?age=0&pos=all&stats=pit&lg=all&qual=0&season=2026&season1=2026&ind=0&team=0&pageitems=500`, { next: { revalidate: 3600 } }).then(r => r.json()).catch(() => ({ data: [] })),
     fetch(`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${dateStr}`, { cache: "no-store" }).then(r => r.json()).catch(() => ({ events: [] })),
     fetch(`https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${dateStr}`, { cache: "no-store" }).then(r => r.json()).catch(() => ({ events: [] })),
+    supabase.from("consensus").select("*").eq("game_date", today).eq("sport_key", "mlb"),
+    supabase.from("signals").select("*").eq("game_date", today).eq("sport_key", "mlb").eq("suppressed", false),
   ]);
+
+  // Build consensus and signals lookup maps
+  function normalizeTeam(name: string) {
+    return name.toLowerCase().trim().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ");
+  }
+
+  const consensusMap = new Map<string, any>();
+  for (const c of consensusRes.data ?? []) {
+    const key = `${normalizeTeam(c.away_team)}|${normalizeTeam(c.home_team)}`;
+    consensusMap.set(key, c);
+  }
+
+  const signalsMap = new Map<string, any[]>();
+  for (const s of signalsRes.data ?? []) {
+    const key = `${normalizeTeam(s.away_team)}|${normalizeTeam(s.home_team)}`;
+    if (!signalsMap.has(key)) signalsMap.set(key, []);
+    signalsMap.get(key)!.push(s);
+  }
+
+  // Fetch ESPN MLB scoreboard for logos + records
+  const espnScoreboard = await fetch(
+    `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${dateStr}`,
+    { cache: "no-store" }
+  ).then(r => r.json()).catch(() => ({ events: [] }));
+
+  const espnGameMap = new Map<string, any>();
+  for (const event of espnScoreboard.events ?? []) {
+    const comp = event.competitions?.[0];
+    const home = comp?.competitors?.find((c: any) => c.homeAway === "home");
+    const away = comp?.competitors?.find((c: any) => c.homeAway === "away");
+    if (!home || !away) continue;
+    const key = `${normalizeTeam(away.team?.displayName ?? "")}|${normalizeTeam(home.team?.displayName ?? "")}`;
+    espnGameMap.set(key, {
+      homeLogo: home.team?.logo ?? null,
+      awayLogo: away.team?.logo ?? null,
+      homeRecord: home.records?.[0]?.summary ?? null,
+      awayRecord: away.records?.[0]?.summary ?? null,
+      homeColor: home.team?.color ? `#${home.team.color}` : null,
+      awayColor: away.team?.color ? `#${away.team.color}` : null,
+    });
+  }
 
   function parseCSV(csv: string): Record<string, string>[] {
     const lines = csv.trim().split("\n");
@@ -127,6 +184,12 @@ export default async function PropsPage() {
 
   const savantBatters = parseCSV(savantBattersRes);
   const savantPitchers = parseCSV(savantPitchersRes);
+
+  // Debug: log first batter row keys to verify CSV column names
+  if (savantBatters.length > 0) {
+    console.log("[savant-batter-cols]", Object.keys(savantBatters[0]).join(", "));
+    console.log("[savant-batter-sample]", JSON.stringify(savantBatters[0]));
+  }
 
   const fgPitcherMap = new Map<string, any>();
   for (const p of fgPitchersRes.data ?? []) {
@@ -270,6 +333,29 @@ export default async function PropsPage() {
       const homeF1RunProb = pHomeScores1st;
       const awayF1RunProb = pAwayScores1st;
 
+      // Lookup ESPN data for logos/records
+      const espnKey = `${normalizeTeam(awayTeam)}|${normalizeTeam(homeTeam)}`;
+      const espnData = espnGameMap.get(espnKey) ?? null;
+
+      // Lookup consensus + signals
+      const consensus = consensusMap.get(espnKey) ?? null;
+      const gameSignals = signalsMap.get(espnKey) ?? [];
+
+      // Find best edge signal
+      const bestEdgeSignal = (() => {
+        if (gameSignals.length === 0) return null;
+        const best = gameSignals.reduce((a: any, b: any) =>
+          Math.abs(b.edge_pct ?? 0) > Math.abs(a.edge_pct ?? 0) ? b : a
+        );
+        if (!best || (best.edge_pct ?? 0) === 0) return null;
+        return {
+          side: best.side,
+          teamName: best.side === "home" ? homeTeam : awayTeam,
+          edgePct: best.edge_pct,
+          tier: best.edge_tier ?? best.tier ?? "no_edge",
+        };
+      })();
+
       mlbGameProps.push({
         gameId,
         homeTeam,
@@ -284,6 +370,15 @@ export default async function PropsPage() {
         homeF5WinProb,
         yrfiProb,
         hasLineups,
+        homeLogo: espnData?.homeLogo ?? null,
+        awayLogo: espnData?.awayLogo ?? null,
+        homeRecord: espnData?.homeRecord ?? null,
+        awayRecord: espnData?.awayRecord ?? null,
+        consensusHomeWinProb: consensus?.consensus_home_win_prob ?? null,
+        consensusAwayWinProb: consensus?.consensus_away_win_prob ?? null,
+        marketHomeWinProb: consensus?.market_implied_home_prob ?? null,
+        marketAwayWinProb: consensus?.market_implied_away_prob ?? null,
+        bestEdgeSignal,
       });
     }
   }

@@ -98,6 +98,7 @@ function BatterRow({ batter }: { batter: BatterProjection }) {
 }
 
 function GameCard({ game }: { game: GameProps }) {
+  const [expanded, setExpanded] = useState(false);
   const [showHome, setShowHome] = useState(true);
   const activeLineup = showHome ? game.homeLineup : game.awayLineup;
   const activeTeam = showHome ? game.homeTeam : game.awayTeam;
@@ -105,103 +106,192 @@ function GameCard({ game }: { game: GameProps }) {
   const activeF5WinProb = showHome
     ? game.homeF5WinProb
     : game.homeF5WinProb != null ? 1 - game.homeF5WinProb : null;
-  const activeLabel = showHome ? "Home SP" : "Away SP";
 
   const homeShort = game.homeTeam.split(" ").pop() ?? game.homeTeam;
   const awayShort = game.awayTeam.split(" ").pop() ?? game.awayTeam;
 
+  const homeWinProb = game.consensusHomeWinProb != null ? game.consensusHomeWinProb * 100 : null;
+  const awayWinProb = game.consensusAwayWinProb != null ? game.consensusAwayWinProb * 100 : null;
+  const favoredWinTeam = homeWinProb != null && awayWinProb != null
+    ? (homeWinProb >= awayWinProb ? homeShort : awayShort) : null;
+  const favoredWinProb = homeWinProb != null && awayWinProb != null
+    ? Math.max(homeWinProb, awayWinProb) : null;
+
+  const homeF5 = game.homeF5WinProb != null ? game.homeF5WinProb * 100 : null;
+  const awayF5 = game.homeF5WinProb != null ? (1 - game.homeF5WinProb) * 100 : null;
+  const favoredF5Team = homeF5 != null && awayF5 != null
+    ? (homeF5 >= awayF5 ? homeShort : awayShort) : null;
+  const favoredF5Prob = homeF5 != null && awayF5 != null ? Math.max(homeF5, awayF5) : null;
+
+  const nrfiProb = game.yrfiProb != null ? (1 - game.yrfiProb) * 100 : null;
+
+  function statBoxColor(p: number): string {
+    return p >= 60 ? "#16A34A" : p >= 50 ? "#D97706" : "#DC2626";
+  }
+
+  const edgeTierColors: Record<string, string> = {
+    strong_value: "#16A34A",
+    good_value: "#D97706",
+    lean: "#6B7280",
+    no_edge: "#4B5563",
+  };
+
   return (
-    <details style={{ background: "#0D1117", border: "1px solid #21262D", borderRadius: "12px", marginBottom: "12px", overflow: "hidden" }}>
-      <summary style={{ padding: "14px 16px", cursor: "pointer", listStyle: "none" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
-          <div>
-            <div style={{ fontSize: "14px", fontWeight: 700, color: "#F1F3F5" }}>
-              {game.awayTeam} <span style={{ color: "#4B5563", fontWeight: 400 }}>@</span> {game.homeTeam}
-            </div>
-            <div style={{ fontSize: "11px", color: "#6B7280", marginTop: "2px" }}>{game.gameTime}</div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", flexShrink: 0 }}>
-            {/* YRFI — headline prop */}
-            {game.yrfiProb != null && (
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.06em" }}>YRFI</div>
-                <div style={{ fontSize: "18px", fontWeight: 800, color: game.yrfiProb > 0.55 ? "#16A34A" : game.yrfiProb < 0.45 ? "#DC2626" : "#D97706", lineHeight: 1 }}>
-                  {(game.yrfiProb * 100).toFixed(0)}%
-                </div>
-                <div style={{ fontSize: "9px", color: "#4B5563", marginTop: "1px" }}>
-                  {game.yrfiProb > 0.55 ? "Lean YES" : game.yrfiProb < 0.45 ? "Lean NO" : "Pick 'em"}
-                </div>
-              </div>
-            )}
-            {/* F5 secondary */}
-            {game.homeF5WinProb != null && (
-              <span style={{ fontSize: "10px", color: "#6B7280" }}>
-                F5: {homeShort} {pct(game.homeF5WinProb, 0)}
-              </span>
-            )}
-          </div>
-        </div>
-      </summary>
+    <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "12px", marginBottom: "10px", overflow: "hidden" }}>
+      {/* Collapsed header — always visible */}
+      <div style={{ padding: "14px 16px", cursor: "pointer" }} onClick={() => setExpanded(e => !e)}>
 
-      <div style={{ borderTop: "1px solid #21262D", padding: "12px 16px" }}>
-        {/* Team toggle */}
-        <div style={{ display: "flex", gap: "4px", marginBottom: "14px" }}>
-          <button
-            onClick={e => { e.preventDefault(); setShowHome(true); }}
-            style={{
-              padding: "4px 12px", borderRadius: "6px", border: "1px solid #21262D",
-              background: showHome ? "#EA6C0A" : "transparent",
-              color: showHome ? "#fff" : "#6B7280", fontSize: "11px", fontWeight: 600, cursor: "pointer",
-            }}
-          >
-            {homeShort}
-          </button>
-          <button
-            onClick={e => { e.preventDefault(); setShowHome(false); }}
-            style={{
-              padding: "4px 12px", borderRadius: "6px", border: "1px solid #21262D",
-              background: !showHome ? "#EA6C0A" : "transparent",
-              color: !showHome ? "#fff" : "#6B7280", fontSize: "11px", fontWeight: 600, cursor: "pointer",
-            }}
-          >
-            {awayShort}
-          </button>
-        </div>
-
-        {/* Active pitcher */}
-        <div style={{ marginBottom: "12px" }}>
-          <div style={{ fontSize: "10px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>
-            Starting Pitcher
-          </div>
-          {activePitcher ? (
-            <PitcherCard pitcher={activePitcher} label={activeLabel} f5WinProb={activeF5WinProb} />
-          ) : (
-            <div style={{ fontSize: "11px", color: "#4B5563", padding: "8px 0" }}>No probable pitcher announced</div>
-          )}
-        </div>
-
-        {/* Active lineup */}
-        <div>
-          <div style={{ fontSize: "10px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>
-            Lineup — {activeTeam}
-          </div>
-          {activeLineup.length > 0 ? (
-            <div style={{ background: "#161B22", borderRadius: "8px", overflow: "hidden", border: "1px solid #21262D" }}>
-              {activeLineup.map(b => <BatterRow key={`${b.name}-${b.slot}`} batter={b} />)}
-              {activeLineup.some(b => b.isProjected) && (
-                <div style={{ fontSize: "10px", color: "#4B5563", padding: "8px 10px", borderTop: "0.5px solid #21262D" }}>
-                  * Projected lineup based on season PA — official lineup not yet posted
-                </div>
+        {/* Row 1: Team logos + names + records + time */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+              {game.awayLogo && (
+                <img src={game.awayLogo} alt={awayShort} width={28} height={28} style={{ objectFit: "contain", flexShrink: 0 }} />
               )}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: "#F1F3F5", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{awayShort}</div>
+                {game.awayRecord && <div style={{ fontSize: "10px", color: "#4B5563" }}>{game.awayRecord}</div>}
+              </div>
             </div>
-          ) : (
-            <div style={{ fontSize: "11px", color: "#4B5563", padding: "8px 0" }}>
-              {game.hasLineups ? "No lineup for this team yet" : "Lineups not yet posted"}
+            <span style={{ fontSize: "11px", color: "#4B5563", flexShrink: 0 }}>@</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+              {game.homeLogo && (
+                <img src={game.homeLogo} alt={homeShort} width={28} height={28} style={{ objectFit: "contain", flexShrink: 0 }} />
+              )}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: "#F1F3F5", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{homeShort}</div>
+                {game.homeRecord && <div style={{ fontSize: "10px", color: "#4B5563" }}>{game.homeRecord}</div>}
+              </div>
             </div>
-          )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+            <div style={{ fontSize: "11px", color: "#6B7280", textAlign: "right" }}>{game.gameTime}</div>
+            <span style={{ fontSize: "16px", color: "#4B5563" }}>{expanded ? "▴" : "▾"}</span>
+          </div>
         </div>
+
+        {/* Row 2: Pitchers */}
+        {(game.awayPitcher || game.homePitcher) && (
+          <div style={{ fontSize: "10px", color: "#4B5563", marginBottom: "10px" }}>
+            <span style={{ color: "#6B7280" }}>{game.awayPitcher?.name?.split(" ").pop() ?? "TBD"}</span>
+            <span style={{ color: "#374151" }}> vs </span>
+            <span style={{ color: "#6B7280" }}>{game.homePitcher?.name?.split(" ").pop() ?? "TBD"}</span>
+          </div>
+        )}
+
+        {/* Row 3: 3 stat boxes */}
+        <div style={{ display: "flex", gap: "8px", marginBottom: game.bestEdgeSignal ? "8px" : "0" }}>
+          <div style={{
+            flex: 1, background: "#0D1117", borderRadius: "8px", padding: "8px 10px", textAlign: "center",
+            border: `1px solid ${favoredWinProb != null ? statBoxColor(favoredWinProb) + "33" : "#21262D"}`,
+          }}>
+            <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "3px" }}>ML Win</div>
+            {favoredWinProb != null ? (
+              <>
+                <div style={{ fontSize: "17px", fontWeight: 800, color: statBoxColor(favoredWinProb), lineHeight: 1 }}>{favoredWinProb.toFixed(0)}%</div>
+                <div style={{ fontSize: "9px", color: "#6B7280", marginTop: "2px" }}>{favoredWinTeam}</div>
+              </>
+            ) : <div style={{ fontSize: "13px", color: "#374151" }}>—</div>}
+          </div>
+
+          <div style={{
+            flex: 1, background: "#0D1117", borderRadius: "8px", padding: "8px 10px", textAlign: "center",
+            border: `1px solid ${favoredF5Prob != null ? statBoxColor(favoredF5Prob) + "33" : "#21262D"}`,
+          }}>
+            <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "3px" }}>F5 Win</div>
+            {favoredF5Prob != null ? (
+              <>
+                <div style={{ fontSize: "17px", fontWeight: 800, color: statBoxColor(favoredF5Prob), lineHeight: 1 }}>{favoredF5Prob.toFixed(0)}%</div>
+                <div style={{ fontSize: "9px", color: "#6B7280", marginTop: "2px" }}>{favoredF5Team}</div>
+              </>
+            ) : <div style={{ fontSize: "13px", color: "#374151" }}>—</div>}
+          </div>
+
+          <div style={{
+            flex: 1, background: "#0D1117", borderRadius: "8px", padding: "8px 10px", textAlign: "center",
+            border: `1px solid ${nrfiProb != null ? statBoxColor(nrfiProb) + "33" : "#21262D"}`,
+          }}>
+            <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "3px" }}>NRFI</div>
+            {nrfiProb != null ? (
+              <>
+                <div style={{ fontSize: "17px", fontWeight: 800, color: statBoxColor(nrfiProb), lineHeight: 1 }}>{nrfiProb.toFixed(0)}%</div>
+                <div style={{ fontSize: "9px", color: nrfiProb >= 55 ? "#16A34A" : nrfiProb <= 45 ? "#DC2626" : "#D97706", marginTop: "2px" }}>
+                  {nrfiProb >= 55 ? "Lean NO" : nrfiProb <= 45 ? "Lean YES" : "Pick 'em"}
+                </div>
+              </>
+            ) : <div style={{ fontSize: "13px", color: "#374151" }}>—</div>}
+          </div>
+        </div>
+
+        {/* Row 4: Edge signal */}
+        {game.bestEdgeSignal && (
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 8px", background: "#0D1117", borderRadius: "6px" }}>
+            <span style={{ fontSize: "10px", fontWeight: 700, color: edgeTierColors[game.bestEdgeSignal.tier] ?? "#6B7280" }}>
+              {game.bestEdgeSignal.teamName.split(" ").pop()} +{game.bestEdgeSignal.edgePct}% edge
+            </span>
+            <span style={{ fontSize: "10px", color: "#4B5563" }}>·</span>
+            <span style={{ fontSize: "10px", color: edgeTierColors[game.bestEdgeSignal.tier] ?? "#6B7280" }}>
+              {game.bestEdgeSignal.tier === "strong_value" ? "Strong value" : game.bestEdgeSignal.tier === "good_value" ? "Good value" : "Lean"}
+            </span>
+          </div>
+        )}
       </div>
-    </details>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div style={{ borderTop: "1px solid #21262D", padding: "12px 16px" }}>
+          {/* Team toggle */}
+          <div style={{ display: "flex", gap: "4px", marginBottom: "14px" }}>
+            {(["home", "away"] as const).map(side => {
+              const isActive = side === "home" ? showHome : !showHome;
+              const label = side === "home" ? homeShort : awayShort;
+              const logo = side === "home" ? game.homeLogo : game.awayLogo;
+              return (
+                <button key={side} onClick={(e) => { e.stopPropagation(); setShowHome(side === "home"); }} style={{
+                  padding: "4px 12px", borderRadius: "6px", border: "1px solid #21262D",
+                  background: isActive ? "#EA6C0A" : "transparent",
+                  color: isActive ? "#fff" : "#6B7280",
+                  fontSize: "11px", fontWeight: 600, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: "5px",
+                }}>
+                  {logo && <img src={logo} alt={label} width={14} height={14} style={{ objectFit: "contain" }} />}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Active pitcher */}
+          <div style={{ marginBottom: "12px" }}>
+            <div style={{ fontSize: "10px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>Starting Pitcher</div>
+            {activePitcher ? (
+              <PitcherCard pitcher={activePitcher as any} label={showHome ? "Home SP" : "Away SP"} f5WinProb={activeF5WinProb} />
+            ) : (
+              <div style={{ fontSize: "11px", color: "#4B5563", padding: "8px 0" }}>No probable pitcher announced</div>
+            )}
+          </div>
+
+          {/* Active lineup */}
+          <div>
+            <div style={{ fontSize: "10px", color: "#EA6C0A", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>
+              Lineup — {activeTeam}
+            </div>
+            {activeLineup.length > 0 ? (
+              <div style={{ background: "#0D1117", borderRadius: "8px", overflow: "hidden", border: "1px solid #21262D" }}>
+                {activeLineup.map(b => <BatterRow key={`${b.name}-${b.slot}`} batter={b} />)}
+                {activeLineup.some(b => b.isProjected) && (
+                  <div style={{ fontSize: "10px", color: "#4B5563", padding: "8px 10px", borderTop: "0.5px solid #21262D" }}>
+                    * Projected lineup based on season PA — official lineup not yet posted
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: "11px", color: "#4B5563", padding: "8px 0" }}>Lineups not yet posted</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
