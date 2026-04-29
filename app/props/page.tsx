@@ -173,13 +173,13 @@ export default async function PropsPage() {
       { headers: { Authorization: process.env.DUNKS_AND_THREES_API_KEY ?? "" }, cache: "no-store" }
     ).then(r => r.json()).catch(() => []),
     fetch(
-      `https://dunksandthrees.com/api/v1/players?season=2026&seasontype=4`,
-      { headers: { Authorization: process.env.DUNKS_AND_THREES_API_KEY ?? "" }, next: { revalidate: 3600 } }
-    ).then(r => r.json()).catch(() => null),
-    fetch(
-      `https://dunksandthrees.com/api/v1/player-projections?date=${today}`,
+      `https://dunksandthrees.com/api/v1/players?date=${today}`,
       { headers: { Authorization: process.env.DUNKS_AND_THREES_API_KEY ?? "" }, cache: "no-store" }
-    ).then(r => r.json()).catch(() => null),
+    ).then(async r => { const t = await r.text(); console.log("[dt-players-status]", r.status, t.slice(0, 300)); return null; }).catch(() => null),
+    fetch(
+      `https://dunksandthrees.com/api/v1/epm?season=2026`,
+      { headers: { Authorization: process.env.DUNKS_AND_THREES_API_KEY ?? "" }, cache: "no-store" }
+    ).then(async r => { const t = await r.text(); console.log("[dt-epm-status]", r.status, t.slice(0, 300)); return null; }).catch(() => null),
   ]);
 
   console.log("[dt-players] response type:", typeof dtPlayersRes, Array.isArray(dtPlayersRes) ? "array len:" + dtPlayersRes?.length : JSON.stringify(dtPlayersRes)?.slice(0, 300));
