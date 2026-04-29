@@ -27,6 +27,7 @@ export interface BatterProjection {
   team: string;
   slot: number;
   position: string;
+  isProjected: boolean;
   xwoba: number | null;
   xba: number | null;
   xslg: number | null;
@@ -50,6 +51,7 @@ export interface GameProps {
   homeF1RunProb: number | null;
   awayF1RunProb: number | null;
   homeF5WinProb: number | null;
+  yrfiProb: number | null;
   hasLineups: boolean;
 }
 
@@ -95,7 +97,7 @@ function buildBatterProjection(
   const hrProb = barrelPct != null ? Math.round(barrelPct * 0.055 * oppHr9Factor * 1000) / 1000 : null;
   const rbiProb = xwoba != null ? Math.round(xwoba * 0.25 * 100) / 100 : null;
 
-  return { name, team, slot, position, xwoba, xba, xslg, barrelPct, hardHitPct, exitVelo, projectedTotalBases, hrProb, rbiProb };
+  return { name, team, slot, position, isProjected: (player as any)?.isProjected ?? false, xwoba, xba, xslg, barrelPct, hardHitPct, exitVelo, projectedTotalBases, hrProb, rbiProb };
 }
 
 export default async function PropsPage() {
@@ -146,6 +148,35 @@ export default async function PropsPage() {
     if (n1) { savantPitcherMap.set(n1, p); savantPitcherMap.set(n2, p); }
   }
 
+  // Fetch roster for a team as lineup fallback (top PA players)
+  async function fetchTeamRoster(teamId: number): Promise<any[]> {
+    try {
+      const res = await fetch(
+        `https://statsapi.mlb.com/api/v1/teams/${teamId}/roster?rosterType=active&season=2026&hydrate=person(stats(type=season,group=hitting,season=2026))`,
+        { next: { revalidate: 1800 } }
+      );
+      if (!res.ok) return [];
+      const data = await res.json();
+      const roster = data.roster ?? [];
+      return roster
+        .filter((p: any) => p.position?.code !== "1") // exclude pitchers
+        .sort((a: any, b: any) => {
+          const aPA = a.person?.stats?.[0]?.splits?.[0]?.stat?.plateAppearances ?? 0;
+          const bPA = b.person?.stats?.[0]?.splits?.[0]?.stat?.plateAppearances ?? 0;
+          return bPA - aPA;
+        })
+        .slice(0, 9)
+        .map((p: any) => ({
+          fullName: p.person?.fullName ?? "",
+          primaryPosition: { abbreviation: p.position?.abbreviation ?? "?" },
+          isProjected: true,
+          plateAppearances: p.person?.stats?.[0]?.splits?.[0]?.stat?.plateAppearances ?? 0,
+        }));
+    } catch {
+      return [];
+    }
+  }
+
   const mlbGameProps: GameProps[] = [];
 
   for (const dateEntry of scheduleRes.dates ?? []) {
@@ -173,31 +204,71 @@ export default async function PropsPage() {
           ? Math.max(0.28, Math.min(0.72, 0.5 + (awayPitcher.xfip - homePitcher.xfip) * 0.12))
           : null;
 
-      // F1 run prob: chance either team scores in 1st inning
-      const homeF1RunProb = awayPitcher?.xfip != null
-        ? Math.max(0.10, Math.min(0.60, 0.28 + (awayPitcher.xfip - LEAGUE_AVG_XFIP) * 0.04))
-        : null;
-      const awayF1RunProb = homePitcher?.xfip != null
-        ? Math.max(0.10, Math.min(0.60, 0.28 + (homePitcher.xfip - LEAGUE_AVG_XFIP) * 0.04))
-        : null;
-
       const homeLineupRaw: any[] = game.lineups?.homePlayers ?? [];
       const awayLineupRaw: any[] = game.lineups?.awayPlayers ?? [];
-      const hasLineups = homeLineupRaw.length > 0 || awayLineupRaw.length > 0;
+      const lineupsConfirmed = homeLineupRaw.length > 0 || awayLineupRaw.length > 0;
 
-      const homeLineup: BatterProjection[] = homeLineupRaw
+      // Fallback to roster if lineup not posted
+      const homeTeamId: number = game.teams?.home?.team?.id ?? 0;
+      const awayTeamId: number = game.teams?.away?.team?.id ?? 0;
+
+      const [homeFallback, awayFallback] = lineupsConfirmed
+        ? [[], []]
+        : await Promise.all([
+            homeLineupRaw.length === 0 && homeTeamId ? fetchTeamRoster(homeTeamId) : Promise.resolve([]),
+            awayLineupRaw.length === 0 && awayTeamId ? fetchTeamRoster(awayTeamId) : Promise.resolve([]),
+          ]);
+
+      const effectiveHomeLineup = homeLineupRaw.length > 0 ? homeLineupRaw : homeFallback;
+      const effectiveAwayLineup = awayLineupRaw.length > 0 ? awayLineupRaw : awayFallback;
+      const hasLineups = effectiveHomeLineup.length > 0 || effectiveAwayLineup.length > 0;
+
+      const homeLineup: BatterProjection[] = effectiveHomeLineup
+        .filter((p: any) => (p?.fullName ?? p?.person?.fullName ?? ""))
         .map((p: any, i: number) => {
           const sv = savantBatterMap.get((p?.fullName ?? p?.person?.fullName ?? "").toLowerCase()) ?? null;
           return buildBatterProjection(p, homeTeam, i + 1, sv, awayPitcher?.hr9 ?? null);
         })
         .filter(b => b.name);
 
-      const awayLineup: BatterProjection[] = awayLineupRaw
+      const awayLineup: BatterProjection[] = effectiveAwayLineup
+        .filter((p: any) => (p?.fullName ?? p?.person?.fullName ?? ""))
         .map((p: any, i: number) => {
           const sv = savantBatterMap.get((p?.fullName ?? p?.person?.fullName ?? "").toLowerCase()) ?? null;
           return buildBatterProjection(p, awayTeam, i + 1, sv, homePitcher?.hr9 ?? null);
         })
         .filter(b => b.name);
+
+      // YRFI model: P(at least 1 run scored in 1st inning by either team)
+      const top5HomeXwoba = homeLineup.slice(0, 5).map(b => b.xwoba).filter(x => x != null) as number[];
+      const top5AwayXwoba = awayLineup.slice(0, 5).map(b => b.xwoba).filter(x => x != null) as number[];
+      const avgHomeXwoba = top5HomeXwoba.length > 0 ? top5HomeXwoba.reduce((a, b) => a + b, 0) / top5HomeXwoba.length : 0.320;
+      const avgAwayXwoba = top5AwayXwoba.length > 0 ? top5AwayXwoba.reduce((a, b) => a + b, 0) / top5AwayXwoba.length : 0.320;
+
+      const pHomeScores1st = awayPitcher?.xfip != null
+        ? Math.max(0.12, Math.min(0.58,
+            0.265
+            + (awayPitcher.xfip - LEAGUE_AVG_XFIP) * 0.035
+            + (avgHomeXwoba - 0.320) * 0.18
+            + ((awayPitcher.bbPct ?? 0.08) - 0.08) * 0.40
+          ))
+        : 0.28;
+
+      const pAwayScores1st = homePitcher?.xfip != null
+        ? Math.max(0.12, Math.min(0.58,
+            0.265
+            + (homePitcher.xfip - LEAGUE_AVG_XFIP) * 0.035
+            + (avgAwayXwoba - 0.320) * 0.18
+            + ((homePitcher.bbPct ?? 0.08) - 0.08) * 0.40
+          ))
+        : 0.28;
+
+      const yrfiProb = (awayPitcher?.xfip != null || homePitcher?.xfip != null)
+        ? Math.round((1 - (1 - pHomeScores1st) * (1 - pAwayScores1st)) * 1000) / 1000
+        : null;
+
+      const homeF1RunProb = pHomeScores1st;
+      const awayF1RunProb = pAwayScores1st;
 
       mlbGameProps.push({
         gameId,
@@ -211,6 +282,7 @@ export default async function PropsPage() {
         homeF1RunProb,
         awayF1RunProb,
         homeF5WinProb,
+        yrfiProb,
         hasLineups,
       });
     }

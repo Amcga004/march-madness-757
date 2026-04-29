@@ -77,6 +77,7 @@ function BatterRow({ batter }: { batter: BatterProjection }) {
         <span style={{ fontSize: "10px", color: "#4B5563", minWidth: "18px", textAlign: "right" }}>#{batter.slot}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <span style={{ fontSize: "12px", color: "#F1F3F5", fontWeight: 500 }}>{batter.name}</span>
+          {batter.isProjected && <span style={{ fontSize: "9px", color: "#4B5563", marginLeft: "3px" }}>*</span>}
           <span style={{ fontSize: "10px", color: "#6B7280", marginLeft: "5px" }}>{batter.position}</span>
         </div>
         <div style={{ display: "flex", gap: "4px" }}>
@@ -119,20 +120,25 @@ function GameCard({ game }: { game: GameProps }) {
             </div>
             <div style={{ fontSize: "11px", color: "#6B7280", marginTop: "2px" }}>{game.gameTime}</div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "3px", flexShrink: 0 }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", flexShrink: 0 }}>
+            {/* YRFI — headline prop */}
+            {game.yrfiProb != null && (
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "9px", color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.06em" }}>YRFI</div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: game.yrfiProb > 0.55 ? "#16A34A" : game.yrfiProb < 0.45 ? "#DC2626" : "#D97706", lineHeight: 1 }}>
+                  {(game.yrfiProb * 100).toFixed(0)}%
+                </div>
+                <div style={{ fontSize: "9px", color: "#4B5563", marginTop: "1px" }}>
+                  {game.yrfiProb > 0.55 ? "Lean YES" : game.yrfiProb < 0.45 ? "Lean NO" : "Pick 'em"}
+                </div>
+              </div>
+            )}
+            {/* F5 secondary */}
             {game.homeF5WinProb != null && (
-              <span style={{ fontSize: "11px", color: "#EA6C0A", fontWeight: 600 }}>
+              <span style={{ fontSize: "10px", color: "#6B7280" }}>
                 F5: {homeShort} {pct(game.homeF5WinProb, 0)}
               </span>
             )}
-            <div style={{ display: "flex", gap: "10px" }}>
-              {game.homeF1RunProb != null && (
-                <span style={{ fontSize: "10px", color: "#6B7280" }}>{homeShort} F1 {pct(game.homeF1RunProb, 0)}</span>
-              )}
-              {game.awayF1RunProb != null && (
-                <span style={{ fontSize: "10px", color: "#6B7280" }}>{awayShort} F1 {pct(game.awayF1RunProb, 0)}</span>
-              )}
-            </div>
           </div>
         </div>
       </summary>
@@ -182,6 +188,11 @@ function GameCard({ game }: { game: GameProps }) {
           {activeLineup.length > 0 ? (
             <div style={{ background: "#161B22", borderRadius: "8px", overflow: "hidden", border: "1px solid #21262D" }}>
               {activeLineup.map(b => <BatterRow key={`${b.name}-${b.slot}`} batter={b} />)}
+              {activeLineup.some(b => b.isProjected) && (
+                <div style={{ fontSize: "10px", color: "#4B5563", padding: "8px 10px", borderTop: "0.5px solid #21262D" }}>
+                  * Projected lineup based on season PA — official lineup not yet posted
+                </div>
+              )}
             </div>
           ) : (
             <div style={{ fontSize: "11px", color: "#4B5563", padding: "8px 0" }}>
