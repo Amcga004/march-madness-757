@@ -47,6 +47,7 @@ export interface BatterProjection {
   rbiProb: number | null;
   // Season stats for display
   seasonAVG: string | null;
+  seasonSLG: string | null;
   seasonHR: number | null;
   seasonRBI: number | null;
 }
@@ -126,6 +127,7 @@ function buildBatterProjection(
 
   // Season stats from Savant CSV
   const seasonAVG = sv ? (sv.ba ?? sv.batting_avg ?? sv.avg ?? null) : null;
+  const seasonSLG = sv ? (sv.slg ?? sv.slugging_avg ?? sv.slg_percent ?? null) : null;
   const seasonHR = sv ? (parseInt(sv.home_run ?? sv.hr ?? "") || null) : null;
   const seasonRBI = sv ? (parseInt(sv.rbi ?? "") || null) : null;
 
@@ -147,7 +149,7 @@ function buildBatterProjection(
     ? Math.min(0.45, Math.round(xwoba * 0.70 * slotFactor * 1000) / 1000)
     : null;
 
-  return { name, team, slot, position, isProjected: (player as any)?.isProjected ?? false, xwoba, xba, xslg, barrelPct, hardHitPct, exitVelo, projectedTotalBases, hrProb, rbiProb, seasonAVG, seasonHR, seasonRBI };
+  return { name, team, slot, position, isProjected: (player as any)?.isProjected ?? false, xwoba, xba, xslg, barrelPct, hardHitPct, exitVelo, projectedTotalBases, hrProb, rbiProb, seasonAVG, seasonSLG, seasonHR, seasonRBI };
 }
 
 export default async function PropsPage() {
@@ -165,7 +167,7 @@ export default async function PropsPage() {
     fetch(`https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${dateStr}`, { cache: "no-store" }).then(r => r.json()).catch(() => ({ events: [] })),
     supabase.from("consensus").select("*").eq("game_date", today).eq("sport_key", "mlb"),
     supabase.from("signals").select("*").eq("game_date", today).eq("sport_key", "mlb").eq("suppressed", false),
-    fetch(`https://statsapi.mlb.com/api/v1/stats?stats=season&group=pitching&season=2026&sportId=1&limit=500`, { next: { revalidate: 3600 } }).then(r => r.json()).catch(() => ({ splits: [] })),
+    fetch(`https://statsapi.mlb.com/api/v1/stats?stats=season&group=pitching&season=2026&sportId=1&limit=1000&playerPool=All`, { next: { revalidate: 3600 } }).then(r => r.json()).catch(() => ({ splits: [] })),
   ]);
 
   // Build consensus and signals lookup maps
@@ -252,8 +254,10 @@ export default async function PropsPage() {
 
   // Build pitcher stats map by player name
   const mlbPitcherStatsMap = new Map<string, any>();
-  for (const split of pitcherStatsRes?.people ?? pitcherStatsRes?.stats?.[0]?.splits ?? []) {
-    const name = (split.player?.fullName ?? split.person?.fullName ?? "").toLowerCase();
+  const pitcherSplits = pitcherStatsRes?.stats?.[0]?.splits ?? [];
+  console.log("[mlb-pitcher-stats] splits count:", pitcherSplits.length, "| sample:", JSON.stringify(pitcherSplits[0] ?? null));
+  for (const split of pitcherSplits) {
+    const name = (split.player?.fullName ?? "").toLowerCase();
     const stat = split.stat ?? {};
     if (name) {
       mlbPitcherStatsMap.set(name, {

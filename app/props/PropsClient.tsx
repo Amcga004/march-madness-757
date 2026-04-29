@@ -42,23 +42,54 @@ function StatRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function eraColor(era: string | null): string {
+  if (!era) return "#9CA3AF";
+  const v = parseFloat(era);
+  return v < 4.00 ? "#16A34A" : v < 5.00 ? "#D97706" : "#DC2626";
+}
+
+function whipColor(whip: string | null): string {
+  if (!whip) return "#9CA3AF";
+  const v = parseFloat(whip);
+  return v < 1.30 ? "#16A34A" : v < 1.50 ? "#D97706" : "#DC2626";
+}
+
 function PitcherCard({ pitcher, label, f5WinProb }: { pitcher: any; label: string; f5WinProb: number | null }) {
   const [expanded, setExpanded] = useState(false);
   const wl = (pitcher.wins != null && pitcher.losses != null) ? `${pitcher.wins}-${pitcher.losses}` : null;
 
   return (
     <div style={{ background: "#161B22", border: "1px solid #21262D", borderRadius: "10px", marginBottom: "8px", overflow: "hidden" }}>
-      <div style={{ padding: "10px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }} onClick={() => setExpanded(e => !e)}>
-        <div>
-          <div style={{ fontSize: "9px", color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.04em" }}>{label}</div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "1px" }}>
-            <span style={{ fontSize: "13px", fontWeight: 700, color: "#F1F3F5" }}>{pitcher.name}</span>
-            {wl && <span style={{ fontSize: "10px", color: "#6B7280" }}>{wl}</span>}
-            {pitcher.era && <span style={{ fontSize: "10px", color: "#6B7280" }}>ERA {pitcher.era}</span>}
-            {pitcher.whip && <span style={{ fontSize: "10px", color: "#6B7280" }}>WHIP {pitcher.whip}</span>}
+      <div style={{ padding: "10px 12px", cursor: "pointer" }} onClick={() => setExpanded(e => !e)}>
+        {/* Row 1: label, name, W-L, chevron */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontSize: "9px", color: "#6B7280", textTransform: "uppercase" as const, letterSpacing: "0.04em" }}>{label}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "1px" }}>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "#F1F3F5" }}>{pitcher.name}</span>
+              {wl && <span style={{ fontSize: "10px", color: "#6B7280" }}>{wl}</span>}
+            </div>
           </div>
+          <span style={{ fontSize: "11px", color: "#4B5563" }}>{expanded ? "▴" : "▾"}</span>
         </div>
-        <span style={{ fontSize: "11px", color: "#4B5563" }}>{expanded ? "▴" : "▾"}</span>
+        {/* Row 2: ERA, WHIP, K%, xFIP, IP always visible */}
+        <div style={{ display: "flex", gap: "8px", marginTop: "6px", flexWrap: "wrap" as const }}>
+          {pitcher.era && (
+            <span style={{ fontSize: "10px", color: "#6B7280" }}>ERA <span style={{ color: eraColor(pitcher.era), fontWeight: 700 }}>{pitcher.era}</span></span>
+          )}
+          {pitcher.whip && (
+            <span style={{ fontSize: "10px", color: "#6B7280" }}>WHIP <span style={{ color: whipColor(pitcher.whip), fontWeight: 700 }}>{pitcher.whip}</span></span>
+          )}
+          {pitcher.kPct != null && (
+            <span style={{ fontSize: "10px", color: "#6B7280" }}>K% <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{(pitcher.kPct * 100).toFixed(1)}%</span></span>
+          )}
+          {pitcher.xfip != null && (
+            <span style={{ fontSize: "10px", color: "#6B7280" }}>xFIP <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{pitcher.xfip.toFixed(2)}</span></span>
+          )}
+          {pitcher.inningsPitched && (
+            <span style={{ fontSize: "10px", color: "#6B7280" }}>IP <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{pitcher.inningsPitched}</span></span>
+          )}
+        </div>
       </div>
 
       <div style={{ padding: "0 12px 10px", display: "flex", gap: "6px", flexWrap: "wrap" as const }}>
@@ -114,18 +145,21 @@ function BatterRow({ batter }: { batter: BatterProjection }) {
             {batter.isProjected && <span style={{ fontSize: "9px", color: "#4B5563" }}>*</span>}
             <span style={{ fontSize: "10px", color: "#4B5563", marginLeft: "2px" }}>{batter.position}</span>
           </div>
-          <div style={{ display: "flex", gap: "6px", marginTop: "2px", flexWrap: "wrap" as const }}>
+          <div style={{ display: "flex", gap: "8px", marginTop: "3px", flexWrap: "wrap" as const }}>
             {batter.xwoba != null && (
-              <span style={{ fontSize: "9px", color: "#6B7280" }}>xwOBA <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{batter.xwoba.toFixed(3)}</span></span>
+              <span style={{ fontSize: "10px", color: "#6B7280" }}>xwOBA <span style={{ color: "#D97706", fontWeight: 600 }}>{batter.xwoba.toFixed(3)}</span></span>
             )}
             {batter.seasonAVG && (
-              <span style={{ fontSize: "9px", color: "#6B7280" }}>AVG <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{batter.seasonAVG}</span></span>
+              <span style={{ fontSize: "10px", color: "#6B7280" }}>AVG <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{batter.seasonAVG}</span></span>
+            )}
+            {(batter as any).seasonSLG && (
+              <span style={{ fontSize: "10px", color: "#6B7280" }}>SLG <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{(batter as any).seasonSLG}</span></span>
             )}
             {batter.seasonHR != null && (
-              <span style={{ fontSize: "9px", color: "#6B7280" }}>HR <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{batter.seasonHR}</span></span>
+              <span style={{ fontSize: "10px", color: "#6B7280" }}>HR <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{batter.seasonHR}</span></span>
             )}
             {batter.seasonRBI != null && (
-              <span style={{ fontSize: "9px", color: "#6B7280" }}>RBI <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{batter.seasonRBI}</span></span>
+              <span style={{ fontSize: "10px", color: "#6B7280" }}>RBI <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{batter.seasonRBI}</span></span>
             )}
           </div>
         </div>
